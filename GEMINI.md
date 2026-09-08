@@ -3,6 +3,12 @@
 ## Project Overview
 `gh-install` is a GitHub CLI extension for installing release binaries from GitHub repositories across Linux, macOS, Windows, and FreeBSD. It supports both interactive and non-interactive workflows, checksum verification, distro/hardware detection, packaging formats (deb, rpm, pkg, appimage, flatpak, snap), archive extraction (`mholt/archiver/v4`), and atomic state management (`state.json` via `flock`).
 
+## Agent Initialization - New Chat
+
+- Load the following skills: tdd, using-superpowers, golang-pro, ast-grep, golang-lint, golang-cli, gopls, verification-before-completion, concise-output, ponytail, wayfinders
+
+- Activate gh-install with serena mcp
+
 ## Key Commands & Workflow
 ```bash
 # Build
@@ -39,6 +45,8 @@ make tidy
 2. **State & File Locking**: Always operate through `LoadState()` and `Save()`. Never bypass `state.json.lock`.
 3. **Deletions on State Removal**: `RmState` uninstalls tracked packages or removes target binary files directly from disk.
 4. **Testing Before Completion**: Run `go test -v ./...` and `make lint` on any Go codebase modifications.
+5. **Consider all OS permutations**: When adding or modifiying a feature, consider if it'll work for Ubuntu, Arch, Fedora, Windows 11, Mac OSX, Debian, FreeBSD, Pop OS!, Kali, etc.te
+6. **Must function interactively as well non-interactively** Ensure that no interactive appear by default that will break non-interactive script execution (Requiring sudo prompt on sudo cache invalidation is to be expected however)
 
 ## Critical Asset Matching Test Scenarios
 
