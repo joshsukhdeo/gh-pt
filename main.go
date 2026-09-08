@@ -29,11 +29,17 @@ func main() {
 	}
 
 	if cfg != nil {
-		if cfg.InstallTypes != "" {
-			vars["install_types"] = cfg.InstallTypes
+		if cfg.Core.InstallTypes != "" {
+			vars["install_types"] = cfg.Core.InstallTypes
 		}
-		if cfg.InstallPath != "" {
-			vars["install_path"] = cfg.InstallPath
+		if cfg.Paths.InstallPath != "" {
+			vars["install_path"] = cfg.Paths.InstallPath
+		}
+		if cfg.Paths.ClonePath != "" {
+			vars["clone_path"] = cfg.Paths.ClonePath
+		}
+		if cfg.Paths.ForkPath != "" {
+			vars["fork_path"] = cfg.Paths.ForkPath
 		}
 		if cfg.ClonePath != "" {
 			vars["clone_path"] = cfg.ClonePath

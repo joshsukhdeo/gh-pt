@@ -9,7 +9,10 @@ type CLI struct {
 	Update               bool              `short:"u" help:"Update user installations (add -g for global only)."`
 	ListSavedState       bool              `help:"List saved state in a user-friendly format." group:"State Management"`
 	EditSavedState       bool              `help:"Edit saved state (enable/disable updates or remove apps)." group:"State Management"`
-	RmSavedState         string            `help:"Remove a saved app from state by repository slug or binary name." group:"State Management"`
+	RmSavedState         string            `help:"Remove a saved app from state tracking only (does NOT uninstall)." group:"State Management"`
+	Rm                   string            `help:"Uninstall an application and remove it from state." group:"State Management"`
+	Purge                string            `help:"Completely uninstall an app, remove cached compile scripts, and remove from state." group:"State Management"`
+	Pin                  string            `help:"Pin a specific version in the saved state." group:"State Management"`
 	ReleaseVersion       string            `default:"latest" short:"v" help:"Repository release tag (version) to install." group:"Non-interactive Mode"`
 	ReleaseAsset         string            `optional:"" short:"a" help:"Name of repository release asset to download. If not set, --release-asset-regexp is used." group:"Non-interactive Mode"`
 	ReleaseAssetRegexp   string            `optional:"" short:"A" help:"Regular expression matching release asset to download." group:"Non-interactive Mode"`
@@ -38,7 +41,7 @@ type CLI struct {
 	CompileFromSource    bool              `help:"Compile repository from source via AI-generated build script (requires --ai)." group:"AI Mode"`
 	TargetPathCreate     bool              `default:"true" negatable:"" help:"Create target installation directory if it does not exist." group:"Non-interactive Mode"`
 	Overwrite            bool              `default:"false" short:"o" help:"Overwrite target binaries." group:"Non-interactive Mode"`
-	Pin                  bool              `default:"false" help:"Pin this installation to the current version (skip during updates)." group:"State Management"`
+	PinInstall           bool              `name:"pin-install" default:"false" help:"Pin this installation to the current version (skip during updates)." group:"State Management"`
 	DryRun               bool              `default:"false" help:"Show what would be downloaded and installed without actually doing it." group:"Non-interactive Mode"`
 	VerifyChecksum       bool              `default:"true" help:"Verify asset checksums if checksum files are available in the release." group:"Non-interactive Mode"`
 	VTApiKey             string            `env:"VT_API_KEY" help:"VirusTotal API key for malicious binary checking." group:"Security Mode"`

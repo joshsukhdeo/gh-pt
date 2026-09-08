@@ -88,34 +88,36 @@ func ListState() error {
 	return nil
 }
 
-func RmState(target string) error {
+func findTargetApps(st *state.State, target string) []string {
+	targetLower := strings.ToLower(target)
+	var matches []string
+
+	for repo, app := range st.Apps {
+		if strings.ToLower(repo) == targetLower {
+			matches = append(matches, repo)
+			continue
+		}
+		for _, renamed := range app.Rename {
+			if strings.ToLower(renamed) == targetLower {
+				matches = append(matches, repo)
+				break
+			}
+		}
+		parts := strings.Split(repo, "/")
+		if strings.ToLower(parts[len(parts)-1]) == targetLower {
+			matches = append(matches, repo)
+		}
+	}
+	return matches
+}
+
+func RmStateOnly(target string) error {
 	st, err := state.LoadState()
 	if err != nil {
 		return err
 	}
 
-	targetLower := strings.ToLower(target)
-	var toRemove []string
-
-	for repo, app := range st.Apps {
-		if strings.ToLower(repo) == targetLower {
-			toRemove = append(toRemove, repo)
-			continue
-		}
-		// check if the target matches any renamed binary
-		for _, renamed := range app.Rename {
-			if strings.ToLower(renamed) == targetLower {
-				toRemove = append(toRemove, repo)
-				break
-			}
-		}
-		// check if target matches the suffix of repo
-		parts := strings.Split(repo, "/")
-		if strings.ToLower(parts[len(parts)-1]) == targetLower {
-			toRemove = append(toRemove, repo)
-		}
-	}
-
+	toRemove := findTargetApps(st, target)
 	if len(toRemove) == 0 {
 		log.Warn().Msgf("No application found matching '%s'", target)
 		return nil
@@ -177,9 +179,105 @@ func RmState(target string) error {
 		}
 
 		delete(st.Apps, r)
+		log.Info().Msgf("Removed %s from state tracking only.", r)
+	}
+	return st.Save()
+}
+
+func RemoveApp(target string, purge bool) error {
+	st, err := state.LoadState()
+	if err != nil {
+		return err
+	}
+
+	toRemove := findTargetApps(st, target)
+	if len(toRemove) == 0 {
+		log.Warn().Msgf("No application found matching '%s'", target)
+		return nil
+	}
+
+	for _, r := range toRemove {
+		app := st.Apps[r]
+
+		if len(app.PackageNames) > 0 {
+			for _, pkgName := range app.PackageNames {
+				log.Info().Msgf("Uninstalling package %s...", pkgName)
+				var cmd *exec.Cmd
+				if _, err := exec.LookPath("dpkg"); err == nil {
+					cmd = exec.Command("sudo", "dpkg", "-r", pkgName)
+				} else if _, err := exec.LookPath("rpm"); err == nil {
+					cmd = exec.Command("sudo", "rpm", "-e", pkgName)
+				} else if _, err := exec.LookPath("pacman"); err == nil {
+					cmd = exec.Command("sudo", "pacman", "-R", "--noconfirm", pkgName)
+				} else if _, err := exec.LookPath("pkg"); err == nil {
+					cmd = exec.Command("sudo", "pkg", "delete", "-y", pkgName)
+				}
+
+				if cmd != nil {
+					if err := cmd.Run(); err != nil {
+						log.Warn().Err(err).Msgf("Failed to uninstall package %s", pkgName)
+					} else {
+						log.Info().Msgf("Successfully uninstalled %s", pkgName)
+					}
+				}
+			}
+		}
+
+		if app.TargetPath != "" {
+			parts := strings.Split(r, "/")
+			repoName := parts[len(parts)-1]
+
+			if len(app.Rename) > 0 {
+				for _, renamed := range app.Rename {
+					binPath := filepath.Join(app.TargetPath, renamed)
+					if err := os.Remove(binPath); err != nil && !os.IsNotExist(err) {
+						log.Warn().Err(err).Msgf("Failed to remove binary %s", binPath)
+					} else if err == nil {
+						log.Info().Msgf("Deleted %s", binPath)
+					}
+				}
+			} else {
+				binPath := filepath.Join(app.TargetPath, repoName)
+				if err := os.Remove(binPath); err != nil && !os.IsNotExist(err) {
+					log.Warn().Err(err).Msgf("Failed to remove binary %s", binPath)
+				} else if err == nil {
+					log.Info().Msgf("Deleted %s", binPath)
+				}
+			}
+		}
+
+		if purge && app.CompileScript != "" {
+			if err := os.Remove(app.CompileScript); err != nil && !os.IsNotExist(err) {
+				log.Warn().Err(err).Msgf("Failed to remove compile script %s", app.CompileScript)
+			} else if err == nil {
+				log.Info().Msgf("Purged compile script %s", app.CompileScript)
+			}
+		}
+
+		delete(st.Apps, r)
 		log.Info().Msgf("Removed %s from managed state.", r)
 	}
 
+	return st.Save()
+}
+
+func PinAppState(target string) error {
+	st, err := state.LoadState()
+	if err != nil {
+		return err
+	}
+
+	toPin := findTargetApps(st, target)
+	if len(toPin) == 0 {
+		log.Warn().Msgf("No application found matching '%s'", target)
+		return nil
+	}
+
+	for _, r := range toPin {
+		app := st.Apps[r]
+		app.Pinned = true
+		log.Info().Msgf("Pinned %s in state.", r)
+	}
 	return st.Save()
 }
 

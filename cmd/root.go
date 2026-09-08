@@ -31,7 +31,7 @@ const (
 type RootCLI params.CLI
 
 func (r *RootCLI) Validate() error {
-	if !r.Update && !r.UpdateAll && !r.ListSavedState && !r.EditSavedState && r.RmSavedState == "" {
+	if !r.Update && !r.UpdateAll && !r.ListSavedState && !r.EditSavedState && r.RmSavedState == "" && r.Rm == "" && r.Purge == "" && r.Pin == "" {
 		match, _ := regexp.MatchString(`.+/.+`, r.Repository)
 		if !match {
 			return fmt.Errorf("repository must be in 'user/repository' format (provided: '%s')", r.Repository)
@@ -136,7 +136,7 @@ func (r *RootCLI) Run() error {
 	cfg := loadConfig()
 	if cfg != nil {
 		if r.VTApiKey == "" {
-			r.VTApiKey = cfg.VTApiKey
+			r.VTApiKey = cfg.Core.VTApiKey
 		}
 	}
 
@@ -165,13 +165,22 @@ func (r *RootCLI) Run() error {
 			r.NoDeps = true
 		default:
 			if cfg != nil {
-				r.AddDeps = cfg.AddDeps
-				r.NoDeps = cfg.NoDeps
+				r.AddDeps = cfg.Core.AddDeps
+				r.NoDeps = cfg.Core.NoDeps
 				if !r.DisablePrompts {
-					r.DisablePrompts = cfg.DisablePrompts
+					r.DisablePrompts = cfg.Core.DisablePrompts
 				}
 				if !r.NoSaveState {
-					r.NoSaveState = cfg.NoSaveState
+					r.NoSaveState = cfg.Core.NoSaveState
+				}
+				if !r.AllowWine {
+					r.AllowWine = cfg.Core.AllowWine
+				}
+				if !r.NativeExtract {
+					r.NativeExtract = cfg.Core.NativeExtract
+				}
+				if !r.KeepSuffixes {
+					r.KeepSuffixes = cfg.Core.KeepSuffixes
 				}
 				if !r.AllowWine {
 					r.AllowWine = cfg.AllowWine
@@ -213,7 +222,16 @@ func (r *RootCLI) Run() error {
 		return EditState()
 	}
 	if r.RmSavedState != "" {
-		return RmState(r.RmSavedState)
+		return RmStateOnly(r.RmSavedState)
+	}
+	if r.Rm != "" {
+		return RemoveApp(r.Rm, false)
+	}
+	if r.Purge != "" {
+		return RemoveApp(r.Purge, true)
+	}
+	if r.Pin != "" {
+		return PinAppState(r.Pin)
 	}
 
 	if r.Update || r.UpdateAll {
@@ -329,8 +347,8 @@ func (r *RootCLI) handleRepoCloneOrFork(cfg *config.Config) error {
 	var cloneBase string
 	var forkBase string
 	if cfg != nil {
-		cloneBase = cfg.ClonePath
-		forkBase = cfg.ForkPath
+		cloneBase = cfg.Paths.ClonePath
+		forkBase = cfg.Paths.ForkPath
 	}
 
 	targetDir := resolveRepoPath(r.Repository, r.Clone, r.Fork, cloneBase, forkBase)
@@ -380,7 +398,7 @@ func (r *RootCLI) handleRepoCloneOrFork(cfg *config.Config) error {
 				Global:     r.Global,
 				Clone:      r.Clone,
 				Fork:       r.Fork,
-				Pinned:     r.Pin,
+				Pinned:     r.PinInstall,
 			})
 			if err != nil {
 				log.Warn().Err(err).Msg("could not save repository state")
@@ -445,8 +463,8 @@ func runAIAgent(aiCmdTemplate, prompt, dir string) error {
 
 func (r *RootCLI) handleAISafetyScan(cfg *config.Config) error {
 	aiCmdTemplate := r.AICmd
-	if cfg != nil && cfg.AICmd != "" && (r.AICmd == "" || r.AICmd == "agy -p \"%s\"") {
-		aiCmdTemplate = cfg.AICmd
+	if cfg != nil && cfg.AI.AICmd != "" && (r.AICmd == "" || r.AICmd == "agy -p \"%s\"") {
+		aiCmdTemplate = cfg.AI.AICmd
 	}
 	if aiCmdTemplate == "" {
 		aiCmdTemplate = "agy -p \"%s\""
@@ -540,7 +558,7 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 						TargetPath:    targetPath,
 						Global:        r.Global,
 						CompileScript: scriptPath,
-						Pinned:        r.Pin,
+						Pinned:        r.PinInstall,
 					})
 					if err != nil {
 						log.Warn().Err(err).Msg("could not save repository state")
@@ -561,8 +579,8 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 
 	// 3. Resolve AI command template
 	aiCmdTemplate := r.AICmd
-	if cfg != nil && cfg.AICmd != "" && (r.AICmd == "" || r.AICmd == `agy -p "%s"`) {
-		aiCmdTemplate = cfg.AICmd
+	if cfg != nil && cfg.AI.AICmd != "" && (r.AICmd == "" || r.AICmd == `agy -p "%s"`) {
+		aiCmdTemplate = cfg.AI.AICmd
 	}
 	if aiCmdTemplate == "" {
 		aiCmdTemplate = `agy -p "%s"`
@@ -633,7 +651,7 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 				TargetPath:    targetPath,
 				Global:        r.Global,
 				CompileScript: scriptPath,
-				Pinned:        r.Pin,
+				Pinned:        r.PinInstall,
 			})
 			if err != nil {
 				log.Warn().Err(err).Msg("could not save repository state")

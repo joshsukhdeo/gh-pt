@@ -9,6 +9,23 @@ import (
 )
 
 type Config struct {
+	Paths PathsConfig `yaml:",inline"`
+	AI    AIConfig    `yaml:",inline"`
+	Core  CoreConfig  `yaml:",inline"`
+}
+
+type PathsConfig struct {
+	InstallPath string `yaml:"install_path"`
+	GlobalPath  string `yaml:"global_path"`
+	ClonePath   string `yaml:"clone_path"`
+	ForkPath    string `yaml:"fork_path"`
+}
+
+type AIConfig struct {
+	AICmd string `yaml:"ai_cmd"`
+}
+
+type CoreConfig struct {
 	InstallTypes   string `yaml:"install_types"`
 	InstallPath    string `yaml:"install_path"`
 	GlobalPath     string `yaml:"global_path"`

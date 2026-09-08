@@ -29,8 +29,8 @@ func doVTRequestWithRetry(client *http.Client, req *http.Request) (*http.Respons
 		}
 		if resp.StatusCode == http.StatusTooManyRequests {
 			_ = resp.Body.Close()
-			log.Warn().Msg("VirusTotal rate limit (429) reached. Throttling...")
-			time.Sleep(vtPollDelay)
+			log.Warn().Msg("VirusTotal rate limit (429) reached. Throttling for 15s...")
+			time.Sleep(15 * time.Second)
 			continue
 		}
 		return resp, nil
@@ -81,7 +81,7 @@ RetryVT:
 				if cfg == nil {
 					cfg = &config.Config{}
 				}
-				cfg.VTApiKey = apiKey
+				cfg.Core.VTApiKey = apiKey
 				_ = config.SaveConfig(cfg)
 				goto RetryVT
 			}

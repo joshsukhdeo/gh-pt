@@ -354,4 +354,19 @@ func TestGithubRelease_installBinaryFallback(t *testing.T) {
 	// We can't directly trigger a permission denied os.OpenFile easily in docker without setting up weird users,
 	// but we can try just creating a regular file and assuming normal install works, to bump coverage in installBinary.
 	// Oh wait, installBinary already has coverage.
+	"github.com/stretchr/testify/assert"
+	"testing"
+)
+
+func TestGetScore(t *testing.T) {
+	types := []string{"tar.gz", "zip", "deb"}
+	assert.Equal(t, 30, getScore("app.tar.gz", types))
+	assert.Equal(t, 20, getScore("app.zip", types))
+	assert.Equal(t, 10, getScore("app.deb", types))
+	assert.Equal(t, -1, getScore("app.rpm", types))
+}
+
+func TestGenerateStrictAssetRegex(t *testing.T) {
+	assert.Equal(t, "^app\\.tar\\.gz$", generateStrictAssetRegex("app.tar.gz", ""))
+	assert.Contains(t, generateStrictAssetRegex("app-v1.0.0.tar.gz", "v1.0.0"), ".*")
 }
