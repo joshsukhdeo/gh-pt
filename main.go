@@ -41,6 +41,12 @@ func main() {
 		if cfg.Paths.ForkPath != "" {
 			vars["fork_path"] = cfg.Paths.ForkPath
 		}
+		if cfg.ClonePath != "" {
+			vars["clone_path"] = cfg.ClonePath
+		}
+		if cfg.ForkPath != "" {
+			vars["fork_path"] = cfg.ForkPath
+		}
 	}
 
 	ctx := kong.Parse(&cli,

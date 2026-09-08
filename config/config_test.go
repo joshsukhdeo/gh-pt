@@ -55,4 +55,72 @@ no_save_state: true
 		assert.False(t, cfg.Core.NoDeps)
 		assert.True(t, cfg.Core.NoSaveState)
 	})
+
+	t.Run("LoadConfig_InvalidYamlReturnsError", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmpDir, "invalid"))
+		xdg.Reload()
+		err := os.MkdirAll(filepath.Join(tmpDir, "invalid", "gh-install"), 0755)
+		require.NoError(t, err)
+
+		yamlContent := []byte(`
+install_types: [invalid yaml
+`)
+		configPath := filepath.Join(tmpDir, "invalid", "gh-install", "config.yml")
+		err = os.WriteFile(configPath, yamlContent, 0644)
+		require.NoError(t, err)
+
+		cfg, err := LoadConfig()
+		assert.Error(t, err)
+		assert.Nil(t, cfg)
+	})
+
+	t.Run("LoadConfig_FileReadErrorReturnsError", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmpDir, "readerror"))
+		xdg.Reload()
+		configDir := filepath.Join(tmpDir, "readerror", "gh-install")
+		err := os.MkdirAll(configDir, 0755)
+		require.NoError(t, err)
+
+		configPath := filepath.Join(configDir, "config.yml")
+		// Create a directory instead of a file so os.ReadFile will fail
+		err = os.MkdirAll(configPath, 0755)
+		require.NoError(t, err)
+
+		cfg, err := LoadConfig()
+		assert.Error(t, err)
+		assert.Nil(t, cfg)
+	})
+
+	t.Run("SaveConfig", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmpDir, "save"))
+		xdg.Reload()
+
+		cfg := &Config{
+			InstallTypes: "deb",
+			VTApiKey: "my-key",
+		}
+
+		err := SaveConfig(cfg)
+		require.NoError(t, err)
+
+		loaded, err := LoadConfig()
+		require.NoError(t, err)
+		assert.Equal(t, "deb", loaded.InstallTypes)
+		assert.Equal(t, "my-key", loaded.VTApiKey)
+	})
+
+	t.Run("SaveConfig_MkdirError", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmpDir, "saveerror"))
+		xdg.Reload()
+
+		// Create file where directory should go
+		err := os.MkdirAll(filepath.Join(tmpDir, "saveerror"), 0755)
+		require.NoError(t, err)
+		err = os.WriteFile(filepath.Join(tmpDir, "saveerror", "gh-install"), []byte("file"), 0644)
+		require.NoError(t, err)
+
+		cfg := &Config{}
+		err = SaveConfig(cfg)
+		assert.Error(t, err)
+	})
 }

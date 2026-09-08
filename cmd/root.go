@@ -182,6 +182,15 @@ func (r *RootCLI) Run() error {
 				if !r.KeepSuffixes {
 					r.KeepSuffixes = cfg.Core.KeepSuffixes
 				}
+				if !r.AllowWine {
+					r.AllowWine = cfg.AllowWine
+				}
+				if !r.NativeExtract {
+					r.NativeExtract = cfg.NativeExtract
+				}
+				if !r.KeepSuffixes {
+					r.KeepSuffixes = cfg.KeepSuffixes
+				}
 			}
 		}
 	}
