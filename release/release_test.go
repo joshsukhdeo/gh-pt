@@ -1,8 +1,8 @@
 package release
 
 import (
-	"testing"
 	"github.com/stretchr/testify/assert"
+	"testing"
 )
 
 func TestGetScore(t *testing.T) {
@@ -14,6 +14,6 @@ func TestGetScore(t *testing.T) {
 }
 
 func TestGenerateStrictAssetRegex(t *testing.T) {
-    assert.Equal(t, "^app\\.tar\\.gz$", generateStrictAssetRegex("app.tar.gz", ""))
-    assert.Contains(t, generateStrictAssetRegex("app-v1.0.0.tar.gz", "v1.0.0"), ".*")
+	assert.Equal(t, "^app\\.tar\\.gz$", generateStrictAssetRegex("app.tar.gz", ""))
+	assert.Contains(t, generateStrictAssetRegex("app-v1.0.0.tar.gz", "v1.0.0"), ".*")
 }

@@ -951,7 +951,7 @@ func (r *GithubRelease) Install() error {
 				AssetBinaries:       r.CliParams.AssetBinaries,
 				AssetBinariesRegexp: r.CliParams.AssetBinariesRegexp,
 				PackageNames:        r.InstalledPackageNames,
-				Pinned:              r.CliParams.Pin,
+				Pinned:              r.CliParams.PinInstall,
 				NativeExtract:       r.CliParams.NativeExtract,
 			})
 		} else {

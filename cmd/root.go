@@ -31,7 +31,7 @@ const (
 type RootCLI params.CLI
 
 func (r *RootCLI) Validate() error {
-	if !r.Update && !r.UpdateAll && !r.ListSavedState && !r.EditSavedState && r.RmSavedState == "" {
+	if !r.Update && !r.UpdateAll && !r.ListSavedState && !r.EditSavedState && r.RmSavedState == "" && r.Rm == "" && r.Purge == "" && r.Pin == "" {
 		match, _ := regexp.MatchString(`.+/.+`, r.Repository)
 		if !match {
 			return fmt.Errorf("repository must be in 'user/repository' format (provided: '%s')", r.Repository)
@@ -213,7 +213,16 @@ func (r *RootCLI) Run() error {
 		return EditState()
 	}
 	if r.RmSavedState != "" {
-		return RmState(r.RmSavedState)
+		return RmStateOnly(r.RmSavedState)
+	}
+	if r.Rm != "" {
+		return RemoveApp(r.Rm, false)
+	}
+	if r.Purge != "" {
+		return RemoveApp(r.Purge, true)
+	}
+	if r.Pin != "" {
+		return PinAppState(r.Pin)
 	}
 
 	if r.Update || r.UpdateAll {
@@ -380,7 +389,7 @@ func (r *RootCLI) handleRepoCloneOrFork(cfg *config.Config) error {
 				Global:     r.Global,
 				Clone:      r.Clone,
 				Fork:       r.Fork,
-				Pinned:     r.Pin,
+				Pinned:     r.PinInstall,
 			})
 			if err != nil {
 				log.Warn().Err(err).Msg("could not save repository state")
@@ -540,7 +549,7 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 						TargetPath:    targetPath,
 						Global:        r.Global,
 						CompileScript: scriptPath,
-						Pinned:        r.Pin,
+						Pinned:        r.PinInstall,
 					})
 					if err != nil {
 						log.Warn().Err(err).Msg("could not save repository state")
@@ -633,7 +642,7 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 				TargetPath:    targetPath,
 				Global:        r.Global,
 				CompileScript: scriptPath,
-				Pinned:        r.Pin,
+				Pinned:        r.PinInstall,
 			})
 			if err != nil {
 				log.Warn().Err(err).Msg("could not save repository state")

@@ -1,8 +1,8 @@
 package cmd
 
 import (
-	"testing"
 	"github.com/stretchr/testify/assert"
+	"testing"
 )
 
 func TestGetDefaultPaths(t *testing.T) {
@@ -15,4 +15,3 @@ func TestGetDefaultPaths(t *testing.T) {
 func TestGetEnvPrefix(t *testing.T) {
 	assert.Equal(t, "GH_INSTALL", GetEnvPrefix())
 }
-
