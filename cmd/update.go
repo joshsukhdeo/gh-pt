@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/cli/go-gh/v2/pkg/api"
-	"github.com/joshsukhdeo/gh-install/params"
 	"github.com/joshsukhdeo/gh-install/release"
 	"github.com/joshsukhdeo/gh-install/state"
 	"github.com/rs/zerolog/log"
@@ -20,9 +19,9 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 	}
 
 	for _, app := range st.Apps {
-		specificallyTargeted := (r.Repository != "" && strings.EqualFold(r.Repository, app.Repository))
+		specificallyTargeted := (r.CLI.Repository != "" && strings.EqualFold(r.CLI.Repository, app.Repository))
 
-		if r.Repository != "" && !specificallyTargeted {
+		if r.CLI.Repository != "" && !specificallyTargeted {
 			continue // specifically targeted another app
 		}
 
@@ -35,11 +34,11 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 			continue
 		}
 
-		if r.Update && !r.UpdateAll {
-			if r.Global && !app.Global {
+		if r.CLI.Update && !r.CLI.UpdateAll {
+			if r.CLI.Global && !app.Global {
 				continue // wants global only, this is user
 			}
-			if !r.Global && app.Global {
+			if !r.CLI.Global && app.Global {
 				continue // wants user only, this is global
 			}
 		}
@@ -47,7 +46,7 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 		log.Info().Msgf("Updating %s...", app.Repository)
 
 		if app.CompileScript != "" {
-			if r.DryRun {
+			if r.CLI.DryRun {
 				log.Info().Msgf("[dry-run] Would execute compile script %s for %s", app.CompileScript, app.Repository)
 				continue
 			}
@@ -71,7 +70,7 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 		}
 
 		if app.Clone || app.Fork {
-			if r.DryRun {
+			if r.CLI.DryRun {
 				log.Info().Msgf("[dry-run] Would sync repo %s at %s", app.Repository, app.TargetPath)
 				continue
 			}
@@ -96,7 +95,7 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 		}
 
 		// Create fresh params for this app based on stored state
-		appParams := *(*params.CLI)(r)
+		appParams := r.CLI
 		appParams.Repository = app.Repository
 		appParams.TargetPath = app.TargetPath
 		appParams.Global = app.Global
