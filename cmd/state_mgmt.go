@@ -185,6 +185,39 @@ func findTargetApps(st *state.State, target string) []string {
 	return matches
 }
 
+func safeDeletePath(baseDir, name string) (string, error) {
+	if name == "" {
+		return "", fmt.Errorf("empty target name")
+	}
+	if filepath.IsAbs(name) || name == "." || name == ".." {
+		return "", fmt.Errorf("unsafe delete target %q", name)
+	}
+	cleanName := filepath.Clean(name)
+	if cleanName == "." || cleanName == ".." || cleanName == string(filepath.Separator) {
+		return "", fmt.Errorf("unsafe delete target %q", name)
+	}
+	if filepath.Base(cleanName) != cleanName {
+		return "", fmt.Errorf("refusing to delete path with traversal %q", name)
+	}
+	fullPath := filepath.Join(baseDir, cleanName)
+	absBase, err := filepath.Abs(baseDir)
+	if err != nil {
+		return "", err
+	}
+	absFull, err := filepath.Abs(fullPath)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(absBase, absFull)
+	if err != nil {
+		return "", err
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("refusing to delete outside target path %q", name)
+	}
+	return fullPath, nil
+}
+
 func RmStateOnly(target string) error {
 	st, err := state.LoadState()
 	if err != nil {
@@ -229,9 +262,15 @@ func RemoveApp(target string, purge bool) error {
 						cmd = exec.Command("sudo", "dpkg", "-r", pkgName)
 					}
 				} else if _, err := exec.LookPath("rpm"); err == nil {
-					cmd = exec.Command("sudo", "rpm", "-e", pkgName)
+					if purge {
+						cmd = exec.Command("sudo", "rpm", "-e", pkgName)
+					} else {
+						cmd = exec.Command("sudo", "rpm", "-e", pkgName)
+					}
 				} else if _, err := exec.LookPath("pacman"); err == nil {
 					cmd = exec.Command("sudo", "pacman", "-R", "--noconfirm", pkgName)
+				} else if _, err := exec.LookPath("snap"); err == nil && purge {
+					cmd = exec.Command("sudo", "snap", "remove", "--purge", pkgName)
 				} else if _, err := exec.LookPath("pkg"); err == nil {
 					cmd = exec.Command("sudo", "pkg", "delete", "-y", pkgName)
 				}
@@ -244,74 +283,65 @@ func RemoveApp(target string, purge bool) error {
 					}
 				}
 			}
-		} else {
-			if app.TargetPath != "" {
-				parts := strings.Split(r, "/")
-				repoName := parts[len(parts)-1]
+		} else if app.TargetPath != "" {
+			parts := strings.Split(r, "/")
+			repoName := parts[len(parts)-1]
 
-				if len(app.Rename) > 0 {
-					for _, renamed := range app.Rename {
-						binPath := filepath.Join(app.TargetPath, renamed)
-						if err := os.Remove(binPath); err != nil && !os.IsNotExist(err) {
-							log.Warn().Err(err).Msgf("Failed to remove binary %s", binPath)
-						} else if err == nil {
-							log.Info().Msgf("Deleted %s", binPath)
-						}
+			if len(app.Rename) > 0 {
+				for _, renamed := range app.Rename {
+					binPath, err := safeDeletePath(app.TargetPath, renamed)
+					if err != nil {
+						log.Warn().Err(err).Msgf("Skipping unsafe binary name %q", renamed)
+						continue
 					}
-				} else {
-					binPath := filepath.Join(app.TargetPath, repoName)
 					if err := os.Remove(binPath); err != nil && !os.IsNotExist(err) {
 						log.Warn().Err(err).Msgf("Failed to remove binary %s", binPath)
 					} else if err == nil {
 						log.Info().Msgf("Deleted %s", binPath)
 					}
 				}
-
-				for _, binName := range app.AssetBinaries {
-					binPath := filepath.Join(app.TargetPath, binName)
+			} else {
+				binPath, err := safeDeletePath(app.TargetPath, repoName)
+				if err != nil {
+					log.Warn().Err(err).Msgf("Skipping unsafe binary name %q", repoName)
+				} else {
 					if err := os.Remove(binPath); err != nil && !os.IsNotExist(err) {
-						log.Warn().Err(err).Msgf("Failed to delete %s", binPath)
+						log.Warn().Err(err).Msgf("Failed to remove binary %s", binPath)
 					} else if err == nil {
 						log.Info().Msgf("Deleted %s", binPath)
 					}
 				}
 			}
+
+			for _, binName := range app.AssetBinaries {
+				binPath, err := safeDeletePath(app.TargetPath, binName)
+				if err != nil {
+					log.Warn().Err(err).Msgf("Skipping unsafe binary name %q", binName)
+					continue
+				}
+				if err := os.Remove(binPath); err != nil && !os.IsNotExist(err) {
+					log.Warn().Err(err).Msgf("Failed to delete %s", binPath)
+				} else if err == nil {
+					log.Info().Msgf("Deleted %s", binPath)
+				}
+			}
 		}
 
-		if purge {
-			if app.CompileScript != "" {
-				if err := os.Remove(app.CompileScript); err != nil && !os.IsNotExist(err) {
-					log.Warn().Err(err).Msgf("Failed to remove compile script %s", app.CompileScript)
-				} else if err == nil {
+		if app.CompileScript != "" {
+			if err := os.Remove(app.CompileScript); err != nil && !os.IsNotExist(err) {
+				log.Warn().Err(err).Msgf("Failed to remove compile script %s", app.CompileScript)
+			} else if err == nil {
+				if purge {
 					log.Info().Msgf("Purged compile script %s", app.CompileScript)
-				}
-
-				repoParts := strings.Split(r, "/")
-				if len(repoParts) == 2 {
-					srcPath := filepath.Join(os.TempDir(), "gh-install-src-"+repoParts[1])
-					_ = os.RemoveAll(srcPath)
+				} else {
+					log.Info().Msgf("Removed compile script %s", app.CompileScript)
 				}
 			}
 
 			repoParts := strings.Split(r, "/")
 			if len(repoParts) == 2 {
-				homeDir, _ := os.UserHomeDir()
-				repoName := strings.ToLower(repoParts[1])
-				if repoName != "" {
-					configPath := filepath.Join(homeDir, ".config", repoName)
-					if err := os.RemoveAll(configPath); err == nil {
-						log.Info().Msgf("Purged config directory %s", configPath)
-					}
-				}
-			}
-		} else {
-			// Normal rm just deletes script but not config
-			if app.CompileScript != "" {
-				if err := os.Remove(app.CompileScript); err != nil && !os.IsNotExist(err) {
-					log.Warn().Err(err).Msgf("Failed to remove compile script %s", app.CompileScript)
-				} else if err == nil {
-					log.Info().Msgf("Removed compile script %s", app.CompileScript)
-				}
+				srcPath := filepath.Join(os.TempDir(), "gh-install-src-"+repoParts[1])
+				_ = os.RemoveAll(srcPath)
 			}
 		}
 

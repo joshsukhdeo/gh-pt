@@ -11,7 +11,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 
 	"github.com/mholt/archiver/v4"
@@ -259,16 +258,8 @@ func BinarySelector(criteria BinaryMatchCriteria) (ISelector, error) {
 		} else {
 			if err := exec.Command("tar", "-xzf", criteria.DownloadPath, "-C", extractDir).Run(); err == nil {
 				extracted = true
-			} else {
-				if runtime.GOOS == "windows" {
-					if err := exec.Command("cmd", "/c", fmt.Sprintf("7z x %s -so | 7z x -si -ttar -o%s -y", criteria.DownloadPath, extractDir)).Run(); err == nil {
-						extracted = true
-					}
-				} else {
-					if err := exec.Command("sh", "-c", fmt.Sprintf("7z x %s -so | 7z x -si -ttar -o%s -y", criteria.DownloadPath, extractDir)).Run(); err == nil {
-						extracted = true
-					}
-				}
+			} else if err := exec.Command("7z", "x", criteria.DownloadPath, "-o"+extractDir, "-y").Run(); err == nil {
+				extracted = true
 			}
 		}
 

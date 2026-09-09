@@ -43,13 +43,14 @@ type CLI struct {
 	CompileFromSource    bool              `help:"Compile repository from source via AI-generated build script (requires --ai)." group:"AI Mode"`
 	TargetPathCreate     bool              `default:"true" negatable:"" help:"Create target installation directory if it does not exist." group:"Non-interactive Mode"`
 	Overwrite            bool              `default:"false" short:"o" help:"Overwrite target binaries." group:"Non-interactive Mode"`
+	Force                bool              `default:"false" short:"f" help:"Skip confirmation prompts for destructive uninstall and purge actions." group:"State Management"`
 	PinInstall           bool              `name:"pin-install" default:"false" help:"Pin this installation to the current version (skip during updates)." group:"State Management"`
 	DryRun               bool              `default:"false" help:"Show what would be downloaded and installed without actually doing it." group:"Non-interactive Mode"`
 	VerifyChecksum       bool              `default:"true" help:"Verify asset checksums if checksum files are available in the release." group:"Non-interactive Mode"`
 	VTApiKey             string            `env:"VT_API_KEY" help:"VirusTotal API key for malicious binary checking." group:"Security Mode"`
 	SkipVtSandbox        bool              `help:"Bypass VirusTotal sandbox upload for unknown zero-day hashes." group:"Security Mode"`
 	LogLevel             string            `default:"info" enum:"error,warn,info,debug" short:"l" help:"Log level."`
-	LogFormat            string            `default:"console" enum:"console,json" short:"f" help:"Log output format."`
+	LogFormat            string            `default:"console" enum:"console,json" help:"Log output format."`
 	LogQuietInteractive  bool              `default:"true" negatable:"" help:"Quiet log in interactive mode" group:"Interactive Mode"`
 	Verbose              bool              `short:"V" help:"Enable verbose output (sets log level to debug)."`
 	Version              kong.VersionFlag  `help:"Show version." env:""`
