@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/adrg/xdg"
 	"github.com/alecthomas/kong"
 	"github.com/cli/go-gh/v2"
 	"github.com/cli/go-gh/v2/pkg/api"
@@ -20,6 +22,7 @@ import (
 	"github.com/pterm/pterm"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 const (
@@ -136,11 +139,25 @@ func (r *RootCLI) Run() error {
 		logLevel = zerolog.Disabled
 	}
 	zerolog.SetGlobalLevel(logLevel)
-	if r.CLI.LogFormat == "console" {
+
+	cfg := loadConfig()
+	if cfg != nil && cfg.Core.LogToFile {
+		fileLogger := &lumberjack.Logger{
+			Filename:   filepath.Join(xdg.DataHome, "gh-install", "gh-install.log"),
+			MaxSize:    10, // megabytes
+			MaxBackups: 5,
+			MaxAge:     30, // days
+			Compress:   true,
+		}
+		if r.CLI.LogFormat == "console" {
+			log.Logger = log.Output(zerolog.ConsoleWriter{Out: io.MultiWriter(os.Stdout, fileLogger)})
+		} else {
+			log.Logger = log.Output(io.MultiWriter(os.Stdout, fileLogger))
+		}
+	} else if r.CLI.LogFormat == "console" {
 		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout})
 	}
 
-	cfg := loadConfig()
 	if cfg != nil {
 		if r.CLI.VTApiKey == "" {
 			r.CLI.VTApiKey = cfg.Core.VTApiKey

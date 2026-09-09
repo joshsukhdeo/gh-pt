@@ -37,6 +37,7 @@ type CoreConfig struct {
 	VTApiKey        string `yaml:"vt_api_key"`
 	AllowPrerelease bool   `yaml:"allow_prerelease"`
 	DisableIcons    bool   `yaml:"disable_icons"`
+	LogToFile       bool   `yaml:"log_to_file"`
 }
 
 func GetConfigPath() string {

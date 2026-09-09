@@ -303,6 +303,7 @@ func RmStateOnly(target string) error {
 
 		delete(st.Apps, r)
 		log.Info().Msgf("Removed %s from state tracking only.", r)
+		state.LogHistory("remove", r, "")
 	}
 	return st.Save()
 }
@@ -407,6 +408,7 @@ func RemoveApp(target string, purge bool) error {
 
 		delete(st.Apps, r)
 		log.Info().Msgf("Removed %s from state tracking only.", r)
+		state.LogHistory("remove", r, "")
 	}
 	return st.Save()
 }
@@ -507,6 +509,7 @@ func EditState() error {
 				repo := parts[1]
 				delete(st.Apps, repo)
 				log.Info().Msgf("Removed %s from state.", repo)
+				state.LogHistory("remove", repo, "")
 			}
 		}
 		_ = st.Save()

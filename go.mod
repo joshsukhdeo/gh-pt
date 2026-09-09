@@ -9,6 +9,7 @@ require (
 	github.com/gofrs/flock v0.13.1
 	github.com/mholt/archiver/v4 v4.0.0-alpha.8
 	github.com/stretchr/testify v1.12.1
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
 
 require (

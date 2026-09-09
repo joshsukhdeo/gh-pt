@@ -65,6 +65,7 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 				log.Error().Err(err).Msgf("Failed to update %s via compile script", app.Repository)
 			} else {
 				log.Info().Msgf("Successfully updated %s via compile script", app.Repository)
+				state.LogHistory("update", app.Repository, app.Version)
 			}
 			continue
 		}
@@ -90,6 +91,7 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 				log.Error().Err(err).Msgf("Failed to sync %s: %s", app.Repository, string(output))
 			} else {
 				log.Info().Msgf("Successfully synced %s", app.Repository)
+				state.LogHistory("update", app.Repository, app.Version)
 			}
 			continue
 		}
@@ -155,6 +157,7 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 			log.Error().Err(err).Msgf("Failed to update %s", app.Repository)
 		} else {
 			log.Info().Msgf("Successfully updated %s", app.Repository)
+			state.LogHistory("update", app.Repository, latestRelease.Name)
 		}
 	}
 

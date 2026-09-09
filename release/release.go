@@ -996,6 +996,14 @@ func (r *GithubRelease) Install() error {
 	}
 	fmt.Printf("\n\033[1;32mInstalled %s successfully!\033[0m\n", repoName)
 
+	if r.CliParams == nil || (!r.CliParams.Update && !r.CliParams.UpdateAll) {
+		repo := ""
+		if r.CliParams != nil {
+			repo = r.CliParams.Repository
+		}
+		state.LogHistory("install", repo, releases[0].Name)
+	}
+
 	return nil
 }
 
