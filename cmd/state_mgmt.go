@@ -444,7 +444,26 @@ func EditState() error {
 		return nil
 	}
 
-	// 1. Interactive Multi-select for toggling auto-updates
+	for {
+		action, _ := pterm.DefaultInteractiveSelect.
+			WithOptions([]string{"Toggle Auto-Updates (Batch)", "Remove Apps (Batch)", "Edit App Settings", "Exit"}).
+			WithDefaultText("Select State Management Action").
+			Show()
+
+		switch action {
+		case "Toggle Auto-Updates (Batch)":
+			editStateToggleUpdates(st)
+		case "Remove Apps (Batch)":
+			editStateRemoveApps(st)
+		case "Edit App Settings":
+			editStateAppFields(st)
+		case "Exit":
+			return nil
+		}
+	}
+}
+
+func editStateToggleUpdates(st *state.State) {
 	var options []string
 	var selectedOptions []string
 
@@ -474,7 +493,6 @@ func EditState() error {
 		WithFilter(false).
 		Show("Select apps to ENABLE for automatic updates")
 
-	// Apply selection
 	selectedMap := make(map[string]bool)
 	for _, s := range selected {
 		selectedMap[s] = true
@@ -490,10 +508,24 @@ func EditState() error {
 		app.Disabled = !selectedMap[label]
 	}
 
-	_ = st.Save()
+	if err := st.Save(); err != nil {
+		pterm.Error.Printf("Failed to save state: %v\n", err)
+	} else {
+		pterm.Success.Println("State saved successfully.")
+	}
+}
 
-	// 2. Interactive Multi-select for removal
-	pterm.Println()
+func editStateRemoveApps(st *state.State) {
+	var options []string
+	for k, app := range st.Apps {
+		cat := "User"
+		if app.Global {
+			cat = "Global"
+		}
+		options = append(options, fmt.Sprintf("[%s] %s", cat, k))
+	}
+	sort.Strings(options)
+
 	pterm.Warning.Println("SPACE selects for DELETION. ENTER confirms selection.")
 	toDelete, _ := pterm.DefaultInteractiveMultiselect.
 		WithOptions(options).
@@ -503,7 +535,6 @@ func EditState() error {
 
 	if len(toDelete) > 0 {
 		for _, label := range toDelete {
-			// reverse extract repo name
 			parts := strings.SplitN(label, "] ", 2)
 			if len(parts) == 2 {
 				repo := parts[1]
@@ -512,8 +543,80 @@ func EditState() error {
 				state.LogHistory("remove", repo, "")
 			}
 		}
-		_ = st.Save()
+		if err := st.Save(); err != nil {
+			pterm.Error.Printf("Failed to save state: %v\n", err)
+		} else {
+			pterm.Success.Println("State saved successfully.")
+		}
+	}
+}
+
+func editStateAppFields(st *state.State) {
+	var repos []string
+	for k := range st.Apps {
+		repos = append(repos, k)
+	}
+	sort.Strings(repos)
+	repos = append(repos, "Back")
+
+	selectedAppRepo, _ := pterm.DefaultInteractiveSelect.
+		WithOptions(repos).
+		WithDefaultText("Select App to Edit").
+		Show()
+
+	if selectedAppRepo == "Back" {
+		return
 	}
 
-	return nil
+	app := st.Apps[selectedAppRepo]
+	for {
+		fields := []string{
+			fmt.Sprintf("TargetPath: %s", app.TargetPath),
+			fmt.Sprintf("Global: %t", app.Global),
+			fmt.Sprintf("ReleaseAsset: %s", app.ReleaseAsset),
+			fmt.Sprintf("Version: %s", app.Version),
+			fmt.Sprintf("Disabled: %t", app.Disabled),
+			fmt.Sprintf("NativeExtract: %t", app.NativeExtract),
+			fmt.Sprintf("IsPrerelease: %t", app.IsPrerelease),
+			"Back",
+		}
+
+		selectedField, _ := pterm.DefaultInteractiveSelect.
+			WithOptions(fields).
+			WithDefaultText("Select Field to Edit").
+			Show()
+
+		if selectedField == "Back" {
+			break
+		}
+
+		parts := strings.Split(selectedField, ":")
+		if len(parts) == 0 {
+			continue
+		}
+		fieldName := strings.TrimSpace(parts[0])
+
+		switch fieldName {
+		case "TargetPath":
+			app.TargetPath, _ = pterm.DefaultInteractiveTextInput.WithDefaultText("TargetPath").WithDefaultValue(app.TargetPath).Show()
+		case "ReleaseAsset":
+			app.ReleaseAsset, _ = pterm.DefaultInteractiveTextInput.WithDefaultText("ReleaseAsset").WithDefaultValue(app.ReleaseAsset).Show()
+		case "Version":
+			app.Version, _ = pterm.DefaultInteractiveTextInput.WithDefaultText("Version").WithDefaultValue(app.Version).Show()
+		case "Global":
+			app.Global, _ = pterm.DefaultInteractiveConfirm.WithDefaultText("Global").WithDefaultValue(app.Global).Show()
+		case "Disabled":
+			app.Disabled, _ = pterm.DefaultInteractiveConfirm.WithDefaultText("Disabled").WithDefaultValue(app.Disabled).Show()
+		case "NativeExtract":
+			app.NativeExtract, _ = pterm.DefaultInteractiveConfirm.WithDefaultText("NativeExtract").WithDefaultValue(app.NativeExtract).Show()
+		case "IsPrerelease":
+			app.IsPrerelease, _ = pterm.DefaultInteractiveConfirm.WithDefaultText("IsPrerelease").WithDefaultValue(app.IsPrerelease).Show()
+		}
+	}
+
+	if err := st.Save(); err != nil {
+		pterm.Error.Printf("Failed to save state: %v\n", err)
+	} else {
+		pterm.Success.Println("App state updated successfully.")
+	}
 }
