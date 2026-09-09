@@ -226,7 +226,7 @@ func (r *RootCLI) Run() error {
 		return EditState()
 	}
 	if r.RmSavedState != "" {
-		if !r.DisablePrompts && !r.Force {
+		if !r.DisablePrompts && !r.Overwrite {
 			confirmed, err := pterm.DefaultInteractiveConfirm.WithDefaultValue(false).Show(fmt.Sprintf("Remove %q from saved state only? This does not uninstall the app.", r.RmSavedState))
 			if err != nil {
 				return err
@@ -238,7 +238,7 @@ func (r *RootCLI) Run() error {
 		return RmStateOnly(r.RmSavedState)
 	}
 	if r.Rm != "" {
-		if !r.DisablePrompts && !r.Force {
+		if !r.DisablePrompts && !r.Overwrite {
 			confirmed, err := pterm.DefaultInteractiveConfirm.WithDefaultValue(false).Show(fmt.Sprintf("Uninstall %q and remove it from saved state? This removes the tracked binary(s) and any package managed by the OS package manager.", r.Rm))
 			if err != nil {
 				return err
@@ -250,7 +250,7 @@ func (r *RootCLI) Run() error {
 		return RemoveApp(r.Rm, false)
 	}
 	if r.Purge != "" {
-		if !r.DisablePrompts && !r.Force {
+		if !r.DisablePrompts && !r.Overwrite {
 			confirmed, err := pterm.DefaultInteractiveConfirm.WithDefaultValue(false).Show(fmt.Sprintf("Purge %q and remove it from saved state? This removes the tracked binary(s) and purges the package if applicable.", r.Purge))
 			if err != nil {
 				return err

@@ -42,8 +42,7 @@ type CLI struct {
 	AISafetyScan         bool              `help:"Use AI to scan the repository for safety concerns before installation (requires --ai)." group:"AI Mode"`
 	CompileFromSource    bool              `help:"Compile repository from source via AI-generated build script (requires --ai)." group:"AI Mode"`
 	TargetPathCreate     bool              `default:"true" negatable:"" help:"Create target installation directory if it does not exist." group:"Non-interactive Mode"`
-	Overwrite            bool              `default:"false" short:"o" help:"Overwrite target binaries." group:"Non-interactive Mode"`
-	Force                bool              `default:"false" short:"f" help:"Skip confirmation prompts for destructive uninstall and purge actions." group:"State Management"`
+	Overwrite            bool              `default:"false" short:"f" name:"force" aliases:"overwrite" help:"Overwrite target binaries and skip confirmation for destructive uninstall/purge actions." group:"Non-interactive Mode"`
 	PinInstall           bool              `name:"pin-install" default:"false" help:"Pin this installation to the current version (skip during updates)." group:"State Management"`
 	DryRun               bool              `default:"false" help:"Show what would be downloaded and installed without actually doing it." group:"Non-interactive Mode"`
 	VerifyChecksum       bool              `default:"true" help:"Verify asset checksums if checksum files are available in the release." group:"Non-interactive Mode"`
