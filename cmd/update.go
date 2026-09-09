@@ -91,6 +91,18 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 				log.Error().Err(err).Msgf("Failed to sync %s: %s", app.Repository, string(output))
 			} else {
 				log.Info().Msgf("Successfully synced %s", app.Repository)
+
+				if app.Fork && r.ExecContext.Overwrite {
+					pullCmd := exec.Command("git", "pull", "origin", "--force")
+					pullCmd.Dir = app.TargetPath
+					pullOutput, pullErr := pullCmd.CombinedOutput()
+					if pullErr != nil {
+						log.Error().Err(pullErr).Msgf("Failed to pull from origin for %s: %s", app.Repository, string(pullOutput))
+					} else {
+						log.Info().Msgf("Successfully pulled from origin for %s", app.Repository)
+					}
+				}
+
 				state.LogHistory("update", app.Repository, app.Version)
 			}
 			continue

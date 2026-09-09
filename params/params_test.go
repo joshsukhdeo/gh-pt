@@ -18,10 +18,9 @@ func TestCLIFlags_CloneAndFork(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = parser.Parse([]string{"joshsukhdeo/gh-pt", "--clone"})
+	_, err = parser.Parse([]string{"repo", "clone", "joshsukhdeo/gh-pt"})
 	require.NoError(t, err)
-	assert.True(t, cli.Clone)
-	assert.False(t, cli.Fork)
+	assert.Equal(t, "joshsukhdeo/gh-pt", cli.Repo.Clone.Repository)
 
 	var cli2 CLI
 	parser2, err := kong.New(&cli2, kong.Vars{
@@ -32,10 +31,9 @@ func TestCLIFlags_CloneAndFork(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = parser2.Parse([]string{"joshsukhdeo/gh-pt", "--fork"})
+	_, err = parser2.Parse([]string{"repo", "fork", "joshsukhdeo/gh-pt"})
 	require.NoError(t, err)
-	assert.True(t, cli2.Fork)
-	assert.False(t, cli2.Clone)
+	assert.Equal(t, "joshsukhdeo/gh-pt", cli2.Repo.Fork.Repository)
 
 	var cli3 CLI
 	parser3, err := kong.New(&cli3, kong.Vars{
@@ -46,11 +44,11 @@ func TestCLIFlags_CloneAndFork(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = parser3.Parse([]string{"joshsukhdeo/gh-pt", "--ai", "--compile-from-source", "--ai-cmd", "my-ai -p %s"})
+	_, err = parser3.Parse([]string{"source", "joshsukhdeo/gh-pt", "--ai", "--ai-cmd", "my-ai -p %s"})
 	require.NoError(t, err)
-	assert.True(t, cli3.AI)
-	assert.True(t, cli3.CompileFromSource)
-	assert.Equal(t, "my-ai -p %s", cli3.AICmd)
+	assert.Equal(t, "joshsukhdeo/gh-pt", cli3.Source.Repository)
+	assert.True(t, cli3.Source.AI)
+	assert.Equal(t, "my-ai -p %s", cli3.Source.AICmd)
 }
 
 func TestCLIDefaults(t *testing.T) {
@@ -66,13 +64,13 @@ func TestCLIDefaults(t *testing.T) {
 	_, err = parser.Parse([]string{})
 	require.NoError(t, err)
 
-	assert.False(t, cli.Interactive)
-	assert.False(t, cli.UpdateAll)
-	assert.False(t, cli.Update)
-	assert.Equal(t, "latest", cli.ReleaseVersion)
-	assert.False(t, cli.All)
-	assert.True(t, cli.TargetPathCreate)
-	assert.False(t, cli.Overwrite)
+	assert.False(t, cli.Install.Interactive)
+	assert.False(t, cli.Install.UpdateAll)
+	assert.False(t, cli.Install.Update)
+	assert.Equal(t, "latest", cli.Install.ReleaseVersion)
+	assert.False(t, cli.Install.All)
+	assert.True(t, cli.Install.TargetPathCreate)
+	assert.False(t, cli.Install.Overwrite)
 	assert.Equal(t, "info", cli.LogLevel)
 	assert.Equal(t, "console", cli.LogFormat)
 	assert.True(t, cli.LogQuietInteractive)
@@ -91,7 +89,7 @@ func TestCLIParse(t *testing.T) {
 	_, err = parser.Parse([]string{"joshsukhdeo/gh-pt", "-i", "--update-all"})
 	require.NoError(t, err)
 
-	assert.Equal(t, "joshsukhdeo/gh-pt", cli.Repository)
-	assert.True(t, cli.Interactive)
-	assert.True(t, cli.UpdateAll)
+	assert.Equal(t, "joshsukhdeo/gh-pt", cli.Install.Repository)
+	assert.True(t, cli.Install.Interactive)
+	assert.True(t, cli.Install.UpdateAll)
 }

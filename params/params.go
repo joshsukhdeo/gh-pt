@@ -84,7 +84,7 @@ type StateRmCmd struct {
 	Purge  bool   `help:"Completely uninstall and purge."`
 }
 
-type StateEditCmd struct {}
+type StateEditCmd struct{}
 
 type ConfigCmd struct {
 	Ls   ConfigLsCmd   `cmd:"" help:"List config settings."`
@@ -93,11 +93,18 @@ type ConfigCmd struct {
 	Rm   ConfigRmCmd   `cmd:"" help:"Remove config setting."`
 	Menu ConfigMenuCmd `cmd:"" default:"withargs" help:"Interactive config menu (default)."`
 }
-type ConfigLsCmd struct {}
-type ConfigGetCmd struct { Key string `arg:""` }
-type ConfigSetCmd struct { Key string `arg:""`; Value string `arg:""` }
-type ConfigRmCmd struct { Key string `arg:""` }
-type ConfigMenuCmd struct {}
+type ConfigLsCmd struct{}
+type ConfigGetCmd struct {
+	Key string `arg:""`
+}
+type ConfigSetCmd struct {
+	Key   string `arg:""`
+	Value string `arg:""`
+}
+type ConfigRmCmd struct {
+	Key string `arg:""`
+}
+type ConfigMenuCmd struct{}
 
 type RepoCmd struct {
 	Clone RepoCloneCmd `cmd:"" help:"Clone the repository."`
@@ -122,8 +129,9 @@ type ScanCmd struct {
 }
 
 type ScanAiCmd struct {
-	Target string `arg:"" optional:"" help:"Target to scan."`
-	AICmd  string `help:"Command template for AI execution."`
+	Target      string `arg:"" optional:"" help:"Target to scan."`
+	Interactive bool   `short:"i" help:"Use interactive AI command from config."`
+	AICmd       string `name:"ai-cmd" help:"Command template for AI execution."`
 }
 
 type ScanVtCmd struct {
@@ -155,27 +163,28 @@ type SourceCmd struct {
 // ExecContext holds the flattened execution parameters
 type ExecContext struct {
 	CommonInstallFlags
-	Repository        string
-	Clone             bool
-	Fork              bool
-	CompileFromSource bool
-	AI                bool
-	AICmd             string
-	AISafetyScan      bool
-	LogLevel          string
-	LogFormat         string
+	Repository          string
+	Clone               bool
+	Fork                bool
+	MaxDepth            int
+	CompileFromSource   bool
+	AI                  bool
+	AICmd               string
+	AISafetyScan        bool
+	LogLevel            string
+	LogFormat           string
 	LogQuietInteractive bool
-	Verbose           bool
-	VTApiKey          string
-	Ls                string
-	Ll                string
-	Full              bool
-	EditSavedState    bool
-	RmSavedState      string
-	Rm                string
-	Purge             string
-	Pin               string
-	Show              bool
-	ShowAssets        bool
-	ShowVersions      bool
+	Verbose             bool
+	VTApiKey            string
+	Ls                  string
+	Ll                  string
+	Full                bool
+	EditSavedState      bool
+	RmSavedState        string
+	Rm                  string
+	Purge               string
+	Pin                 string
+	Show                bool
+	ShowAssets          bool
+	ShowVersions        bool
 }

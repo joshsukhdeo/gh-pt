@@ -22,7 +22,8 @@ type PathsConfig struct {
 }
 
 type AIConfig struct {
-	AICmd string `yaml:"ai_cmd"`
+	AICmd            string `yaml:"ai_cmd"`
+	AIInteractiveCmd string `yaml:"ai_interactive_cmd"`
 }
 
 type CoreConfig struct {

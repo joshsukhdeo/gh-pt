@@ -2,12 +2,13 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/joshsukhdeo/gh-pt/config"
 	"github.com/joshsukhdeo/gh-pt/params"
 )
 
 func RunCommand(cmdStr string, cli *params.CLI) error {
 	r := &RootCLI{}
-	
+
 	r.LogLevel = cli.LogLevel
 	r.LogFormat = cli.LogFormat
 	r.LogQuietInteractive = cli.LogQuietInteractive
@@ -33,12 +34,14 @@ func RunCommand(cmdStr string, cli *params.CLI) error {
 		r.Repository = cli.Repo.Clone.Repository
 		r.Clone = true
 		r.Overwrite = cli.Repo.Clone.Force
+		r.MaxDepth = cli.Repo.Clone.MaxDepth
 		return r.RunInstall()
 	case "repo fork":
 		r.CommonInstallFlags = cli.Install.CommonInstallFlags
 		r.Repository = cli.Repo.Fork.Repository
 		r.Fork = true
 		r.Overwrite = cli.Repo.Fork.Force
+		r.MaxDepth = cli.Repo.Fork.MaxDepth
 		return r.RunInstall()
 	case "source":
 		r.CommonInstallFlags = cli.Source.CommonInstallFlags
@@ -48,7 +51,18 @@ func RunCommand(cmdStr string, cli *params.CLI) error {
 		r.AI = true
 		return r.RunInstall()
 	case "scan ai":
-		return RunAIScan(cli.Scan.Ai.Target, cli.Scan.Ai.AICmd)
+		aiCmd := cli.Scan.Ai.AICmd
+		if aiCmd == "" {
+			cfg, _ := config.LoadConfig()
+			if cfg != nil {
+				if cli.Scan.Ai.Interactive {
+					aiCmd = cfg.AI.AIInteractiveCmd
+				} else {
+					aiCmd = cfg.AI.AICmd
+				}
+			}
+		}
+		return RunAIScan(cli.Scan.Ai.Target, aiCmd)
 	case "scan vt":
 		return RunVTScan(cli.Scan.Vt.Target)
 	case "vt set-key":
@@ -67,4 +81,3 @@ func RunCommand(cmdStr string, cli *params.CLI) error {
 		return fmt.Errorf("unknown command: %s", cmdStr)
 	}
 }
-

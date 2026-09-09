@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -8,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/joshsukhdeo/gh-pt/params"
+	"github.com/joshsukhdeo/gh-pt/state"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -112,4 +115,55 @@ func TestBuildCompileFixPrompt(t *testing.T) {
 	assert.Contains(t, prompt, "ninja: command not found")
 	assert.Contains(t, prompt, "attempt 1 of 2")
 	assert.Contains(t, prompt, "fix and then attempt to run the compile script and it is only done when script runs successfully")
+}
+
+func TestBuildCloneOrForkArgs(t *testing.T) {
+	// Clone without depth
+	args := buildCloneOrForkArgs("cli/cli", false, "/path/to/target", 0)
+	assert.Equal(t, []string{"repo", "clone", "cli/cli", "/path/to/target"}, args)
+
+	// Clone with depth
+	args = buildCloneOrForkArgs("cli/cli", false, "/path/to/target", 1)
+	assert.Equal(t, []string{"repo", "clone", "cli/cli", "/path/to/target", "--", "--depth", "1"}, args)
+
+	// Fork without depth
+	args = buildCloneOrForkArgs("cli/cli", true, "/path/to/target", 0)
+	assert.Equal(t, []string{"repo", "fork", "cli/cli", "--clone", "/path/to/target"}, args)
+
+	// Fork with depth
+	args = buildCloneOrForkArgs("cli/cli", true, "/path/to/target", 5)
+	assert.Equal(t, []string{"repo", "fork", "cli/cli", "--clone", "/path/to/target", "--", "--depth", "5"}, args)
+}
+
+func TestRouter_MaxDepth(t *testing.T) {
+	cliClone := params.CLI{}
+	cliClone.Repo.Clone.Repository = "joshsukhdeo/gh-pt"
+	cliClone.Repo.Clone.MaxDepth = 3
+	cliClone.Install.DryRun = true
+
+	err := RunCommand("repo clone", &cliClone)
+	assert.NoError(t, err)
+
+	cliFork := params.CLI{}
+	cliFork.Repo.Fork.Repository = "joshsukhdeo/gh-pt"
+	cliFork.Repo.Fork.MaxDepth = 4
+	cliFork.Install.DryRun = true
+
+	err = RunCommand("repo fork", &cliFork)
+	assert.NoError(t, err)
+}
+
+func TestInstalledApp_MaxDepthSerialization(t *testing.T) {
+	app := state.InstalledApp{
+		Repository: "joshsukhdeo/gh-pt",
+		MaxDepth:   2,
+	}
+	data, err := json.Marshal(app)
+	assert.NoError(t, err)
+	assert.Contains(t, string(data), `"max_depth":2`)
+
+	var loaded state.InstalledApp
+	err = json.Unmarshal(data, &loaded)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, loaded.MaxDepth)
 }

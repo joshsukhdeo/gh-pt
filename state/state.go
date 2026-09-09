@@ -27,6 +27,7 @@ type InstalledApp struct {
 	NativeExtract       bool              `json:"native_extract"`
 	Clone               bool              `json:"clone,omitempty"`
 	Fork                bool              `json:"fork,omitempty"`
+	MaxDepth            int               `json:"max_depth,omitempty"`
 	CompileScript       string            `json:"compile_script,omitempty"`
 	IsPrerelease        bool              `json:"is_prerelease,omitempty"`
 }

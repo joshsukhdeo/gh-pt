@@ -105,7 +105,7 @@ func TestShowInfo_ShowVersions(t *testing.T) {
 	}
 
 	r := &RootCLI{
-		CLI: params.CLI{
+		ExecContext: params.ExecContext{
 			Repository:   "test/repo",
 			ShowVersions: true,
 		},
@@ -150,7 +150,7 @@ func TestShowInfo_ShowVersions_DisableIcons(t *testing.T) {
 	}
 
 	r := &RootCLI{
-		CLI: params.CLI{
+		ExecContext: params.ExecContext{
 			Repository:   "test/repo",
 			ShowVersions: true,
 		},
@@ -197,10 +197,12 @@ func TestShowInfo_Show(t *testing.T) {
 
 	// Default (stable): should pick v1.14.0 and display max 10 versions, then v1.14.0 assets
 	r := &RootCLI{
-		CLI: params.CLI{
-			Repository:     "test/repo",
-			Show:           true,
-			ReleaseVersion: "latest",
+		ExecContext: params.ExecContext{
+			Repository: "test/repo",
+			Show:       true,
+			CommonInstallFlags: params.CommonInstallFlags{
+				ReleaseVersion: "latest",
+			},
 		},
 	}
 
@@ -220,11 +222,13 @@ func TestShowInfo_Show(t *testing.T) {
 
 	// With Prerelease: should pick v1.15.0
 	rPrerelease := &RootCLI{
-		CLI: params.CLI{
-			Repository:     "test/repo",
-			Show:           true,
-			Prerelease:     true,
-			ReleaseVersion: "latest",
+		ExecContext: params.ExecContext{
+			Repository: "test/repo",
+			Show:       true,
+			CommonInstallFlags: params.CommonInstallFlags{
+				Prerelease:     true,
+				ReleaseVersion: "latest",
+			},
 		},
 	}
 	outPre := captureOutput(func() {
@@ -253,10 +257,12 @@ func TestShowInfo_ShowAssets(t *testing.T) {
 
 	// Target specific version v1.0.0
 	r := &RootCLI{
-		CLI: params.CLI{
-			Repository:     "test/repo",
-			ShowAssets:     true,
-			ReleaseVersion: "v1.0.0",
+		ExecContext: params.ExecContext{
+			Repository: "test/repo",
+			ShowAssets: true,
+			CommonInstallFlags: params.CommonInstallFlags{
+				ReleaseVersion: "v1.0.0",
+			},
 		},
 	}
 
@@ -272,7 +278,7 @@ func TestShowInfo_ShowAssets(t *testing.T) {
 func TestShowInfo_Errors(t *testing.T) {
 	// Empty repository
 	r := &RootCLI{
-		CLI: params.CLI{
+		ExecContext: params.ExecContext{
 			Show: true,
 		},
 	}
@@ -315,20 +321,16 @@ func TestShowInfo_RoutingInRun(t *testing.T) {
 		return mock, nil
 	}
 
-	r := &RootCLI{
-		CLI: params.CLI{
+	cli := &params.CLI{
+		Show: params.ShowCmd{
 			Repository: "test/repo",
-			ShowAssets: true,
+			Assets:     true,
 		},
 	}
 
-	// Ensure Validate passes without error and without needing target path
-	err := r.Validate()
-	assert.NoError(t, err)
-
-	// Ensure Run routes to ShowInfo and returns without error
+	// Ensure RunCommand routes to ShowInfo and returns without error
 	out := captureOutput(func() {
-		err = r.Run()
+		err := RunCommand("show", cli)
 		assert.NoError(t, err)
 	})
 	assert.Contains(t, out, "my-asset.deb")

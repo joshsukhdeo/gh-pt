@@ -90,12 +90,14 @@ func TestGenerateStrictAssetRegex(t *testing.T) {
 
 func TestGithubRelease_ResolveDestinationPath(t *testing.T) {
 	gr := &GithubRelease{
-		CliParams: &params.CLI{
-			TargetPath: "/tmp/bin",
-			Rename: map[string]string{
-				"test-linux-amd64": "test",
+		CliParams: &params.ExecContext{
+			CommonInstallFlags: params.CommonInstallFlags{
+				TargetPath: "/tmp/bin",
+				Rename: map[string]string{
+					"test-linux-amd64": "test",
+				},
+				DisablePrompts: true,
 			},
-			DisablePrompts: true,
 		},
 	}
 
@@ -104,7 +106,7 @@ func TestGithubRelease_ResolveDestinationPath(t *testing.T) {
 }
 
 func TestGithubRelease_MakeGithubRelease(t *testing.T) {
-	p := &params.CLI{}
+	p := &params.ExecContext{}
 	client := &MockGithubClient{}
 	r := MakeGithubRelease(p, client)
 	assert.NotNil(t, r)
@@ -117,11 +119,13 @@ func TestGithubRelease_InstallBinary(t *testing.T) {
 	require.NoError(t, err)
 
 	gr := &GithubRelease{
-		CliParams: &params.CLI{
-			TargetPath:     tmpDir,
-			Rename:         map[string]string{},
-			DisablePrompts: true,
-			Overwrite:      true,
+		CliParams: &params.ExecContext{
+			CommonInstallFlags: params.CommonInstallFlags{
+				TargetPath:     tmpDir,
+				Rename:         map[string]string{},
+				DisablePrompts: true,
+				Overwrite:      true,
+			},
 		},
 	}
 
@@ -144,8 +148,10 @@ func TestGithubRelease_InstallDebRpm(t *testing.T) {
 	defer func() { execCommand = origExecCommand }()
 
 	gr := &GithubRelease{
-		CliParams: &params.CLI{
-			NoDeps: true,
+		CliParams: &params.ExecContext{
+			CommonInstallFlags: params.CommonInstallFlags{
+				NoDeps: true,
+			},
 		},
 	}
 
@@ -165,13 +171,15 @@ func TestGithubRelease_InstallArchivedBinary(t *testing.T) {
 	fsys := os.DirFS(tmpDir)
 
 	gr := &GithubRelease{
-		CliParams: &params.CLI{
-			TargetPath: tmpDir,
-			Rename: map[string]string{
-				"source_archive": "dest_archive",
+		CliParams: &params.ExecContext{
+			CommonInstallFlags: params.CommonInstallFlags{
+				TargetPath: tmpDir,
+				Rename: map[string]string{
+					"source_archive": "dest_archive",
+				},
+				DisablePrompts: true,
+				Overwrite:      true,
 			},
-			DisablePrompts: true,
-			Overwrite:      true,
 		},
 	}
 
@@ -190,8 +198,10 @@ func TestGithubRelease_InstallPkg(t *testing.T) {
 	defer func() { execCommand = origExecCommand }()
 
 	gr := &GithubRelease{
-		CliParams: &params.CLI{
-			NoDeps: true,
+		CliParams: &params.ExecContext{
+			CommonInstallFlags: params.CommonInstallFlags{
+				NoDeps: true,
+			},
 		},
 	}
 
@@ -205,8 +215,10 @@ func TestGithubRelease_InstallPacman(t *testing.T) {
 	defer func() { execCommand = origExecCommand }()
 
 	gr := &GithubRelease{
-		CliParams: &params.CLI{
-			NoDeps: true,
+		CliParams: &params.ExecContext{
+			CommonInstallFlags: params.CommonInstallFlags{
+				NoDeps: true,
+			},
 		},
 	}
 
@@ -220,8 +232,10 @@ func TestGithubRelease_EnsureSudo(t *testing.T) {
 	defer func() { execCommand = origExecCommand }()
 
 	gr := &GithubRelease{
-		CliParams: &params.CLI{
-			DisablePrompts: true,
+		CliParams: &params.ExecContext{
+			CommonInstallFlags: params.CommonInstallFlags{
+				DisablePrompts: true,
+			},
 		},
 	}
 	err := gr.ensureSudo()
@@ -247,11 +261,13 @@ func TestGithubRelease_Install(t *testing.T) {
 	}
 
 	gr := &GithubRelease{
-		CliParams: &params.CLI{
-			DisablePrompts: true,
-			Repository:     "owner/repo",
-			ReleaseVersion: "latest",
-			Type:           []string{"binary"},
+		CliParams: &params.ExecContext{
+			Repository: "owner/repo",
+			CommonInstallFlags: params.CommonInstallFlags{
+				DisablePrompts: true,
+				ReleaseVersion: "latest",
+				Type:           []string{"binary"},
+			},
 		},
 		Client: client,
 	}
@@ -270,11 +286,13 @@ func TestGithubRelease_CompileFromSource(t *testing.T) {
 	defer func() { execCommand = origExecCommand }()
 
 	gr := &GithubRelease{
-		CliParams: &params.CLI{
+		CliParams: &params.ExecContext{
 			CompileFromSource: true,
 			AI:                true,
-			DisablePrompts:    true,
 			AICmd:             "true", // mock success via shell
+			CommonInstallFlags: params.CommonInstallFlags{
+				DisablePrompts: true,
+			},
 		},
 	}
 	// As it uses `os.UserHomeDir()`, let's just make sure it fails safely or executes gracefully without panics
@@ -292,10 +310,12 @@ func TestSuccessMessage(t *testing.T) {
 	defer func() { execCommand = origExecCommand }()
 
 	gr := &GithubRelease{
-		CliParams: &params.CLI{
-			NoDeps:         true,
-			Interactive:    true,
-			DisablePrompts: false,
+		CliParams: &params.ExecContext{
+			CommonInstallFlags: params.CommonInstallFlags{
+				NoDeps:         true,
+				Interactive:    true,
+				DisablePrompts: false,
+			},
 		},
 		Prompter: MockPrompter{MockConfirm: true, MockInput: "ok"},
 	}

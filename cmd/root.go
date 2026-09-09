@@ -30,7 +30,6 @@ const (
 	GH_INSTALL_CHECKSUM_ASSET_REGEX = ".*(?:checksum|txt)+.*$"
 )
 
-
 func (r *RootCLI) Validate() error {
 	if runtime.GOOS == "windows" && r.Wine != "off" && r.Wine != "" {
 		pterm.Warning.Println("Wine is not supported on Windows. Continuing with wine disabled.")
@@ -396,9 +395,26 @@ func resolveRepoPath(repo string, isClone, isFork bool, clonePath, forkPath stri
 	return ""
 }
 
+func buildCloneOrForkArgs(repo string, isFork bool, targetDir string, maxDepth int) []string {
+	var args []string
+	if isFork {
+		args = []string{"repo", "fork", repo, "--clone", targetDir}
+		if maxDepth > 0 {
+			args = append(args, "--", "--depth", fmt.Sprintf("%d", maxDepth))
+		}
+	} else {
+		cloneArgs := []string{"repo", "clone", repo, targetDir}
+		if maxDepth > 0 {
+			cloneArgs = append(cloneArgs, "--", "--depth", fmt.Sprintf("%d", maxDepth))
+		}
+		args = cloneArgs
+	}
+	return args
+}
+
 func (r *RootCLI) handleRepoCloneOrFork(cfg *config.Config) error {
-	var cloneBase string
-	var forkBase string
+	cloneBase := GetDefaultClonePath()
+	forkBase := GetDefaultForkPath()
 	if cfg != nil {
 		cloneBase = cfg.Paths.ClonePath
 		forkBase = cfg.Paths.ForkPath
@@ -425,16 +441,18 @@ func (r *RootCLI) handleRepoCloneOrFork(cfg *config.Config) error {
 		return nil
 	}
 
+	if _, err := os.Stat(targetDir); err == nil {
+		if !r.Overwrite {
+			return fmt.Errorf("target path %s already exists; use force to overwrite", targetDir)
+		}
+		_ = os.RemoveAll(targetDir)
+	}
+
 	if err := os.MkdirAll(filepath.Dir(targetDir), 0755); err != nil {
 		return fmt.Errorf("failed to create parent directory: %w", err)
 	}
 
-	var args []string
-	if r.Fork {
-		args = []string{"repo", "fork", r.Repository, "--clone", "--", targetDir}
-	} else {
-		args = []string{"repo", "clone", r.Repository, targetDir}
-	}
+	args := buildCloneOrForkArgs(r.Repository, r.Fork, targetDir, r.MaxDepth)
 
 	stdOut, stdErr, err := gh.Exec(args...)
 	if err != nil {
@@ -452,6 +470,7 @@ func (r *RootCLI) handleRepoCloneOrFork(cfg *config.Config) error {
 				Clone:      r.Clone,
 				Fork:       r.Fork,
 				Pinned:     r.PinInstall,
+				MaxDepth:   r.MaxDepth,
 			})
 			if err != nil {
 				log.Warn().Err(err).Msg("could not save repository state")
@@ -578,6 +597,9 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 
 	// 1. Clone repo into builds directory
 	cloneArgs := []string{"repo", "clone", r.Repository, repoDir}
+	if r.MaxDepth > 0 {
+		cloneArgs = append(cloneArgs, "--", "--depth", fmt.Sprintf("%d", r.MaxDepth))
+	}
 	stdOut, stdErr, err := gh.Exec(cloneArgs...)
 	if err != nil {
 		return fmt.Errorf("failed to clone repository to builds dir: %s (%w)", stdErr.String(), err)
@@ -612,6 +634,7 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 						Global:        r.Global,
 						CompileScript: scriptPath,
 						Pinned:        r.PinInstall,
+						MaxDepth:      r.MaxDepth,
 					})
 					if err != nil {
 						log.Warn().Err(err).Msg("could not save repository state")
@@ -705,6 +728,7 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 				Global:        r.Global,
 				CompileScript: scriptPath,
 				Pinned:        r.PinInstall,
+				MaxDepth:      r.MaxDepth,
 			})
 			if err != nil {
 				log.Warn().Err(err).Msg("could not save repository state")

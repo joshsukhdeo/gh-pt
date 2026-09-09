@@ -11,20 +11,18 @@ Rename the project and CLI from `gh-pt` to `gh-pt` (supporting `gh pt`, `ghpt`),
 
 ## Decisions so far
 
-*(Empty)*
+- [Ticket 1: Codebase and Namespace Renaming](#ticket-1): Done
+- [Ticket 2: CLI Command Router Refactor](#ticket-2): Refactored `params.CLI` to have subcommands (e.g., `InstallCmd`, `StateCmd`). Mapped flat `ExecContext` properties into `RootCLI` for backwards compatibility. Dynamic help names supported via `filepath.Base(os.Args[0])`.
+- [Ticket 3: State File Splitting and Migration Architecture](#ticket-3): Skipped splitting state.json per YAGNI. Added `MaxDepth` directly to existing `InstalledApp` schema and mapped to `gh repo clone/fork -- --depth N`.
 
 ## Open Tickets
 
-- [Ticket 1: Codebase and Namespace Renaming](#ticket-1) : Done
-- [Ticket 2: CLI Command Router Refactor](#ticket-2) (Frontier)
-- [Ticket 3: State File Splitting and Migration Architecture](#ticket-3) (Frontier)
 - [Ticket 4: TUI Interactive Editors for Config and State](#ticket-4) (Offloaded to Jules)
 - [Ticket 5: VirusTotal and AI Scan Engine](#ticket-5) (Offloaded to Jules)
 
 ## Not yet specified
 
-- **AI Safety Scan**: What model is used for `scan --ai`? Is it an external API call, or a local heuristic? How does it report "safety" without burning massive tokens?
-- **Fork Update Behavior**: The user mentioned "implement a different behavior for forked if a different behavior should occur instead". We need to define exactly what updating a fork means (e.g., syncing upstream vs pulling origin).
+*(Empty)*
 
 ## Out of scope
 

@@ -25,11 +25,11 @@ func TestListState_LsAndLl(t *testing.T) {
 		AssetBinaries: []string{"bin1", "bin2"},
 	})
 
-	r1 := &cmd.RootCLI{CLI: params.CLI{Ls: "test", Full: true}}
+	r1 := &cmd.RootCLI{ExecContext: params.ExecContext{Ls: "test", Full: true}}
 	err := cmd.ListState(r1)
 	assert.NoError(t, err)
 
-	r2 := &cmd.RootCLI{CLI: params.CLI{Ll: "test", Full: true}}
+	r2 := &cmd.RootCLI{ExecContext: params.ExecContext{Ll: "test", Full: true}}
 	err = cmd.ListState(r2)
 	assert.NoError(t, err)
 }

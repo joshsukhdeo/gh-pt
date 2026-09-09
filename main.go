@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/alecthomas/kong"
 	"github.com/joshsukhdeo/gh-pt/cmd"
@@ -44,7 +45,7 @@ func main() {
 	}
 
 	ctx := kong.Parse(&cli,
-		kong.Name("gh-pt"),
+		kong.Name(filepath.Base(os.Args[0])),
 		kong.Description(`Install binaries for a Github repository release interactively or non-interactively.`),
 		kong.DefaultEnvars(cmd.GetEnvPrefix()),
 		kong.PostBuild(cmd.PostBuild),
