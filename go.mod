@@ -1,4 +1,4 @@
-module github.com/joshsukhdeo/gh-install
+module github.com/joshsukhdeo/gh-pt
 
 go 1.25.0
 

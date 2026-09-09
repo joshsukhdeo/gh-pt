@@ -6,13 +6,13 @@ import (
 	"os/exec"
 
 	"github.com/alecthomas/kong"
-	"github.com/joshsukhdeo/gh-install/cmd"
-	"github.com/joshsukhdeo/gh-install/config"
+	"github.com/joshsukhdeo/gh-pt/cmd"
+	"github.com/joshsukhdeo/gh-pt/config"
 )
 
 func main() {
 	if _, err := exec.LookPath("gh"); err != nil {
-		fmt.Fprintln(os.Stderr, "Error: GitHub CLI ('gh') is not installed or not in PATH. It is required for gh-install. Please install it from https://cli.github.com/")
+		fmt.Fprintln(os.Stderr, "Error: GitHub CLI ('gh') is not installed or not in PATH. It is required for gh-pt. Please install it from https://cli.github.com/")
 		os.Exit(1)
 	}
 
@@ -50,7 +50,7 @@ func main() {
 	}
 
 	ctx := kong.Parse(&cli,
-		kong.Name("gh-install"),
+		kong.Name("gh-pt"),
 		kong.Description(`Install binaries for a Github repository release interactively or non-interactively.  
 			Intended for quickly installing release binaries for projects that do not distribute 
 			using Homebrew or other package managers.`),

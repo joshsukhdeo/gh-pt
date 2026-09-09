@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/joshsukhdeo/gh-install/config"
+	"github.com/joshsukhdeo/gh-pt/config"
 	"github.com/pterm/pterm"
 	"github.com/rs/zerolog/log"
 )

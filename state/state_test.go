@@ -45,7 +45,7 @@ func TestStateManagement(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify it was written to disk
-		statePath := filepath.Join(tmpDir, "gh-install", "state.json")
+		statePath := filepath.Join(tmpDir, "gh-pt", "state.json")
 		assert.FileExists(t, statePath)
 
 		// Load again to verify unmarshalling
@@ -107,20 +107,20 @@ func TestStateManagement(t *testing.T) {
 
 		app := &InstalledApp{
 			Repository:    "neovim/neovim",
-			CompileScript: "/home/user/.config/gh-install/scripts/compile-neovim.sh",
+			CompileScript: "/home/user/.config/gh-pt/scripts/compile-neovim.sh",
 		}
 
 		_ = st.AddApp(app)
 
 		st2, err := LoadState()
 		require.NoError(t, err)
-		assert.Equal(t, "/home/user/.config/gh-install/scripts/compile-neovim.sh", st2.Apps["neovim/neovim"].CompileScript)
+		assert.Equal(t, "/home/user/.config/gh-pt/scripts/compile-neovim.sh", st2.Apps["neovim/neovim"].CompileScript)
 	})
 
 	t.Run("LoadState_FileReadErrorReturnsError", func(t *testing.T) {
 		t.Setenv("XDG_DATA_HOME", filepath.Join(tmpDir, "readerror"))
 		xdg.Reload()
-		stateDir := filepath.Join(tmpDir, "readerror", "gh-install")
+		stateDir := filepath.Join(tmpDir, "readerror", "gh-pt")
 		err := os.MkdirAll(stateDir, 0755)
 		require.NoError(t, err)
 
@@ -137,7 +137,7 @@ func TestStateManagement(t *testing.T) {
 	t.Run("LoadState_InvalidJsonReturnsError", func(t *testing.T) {
 		t.Setenv("XDG_DATA_HOME", filepath.Join(tmpDir, "invalid"))
 		xdg.Reload()
-		stateDir := filepath.Join(tmpDir, "invalid", "gh-install")
+		stateDir := filepath.Join(tmpDir, "invalid", "gh-pt")
 		err := os.MkdirAll(stateDir, 0755)
 		require.NoError(t, err)
 
@@ -156,7 +156,7 @@ func TestStateManagement(t *testing.T) {
 		// Create a file where directory should be
 		err := os.MkdirAll(filepath.Join(tmpDir, "mkdirerror"), 0755)
 		require.NoError(t, err)
-		err = os.WriteFile(filepath.Join(tmpDir, "mkdirerror", "gh-install"), []byte("file"), 0644)
+		err = os.WriteFile(filepath.Join(tmpDir, "mkdirerror", "gh-pt"), []byte("file"), 0644)
 		require.NoError(t, err)
 
 		st := &State{Apps: make(map[string]*InstalledApp)}
@@ -168,7 +168,7 @@ func TestStateManagement(t *testing.T) {
 		t.Setenv("XDG_DATA_HOME", filepath.Join(tmpDir, "writeerror"))
 		xdg.Reload()
 		// Create a directory where file should be
-		err := os.MkdirAll(filepath.Join(tmpDir, "writeerror", "gh-install", "state.json"), 0755)
+		err := os.MkdirAll(filepath.Join(tmpDir, "writeerror", "gh-pt", "state.json"), 0755)
 		require.NoError(t, err)
 
 		st := &State{Apps: make(map[string]*InstalledApp)}
@@ -179,11 +179,11 @@ func TestStateManagement(t *testing.T) {
 	t.Run("Save_LockErrorReturnsError", func(t *testing.T) {
 		t.Setenv("XDG_DATA_HOME", filepath.Join(tmpDir, "lockerror"))
 		xdg.Reload()
-		err := os.MkdirAll(filepath.Join(tmpDir, "lockerror", "gh-install"), 0755)
+		err := os.MkdirAll(filepath.Join(tmpDir, "lockerror", "gh-pt"), 0755)
 		require.NoError(t, err)
 
 		// Create a directory where the lock file would go, so lock.Lock() fails
-		lockPath := filepath.Join(tmpDir, "lockerror", "gh-install", "state.json.lock")
+		lockPath := filepath.Join(tmpDir, "lockerror", "gh-pt", "state.json.lock")
 		err = os.MkdirAll(lockPath, 0755)
 		require.NoError(t, err)
 
@@ -195,7 +195,7 @@ func TestStateManagement(t *testing.T) {
 	t.Run("LoadState_AppsIsNil", func(t *testing.T) {
 		t.Setenv("XDG_DATA_HOME", filepath.Join(tmpDir, "nilapps"))
 		xdg.Reload()
-		stateDir := filepath.Join(tmpDir, "nilapps", "gh-install")
+		stateDir := filepath.Join(tmpDir, "nilapps", "gh-pt")
 		err := os.MkdirAll(stateDir, 0755)
 		require.NoError(t, err)
 

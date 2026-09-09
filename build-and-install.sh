@@ -8,11 +8,11 @@ for arg in "$@"; do
     fi
 done
 
-echo "[+] Building gh-install..."
+echo "[+] Building gh-pt..."
 make build
 
 echo "[+] Registering extension with GitHub CLI..."
-EXTENSION_DIR="${HOME}/.local/share/gh/extensions/gh-install"
+EXTENSION_DIR="${HOME}/.local/share/gh/extensions/gh-pt"
 
 if [ -L "${EXTENSION_DIR}" ]; then
     echo "[*] Symlink already exists at ${EXTENSION_DIR}."
@@ -20,15 +20,15 @@ else
     gh extension install .
 fi
 
-echo "[+] Managing global binary in /usr/local/bin/gh-install..."
+echo "[+] Managing global binary in /usr/local/bin/gh-pt..."
 if [ "$NO_SYMLINK" -eq 1 ]; then
     echo "[*] --no-symlink specified. Hard copying binary..."
-    sudo rm -f /usr/local/bin/gh-install
-    sudo cp "$(pwd)/gh-install" /usr/local/bin/gh-install
+    sudo rm -f /usr/local/bin/gh-pt
+    sudo cp "$(pwd)/gh-pt" /usr/local/bin/gh-pt
 else
     echo "[*] Symlinking binary..."
-    sudo rm -f /usr/local/bin/gh-install
-    sudo ln -s "$(pwd)/gh-install" /usr/local/bin/gh-install
+    sudo rm -f /usr/local/bin/gh-pt
+    sudo ln -s "$(pwd)/gh-pt" /usr/local/bin/gh-pt
 fi
 
-echo "[+] Done. Test with: gh install --help or gh-install --help"
+echo "[+] Done. Test with: gh install --help or gh-pt --help"

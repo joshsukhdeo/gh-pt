@@ -2,9 +2,9 @@ package cmd_test
 
 import (
 	"github.com/adrg/xdg"
-	"github.com/joshsukhdeo/gh-install/cmd"
-	"github.com/joshsukhdeo/gh-install/params"
-	"github.com/joshsukhdeo/gh-install/state"
+	"github.com/joshsukhdeo/gh-pt/cmd"
+	"github.com/joshsukhdeo/gh-pt/params"
+	"github.com/joshsukhdeo/gh-pt/state"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )

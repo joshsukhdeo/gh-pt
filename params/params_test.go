@@ -18,7 +18,7 @@ func TestCLIFlags_CloneAndFork(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = parser.Parse([]string{"joshsukhdeo/gh-install", "--clone"})
+	_, err = parser.Parse([]string{"joshsukhdeo/gh-pt", "--clone"})
 	require.NoError(t, err)
 	assert.True(t, cli.Clone)
 	assert.False(t, cli.Fork)
@@ -32,7 +32,7 @@ func TestCLIFlags_CloneAndFork(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = parser2.Parse([]string{"joshsukhdeo/gh-install", "--fork"})
+	_, err = parser2.Parse([]string{"joshsukhdeo/gh-pt", "--fork"})
 	require.NoError(t, err)
 	assert.True(t, cli2.Fork)
 	assert.False(t, cli2.Clone)
@@ -46,7 +46,7 @@ func TestCLIFlags_CloneAndFork(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = parser3.Parse([]string{"joshsukhdeo/gh-install", "--ai", "--compile-from-source", "--ai-cmd", "my-ai -p %s"})
+	_, err = parser3.Parse([]string{"joshsukhdeo/gh-pt", "--ai", "--compile-from-source", "--ai-cmd", "my-ai -p %s"})
 	require.NoError(t, err)
 	assert.True(t, cli3.AI)
 	assert.True(t, cli3.CompileFromSource)
@@ -88,10 +88,10 @@ func TestCLIParse(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = parser.Parse([]string{"joshsukhdeo/gh-install", "-i", "--update-all"})
+	_, err = parser.Parse([]string{"joshsukhdeo/gh-pt", "-i", "--update-all"})
 	require.NoError(t, err)
 
-	assert.Equal(t, "joshsukhdeo/gh-install", cli.Repository)
+	assert.Equal(t, "joshsukhdeo/gh-pt", cli.Repository)
 	assert.True(t, cli.Interactive)
 	assert.True(t, cli.UpdateAll)
 }

@@ -15,10 +15,10 @@ import (
 	"github.com/alecthomas/kong"
 	"github.com/cli/go-gh/v2"
 	"github.com/cli/go-gh/v2/pkg/api"
-	"github.com/joshsukhdeo/gh-install/config"
-	"github.com/joshsukhdeo/gh-install/params"
-	"github.com/joshsukhdeo/gh-install/release"
-	"github.com/joshsukhdeo/gh-install/state"
+	"github.com/joshsukhdeo/gh-pt/config"
+	"github.com/joshsukhdeo/gh-pt/params"
+	"github.com/joshsukhdeo/gh-pt/release"
+	"github.com/joshsukhdeo/gh-pt/state"
 	"github.com/pterm/pterm"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -143,7 +143,7 @@ func (r *RootCLI) Run() error {
 	cfg := loadConfig()
 	if cfg != nil && cfg.Core.LogToFile {
 		fileLogger := &lumberjack.Logger{
-			Filename:   filepath.Join(xdg.DataHome, "gh-install", "gh-install.log"),
+			Filename:   filepath.Join(xdg.DataHome, "gh-pt", "gh-pt.log"),
 			MaxSize:    10, // megabytes
 			MaxBackups: 5,
 			MaxAge:     30, // days

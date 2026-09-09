@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/joshsukhdeo/gh-install/params"
+	"github.com/joshsukhdeo/gh-pt/params"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

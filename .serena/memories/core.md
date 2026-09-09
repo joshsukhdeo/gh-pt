@@ -1,6 +1,6 @@
 # Core
 
-- **Overview**: Go CLI tool (`gh-install`) for installing GitHub repository releases.
+- **Overview**: Go CLI tool (`gh-pt`) for installing GitHub repository releases.
 - **Entrypoint**: `main.go` using the `github.com/alecthomas/kong` CLI framework.
 - **Project Domains**:
   - `mem:tech_stack`: Languages, frameworks, and tools.

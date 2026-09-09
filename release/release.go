@@ -19,9 +19,9 @@ import (
 	"strings"
 
 	"github.com/cli/go-gh/v2"
-	"github.com/joshsukhdeo/gh-install/params"
-	"github.com/joshsukhdeo/gh-install/selector"
-	"github.com/joshsukhdeo/gh-install/state"
+	"github.com/joshsukhdeo/gh-pt/params"
+	"github.com/joshsukhdeo/gh-pt/selector"
+	"github.com/joshsukhdeo/gh-pt/state"
 	"github.com/pterm/pterm"
 	"github.com/rs/zerolog/log"
 )
@@ -514,13 +514,13 @@ func (r *GithubRelease) installMac(binaryPath string) error {
 	}
 	if strings.HasSuffix(strings.ToLower(binaryPath), ".dmg") {
 		log.Info().Msg("Mounting DMG...")
-		cmd := execCommand("hdiutil", "attach", binaryPath, "-nobrowse", "-mountpoint", "/Volumes/gh-install-dmg")
+		cmd := execCommand("hdiutil", "attach", binaryPath, "-nobrowse", "-mountpoint", "/Volumes/gh-pt-dmg")
 		if err := cmd.Run(); err != nil {
 			return err
 		}
-		defer func() { _ = execCommand("hdiutil", "detach", "/Volumes/gh-install-dmg").Run() }()
+		defer func() { _ = execCommand("hdiutil", "detach", "/Volumes/gh-pt-dmg").Run() }()
 
-		cpCmd := execCommand("sh", "-c", fmt.Sprintf("cp -R /Volumes/gh-install-dmg/*.app %s/", r.CliParams.TargetPath))
+		cpCmd := execCommand("sh", "-c", fmt.Sprintf("cp -R /Volumes/gh-pt-dmg/*.app %s/", r.CliParams.TargetPath))
 		if err := cpCmd.Run(); err != nil {
 			return err
 		}

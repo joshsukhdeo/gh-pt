@@ -1,9 +1,9 @@
-# gh-install
+# gh-pt
 
 ## Installation
 
 ```bash
-gh extension install joshsukhdeo/gh-install
+gh extension install joshsukhdeo/gh-pt
 ```
 
 ---
@@ -40,7 +40,7 @@ gh extension install joshsukhdeo/gh-install
 
 ```bash
 $ gh install --help
-Usage: gh-install [<repository>] [flags]
+Usage: gh-pt [<repository>] [flags]
 
 Install binaries for a Github repository release interactively or
 non-interactively.
@@ -178,7 +178,7 @@ Security Mode
 
 ## Package Manager Detection
 
-On Linux, `gh-install` dynamically detects which package managers are available on your system using `exec.LookPath` and adjusts the default asset priority accordingly:
+On Linux, `gh-pt` dynamically detects which package managers are available on your system using `exec.LookPath` and adjusts the default asset priority accordingly:
 
 | Distribution | Detected via | Default priority |
 |---|---|---|
@@ -218,14 +218,14 @@ If you are running `gh install` in a temporary script and don't want to track it
 ---
 
 - **Repository Tracking (Clone / Fork):** Supports cloning (`--clone`) or forking (`--fork`) git repositories into configurable base directories (defaults: `~/src` and `~/projects`), tracking them in `state.json` and automatically syncing them via `gh repo sync` during `gh install -U` / `-u`.
-- **AI Compilation from Source:** Supports `--compile-from-source` (with `--ai` and configurable `--ai-cmd 'agy -p "%s"'`) which clones the target repository to a temporary directory, invokes the AI agent to produce an automated build script saved at `~/.config/gh-install/scripts/compile-<pkgname>.sh` (or `.ps1` on Windows), executes compilation and installation, purges the temporary workspace, and tracks `compile_script` in state for replay during `-U`/`-u` updates.
+- **AI Compilation from Source:** Supports `--compile-from-source` (with `--ai` and configurable `--ai-cmd 'agy -p "%s"'`) which clones the target repository to a temporary directory, invokes the AI agent to produce an automated build script saved at `~/.config/gh-pt/scripts/compile-<pkgname>.sh` (or `.ps1` on Windows), executes compilation and installation, purges the temporary workspace, and tracks `compile_script` in state for replay during `-U`/`-u` updates.
 - **Pinned updates:** Pinned entries remain tracked but are skipped by `-U` and `-u` until the pin is removed.
 
 ---
 
 ## Configuration & Environment Variables
 
-All CLI flags can be set via environment variables (prefixed with `GH_INSTALL_`) or a YAML configuration file located at `~/.config/gh-install/config.yml`.
+All CLI flags can be set via environment variables (prefixed with `GH_INSTALL_`) or a YAML configuration file located at `~/.config/gh-pt/config.yml`.
 
 Example `config.yml`:
 ```yaml
@@ -247,11 +247,11 @@ The configuration precedence is: `CLI Argument > Environment Variable > config.y
 
 ## Topgrade Integration
 
-`gh-install` can easily be integrated with [Topgrade](https://github.com/topgrade-rs/topgrade) to keep all your installed binaries up to date automatically alongside your system packages. Just add the following to your `topgrade.toml` under the `[commands]` block:
+`gh-pt` can easily be integrated with [Topgrade](https://github.com/topgrade-rs/topgrade) to keep all your installed binaries up to date automatically alongside your system packages. Just add the following to your `topgrade.toml` under the `[commands]` block:
 
 ```toml
 [commands]
-"gh-install" = "gh install -U"
+"gh-pt" = "gh install -U"
 ```
 
 *Project maintained with model switch to nemotron-3.5-lightning-free for active development.*

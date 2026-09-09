@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"github.com/adrg/xdg"
-	"github.com/joshsukhdeo/gh-install/params"
-	"github.com/joshsukhdeo/gh-install/state"
+	"github.com/joshsukhdeo/gh-pt/params"
+	"github.com/joshsukhdeo/gh-pt/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -130,7 +130,7 @@ func TestShowInfo_ShowVersions_DisableIcons(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	xdg.Reload()
 
-	cfgPath := filepath.Join(tmpDir, "gh-install", "config.yml")
+	cfgPath := filepath.Join(tmpDir, "gh-pt", "config.yml")
 	_ = os.MkdirAll(filepath.Dir(cfgPath), 0755)
 	_ = os.WriteFile(cfgPath, []byte("disable_icons: true\n"), 0644)
 

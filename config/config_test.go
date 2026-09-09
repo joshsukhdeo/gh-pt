@@ -22,7 +22,7 @@ func TestConfigManagement(t *testing.T) {
 	})
 
 	t.Run("LoadConfig_ValidYaml", func(t *testing.T) {
-		configDir := filepath.Join(tmpDir, "gh-install")
+		configDir := filepath.Join(tmpDir, "gh-pt")
 		err := os.MkdirAll(configDir, 0755)
 		require.NoError(t, err)
 
@@ -60,13 +60,13 @@ ai_cmd: "my-ai -p '%s'"
 	t.Run("LoadConfig_InvalidYamlReturnsError", func(t *testing.T) {
 		t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmpDir, "invalid"))
 		xdg.Reload()
-		err := os.MkdirAll(filepath.Join(tmpDir, "invalid", "gh-install"), 0755)
+		err := os.MkdirAll(filepath.Join(tmpDir, "invalid", "gh-pt"), 0755)
 		require.NoError(t, err)
 
 		yamlContent := []byte(`
 install_types: [invalid yaml
 `)
-		configPath := filepath.Join(tmpDir, "invalid", "gh-install", "config.yml")
+		configPath := filepath.Join(tmpDir, "invalid", "gh-pt", "config.yml")
 		err = os.WriteFile(configPath, yamlContent, 0644)
 		require.NoError(t, err)
 
@@ -78,7 +78,7 @@ install_types: [invalid yaml
 	t.Run("LoadConfig_FileReadErrorReturnsError", func(t *testing.T) {
 		t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmpDir, "readerror"))
 		xdg.Reload()
-		configDir := filepath.Join(tmpDir, "readerror", "gh-install")
+		configDir := filepath.Join(tmpDir, "readerror", "gh-pt")
 		err := os.MkdirAll(configDir, 0755)
 		require.NoError(t, err)
 
@@ -119,7 +119,7 @@ install_types: [invalid yaml
 		// Create file where directory should go
 		err := os.MkdirAll(filepath.Join(tmpDir, "saveerror"), 0755)
 		require.NoError(t, err)
-		err = os.WriteFile(filepath.Join(tmpDir, "saveerror", "gh-install"), []byte("file"), 0644)
+		err = os.WriteFile(filepath.Join(tmpDir, "saveerror", "gh-pt"), []byte("file"), 0644)
 		require.NoError(t, err)
 
 		cfg := &Config{}

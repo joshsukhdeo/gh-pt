@@ -10,7 +10,7 @@ import (
 )
 
 var HistoryLogger = &lumberjack.Logger{
-	Filename:   filepath.Join(xdg.DataHome, "gh-install", "history.jsonl"),
+	Filename:   filepath.Join(xdg.DataHome, "gh-pt", "history.jsonl"),
 	MaxSize:    5,
 	MaxBackups: 2,
 }

@@ -1,19 +1,19 @@
 # AGENTS.md
 
 ## Project Overview
-`gh-install` is a GitHub CLI extension for installing release binaries from GitHub repositories across Linux, macOS, Windows, and FreeBSD. It supports both interactive and non-interactive workflows, checksum verification, distro/hardware detection, packaging formats (deb, rpm, pkg, appimage, flatpak, snap), archive extraction (`mholt/archiver/v4`), and atomic state management (`state.json` via `flock`).
+`gh-pt` is a GitHub CLI extension for installing release binaries from GitHub repositories across Linux, macOS, Windows, and FreeBSD. It supports both interactive and non-interactive workflows, checksum verification, distro/hardware detection, packaging formats (deb, rpm, pkg, appimage, flatpak, snap), archive extraction (`mholt/archiver/v4`), and atomic state management (`state.json` via `flock`).
 
 ## Agent Initialization - New Chat
 
 - Load the following skills: tdd, using-superpowers, golang-pro, ast-grep, golang-lint, golang-cli, gopls, verification-before-completion, concise-output, ponytail, wayfinders
 
-- Activate gh-install with serena mcp
+- Activate gh-pt with serena mcp
 
 ## Key Commands & Workflow
 ```bash
 # Build
 make build
-# or: go build -v -o gh-install .
+# or: go build -v -o gh-pt .
 
 # Run Tests
 go test -v ./...
@@ -37,8 +37,8 @@ make tidy
 - `selector/`:
   - `selector.go`: Regex builder (`buildRegexFromTypes`) and priority asset filtering.
   - `interactive_selector.go`: TUI/interactive prompts using `pterm`.
-- `state/state.go`: XDG data store (`$XDG_DATA_HOME/gh-install/state.json`) with file-locking (`flock` on `state.json.lock`), supporting binary releases and `Clone`/`Fork` tracking.
-- `config/config.go`: XDG configuration parsing (`$XDG_CONFIG_HOME/gh-install/config.yml`), including custom `clone_path` and `fork_path`.
+- `state/state.go`: XDG data store (`$XDG_DATA_HOME/gh-pt/state.json`) with file-locking (`flock` on `state.json.lock`), supporting binary releases and `Clone`/`Fork` tracking.
+- `config/config.go`: XDG configuration parsing (`$XDG_CONFIG_HOME/gh-pt/config.yml`), including custom `clone_path` and `fork_path`.
 
 ## Critical Implementation Rules & Gotchas
 1. **GitHub CLI Prerequisite**: Authentication and presence of `gh` CLI is mandatory.
@@ -58,6 +58,6 @@ These scenarios are essential for validating asset selection behavior:
 
 3. **Final Fallback Pattern**: The absolute last fallback is `{item name}.{accepted file type}`. This pattern must be matched at the end after failing to match: version number, OS, (on Linux: distro), architecture, and libc (gnu/glibc vs musl). The final fallback accepts any file with the correct extension, regardless of metadata.
 
-4. **Type Priority per Platform**: Ensure appropriate type priority and OS/arch priorities for the system gh-install runs on. Linux systems prioritize deb/rpm/appimage, macOS prioritizes dmg/pkg, Windows prioritizes exe/msi. Each platform has its own arch preference order.
+4. **Type Priority per Platform**: Ensure appropriate type priority and OS/arch priorities for the system gh-pt runs on. Linux systems prioritize deb/rpm/appimage, macOS prioritizes dmg/pkg, Windows prioritizes exe/msi. Each platform has its own arch preference order.
 
 5. **Success Message**: Ensure a green success message is printed on successful installation completion.

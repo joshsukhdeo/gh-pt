@@ -43,7 +43,7 @@ type State struct {
 var _ StateManager = (*State)(nil)
 
 func GetStatePath() string {
-	return filepath.Join(xdg.DataHome, "gh-install", "state.json")
+	return filepath.Join(xdg.DataHome, "gh-pt", "state.json")
 }
 
 func LoadState() (*State, error) {

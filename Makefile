@@ -1,7 +1,7 @@
 # Define variables
 GO_BIN = go
 GO_BUILD_FLAGS = -v
-BINARY_NAME = gh-install
+BINARY_NAME = gh-pt
 MAIN_PACKAGE = .
 OUTPUT_DIR = .
 

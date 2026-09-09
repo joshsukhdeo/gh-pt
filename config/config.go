@@ -41,7 +41,7 @@ type CoreConfig struct {
 }
 
 func GetConfigPath() string {
-	return filepath.Join(xdg.ConfigHome, "gh-install", "config.yml")
+	return filepath.Join(xdg.ConfigHome, "gh-pt", "config.yml")
 }
 
 func LoadConfig() (*Config, error) {

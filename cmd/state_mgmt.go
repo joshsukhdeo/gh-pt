@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/joshsukhdeo/gh-install/state"
+	"github.com/joshsukhdeo/gh-pt/state"
 	"github.com/pterm/pterm"
 	"github.com/rs/zerolog/log"
 )
@@ -29,7 +29,7 @@ func ListState(rList ...*RootCLI) error {
 	}
 
 	if len(st.Apps) == 0 {
-		pterm.Info.Println("No applications are currently managed by gh-install.")
+		pterm.Info.Println("No applications are currently managed by gh-pt.")
 		return nil
 	}
 
@@ -401,7 +401,7 @@ func RemoveApp(target string, purge bool) error {
 
 			repoParts := strings.Split(r, "/")
 			if len(repoParts) == 2 {
-				srcPath := filepath.Join(os.TempDir(), "gh-install-src-"+repoParts[1])
+				srcPath := filepath.Join(os.TempDir(), "gh-pt-src-"+repoParts[1])
 				_ = os.RemoveAll(srcPath)
 			}
 		}
@@ -440,7 +440,7 @@ func EditState() error {
 	}
 
 	if len(st.Apps) == 0 {
-		pterm.Info.Println("No applications are currently managed by gh-install.")
+		pterm.Info.Println("No applications are currently managed by gh-pt.")
 		return nil
 	}
 

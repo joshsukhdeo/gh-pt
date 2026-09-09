@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/cli/go-gh/v2/pkg/api"
-	"github.com/joshsukhdeo/gh-install/release"
-	"github.com/joshsukhdeo/gh-install/state"
+	"github.com/joshsukhdeo/gh-pt/release"
+	"github.com/joshsukhdeo/gh-pt/state"
 	"github.com/rs/zerolog/log"
 )
 
