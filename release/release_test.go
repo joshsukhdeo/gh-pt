@@ -1,23 +1,19 @@
 package release
 
 import (
-	"github.com/stretchr/testify/require"
-	"github.com/joshsukhdeo/gh-install/params"
-	"github.com/stretchr/testify/assert"
+	"bytes"
 	"io"
-	"testing"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
-
-    "path/filepath"
-    "bytes"
+	"path/filepath"
+	"testing"
 	"time"
 
-
-
-
+	"github.com/joshsukhdeo/gh-install/params"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Helper to mock exec.Command
@@ -43,12 +39,14 @@ func mockGhExec(args ...string) (bytes.Buffer, bytes.Buffer, error) {
 
 type MockGithubClient struct {
 	GetResponses map[string]interface{}
-	GetError error
-	ReqError error
+	GetError     error
+	ReqError     error
 }
-func (m *MockGithubClient) Get(path string, response interface{}) error { return m.GetError }
-func (m *MockGithubClient) Request(method string, path string, body io.Reader) (*http.Response, error) { return nil, m.ReqError }
 
+func (m *MockGithubClient) Get(path string, response interface{}) error { return m.GetError }
+func (m *MockGithubClient) Request(method string, path string, body io.Reader) (*http.Response, error) {
+	return nil, m.ReqError
+}
 
 func TestGithubRelease_ResolveDestinationPath(t *testing.T) {
 	gr := &GithubRelease{
@@ -69,10 +67,10 @@ func TestGithubRelease_ResolveDestinationPath(t *testing.T) {
 }
 
 func TestGithubRelease_MakeGithubRelease(t *testing.T) {
-    p := &params.CLI{}
-    client := &MockGithubClient{}
-    r := MakeGithubRelease(p, client)
-    assert.NotNil(t, r)
+	p := &params.CLI{}
+	client := &MockGithubClient{}
+	r := MakeGithubRelease(p, client)
+	assert.NotNil(t, r)
 }
 
 func TestGithubRelease_InstallBinary(t *testing.T) {
@@ -83,10 +81,10 @@ func TestGithubRelease_InstallBinary(t *testing.T) {
 
 	gr := &GithubRelease{
 		CliParams: &params.CLI{
-			TargetPath: tmpDir,
-			Rename: map[string]string{},
+			TargetPath:     tmpDir,
+			Rename:         map[string]string{},
 			DisablePrompts: true,
-			Overwrite: true,
+			Overwrite:      true,
 		},
 	}
 
@@ -170,7 +168,7 @@ func TestGithubRelease_InstallArchivedBinary(t *testing.T) {
 				"source_archive": "dest_archive",
 			},
 			DisablePrompts: true,
-			Overwrite: true,
+			Overwrite:      true,
 		},
 	}
 
@@ -225,9 +223,9 @@ func TestGithubRelease_Install(t *testing.T) {
 	gr := &GithubRelease{
 		CliParams: &params.CLI{
 			DisablePrompts: true,
-			Repository: "owner/repo",
+			Repository:     "owner/repo",
 			ReleaseVersion: "latest",
-			Type: []string{"binary"},
+			Type:           []string{"binary"},
 		},
 		Client: client,
 	}
@@ -278,7 +276,6 @@ func TestGithubRelease_EnsureSudo(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-
 func TestGithubRelease_DryRun(t *testing.T) {
 	gr := &GithubRelease{
 		CliParams: &params.CLI{
@@ -300,8 +297,8 @@ func TestGithubRelease_CompileFromSource(t *testing.T) {
 	gr := &GithubRelease{
 		CliParams: &params.CLI{
 			CompileFromSource: true,
-            AI: true,
-			DisablePrompts: true,
+			AI:                true,
+			DisablePrompts:    true,
 		},
 	}
 
@@ -316,15 +313,14 @@ func TestGithubRelease_ensureSudoPacman(t *testing.T) {
 
 	gr := &GithubRelease{
 		CliParams: &params.CLI{
-			NoDeps: true,
-            DisablePrompts: true,
+			NoDeps:         true,
+			DisablePrompts: true,
 		},
 	}
-    // We already tested installPacman above, this provides full coverage across pacman functionality
+	// We already tested installPacman above, this provides full coverage across pacman functionality
 	err := gr.installPacman("/tmp/test.pkg.tar.zst")
 	require.NoError(t, err)
 }
-
 
 func TestGithubRelease_doVTRequestWithRetry(t *testing.T) {
 	// Let's test the retry logic by failing once and then succeeding
@@ -357,17 +353,6 @@ func TestGithubRelease_installBinaryFallback(t *testing.T) {
 
 	// We can't directly trigger a permission denied os.OpenFile easily in docker without setting up weird users,
 	// but we can try just creating a regular file and assuming normal install works, to bump coverage in installBinary.
-}
-
-
-
-
-func IgnoreTestGetScore(t *testing.T) {
-	types := []string{"tar.gz", "zip", "deb"}
-	assert.Equal(t, 30, getScore("app.tar.gz", types))
-	assert.Equal(t, 20, getScore("app.zip", types))
-	assert.Equal(t, 10, getScore("app.deb", types))
-	assert.Equal(t, -1, getScore("app.rpm", types))
 }
 
 func TestGenerateStrictAssetRegex(t *testing.T) {

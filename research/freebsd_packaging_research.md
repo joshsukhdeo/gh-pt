@@ -6,7 +6,7 @@ FreeBSD provides a robust package management system (`pkg`) that handles pre-com
 ## Standard FreeBSD GitHub Release Assets
 
 1.  **Native Packages (`.pkg` or `.txz`)**
-    *   **Description**: These are complete, pre-compiled binary packages formatted specifically for the FreeBSD package manager. 
+    *   **Description**: These are complete, pre-compiled binary packages formatted specifically for the FreeBSD package manager.
     *   **`.pkg`**: The modern metadata-rich package format.
     *   **`.txz`**: A standard archive (tar + xz) commonly used for both the FreeBSD base system sets and binary packages, though heavily used by older `pkg` versions as well.
     *   **Typical Naming**: `app-name_1.0_freebsd_amd64.pkg` or `app-name_1.0_freebsd_amd64.txz`

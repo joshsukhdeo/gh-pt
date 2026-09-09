@@ -31,7 +31,7 @@ type CLI struct {
 	KeepSuffixes         bool              `short:"k" help:"Keep OS/hardware suffixes on extracted binaries instead of automatically stripping them." group:"Non-interactive Mode"`
 	DisablePrompts       bool              `short:"D" env:"GH_INSTALL_DISABLE_PROMPTS" help:"Disable all interactive prompts. Can be configured via GH_INSTALL_DISABLE_PROMPTS env var." group:"Non-interactive Mode"`
 	NoSaveState          bool              `short:"S" env:"GH_INSTALL_NO_SAVE_STATE" help:"Do not save installation to state (prevents tracking for updates). Can be configured via GH_INSTALL_NO_SAVE_STATE env var." group:"Non-interactive Mode"`
-	Wine                string            `default:"off" enum:"force,priority,allow,off" env:"GH_INSTALL_WINE" help:"Wine mode (force, priority, allow, off)." group:"Non-interactive Mode"`
+	Wine                 string            `default:"off" enum:"force,priority,allow,off" env:"GH_INSTALL_WINE" help:"Wine mode (force, priority, allow, off)." group:"Non-interactive Mode"`
 	AllowForeignArch     bool              `env:"GH_INSTALL_ALLOW_FOREIGN_ARCH" help:"Allow installing assets with foreign architectures (e.g., arm64 on amd64). Can be configured via GH_INSTALL_ALLOW_FOREIGN_ARCH env var." group:"Non-interactive Mode"`
 	AllowRootUserInstall bool              `help:"Allow installation to user-local paths when running as root (e.g. via sudo)." group:"Non-interactive Mode"`
 	NativeExtract        bool              `env:"GH_INSTALL_NATIVE_EXTRACT" help:"Use native OS utilities (tar/7z) for archive extraction instead of pure Go. Can be configured via GH_INSTALL_NATIVE_EXTRACT env var." group:"Non-interactive Mode"`

@@ -1,98 +1,86 @@
 package tests
 
 import (
-	"testing"
 	"os"
 	"path/filepath"
-	"github.com/stretchr/testify/assert"
+	"testing"
+
 	"github.com/adrg/xdg"
-	"github.com/joshsukhdeo/gh-install/state"
 	"github.com/joshsukhdeo/gh-install/cmd"
+	"github.com/joshsukhdeo/gh-install/state"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestPinAppState(t *testing.T) {
+func setupState(t *testing.T) string {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", tmpDir)
 	xdg.Reload()
 
-	st, _ := state.LoadState()
+	st, err := state.LoadState()
+	require.NoError(t, err)
+
 	st.AddApp(&state.InstalledApp{
 		Repository: "test/repo1",
-		Version: "v1.0",
+		TargetPath: tmpDir,
+		Rename:     map[string]string{"binary1": "bin1"},
+		Pinned:     false,
+	})
+	st.AddApp(&state.InstalledApp{
+		Repository:    "test/repo2",
+		TargetPath:    tmpDir,
+		CompileScript: filepath.Join(tmpDir, "script.sh"),
 	})
 
-	err := cmd.PinAppState("test/repo1")
-	assert.NoError(t, err)
-
-	st, _ = state.LoadState()
-	assert.True(t, st.Apps["test/repo1"].Pinned)
+	return tmpDir
 }
 
 func TestRmStateOnly(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Setenv("XDG_DATA_HOME", tmpDir)
-	xdg.Reload()
+	setupState(t)
+	err := cmd.RmStateOnly("repo1")
+	require.NoError(t, err)
 
 	st, _ := state.LoadState()
-	st.AddApp(&state.InstalledApp{
-		Repository: "test/repo1",
-		Version: "v1.0",
-	})
-
-	err := cmd.RmStateOnly("test/repo1")
-	assert.NoError(t, err)
-
-	st, _ = state.LoadState()
-	assert.Nil(t, st.Apps["test/repo1"])
+	_, exists := st.Apps["test/repo1"]
+	assert.False(t, exists)
 }
 
 func TestRemoveApp(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Setenv("XDG_DATA_HOME", tmpDir)
-	xdg.Reload()
+	tmpDir := setupState(t)
+
+	binPath := filepath.Join(tmpDir, "bin1")
+	os.WriteFile(binPath, []byte("data"), 0755)
+
+	err := cmd.RemoveApp("repo1", false)
+	require.NoError(t, err)
 
 	st, _ := state.LoadState()
-
-
-
-
-	binDir := filepath.Join(tmpDir, "bin1")
-	os.WriteFile(binDir, []byte(""), 0755)
-
-	st.AddApp(&state.InstalledApp{
-		Repository: "test/repo1",
-		Version: "v1.0",
-		TargetPath: tmpDir,
-		AssetBinaries: []string{"bin1"},
-	})
-
-	err := cmd.RemoveApp("test/repo1", false)
-	assert.NoError(t, err)
-
-	st, _ = state.LoadState()
-	assert.Nil(t, st.Apps["test/repo1"])
-	assert.NoFileExists(t, binDir)
+	_, exists := st.Apps["test/repo1"]
+	assert.False(t, exists)
+	assert.NoFileExists(t, binPath)
 }
 
 func TestPurgeApp(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Setenv("XDG_DATA_HOME", tmpDir)
-	xdg.Reload()
-
-	st, _ := state.LoadState()
+	tmpDir := setupState(t)
 
 	scriptPath := filepath.Join(tmpDir, "script.sh")
-	os.WriteFile(scriptPath, []byte(""), 0755)
+	os.WriteFile(scriptPath, []byte("data"), 0755)
 
-	st.AddApp(&state.InstalledApp{
-		Repository: "test/repo2",
-		CompileScript: scriptPath,
-	})
+	err := cmd.RemoveApp("repo2", true)
+	require.NoError(t, err)
 
-	err := cmd.RemoveApp("test/repo2", true)
-	assert.NoError(t, err)
-
-	st, _ = state.LoadState()
-	assert.Nil(t, st.Apps["test/repo2"])
+	st, _ := state.LoadState()
+	_, exists := st.Apps["test/repo2"]
+	assert.False(t, exists)
 	assert.NoFileExists(t, scriptPath)
+}
+
+func TestPinAppState(t *testing.T) {
+	setupState(t)
+
+	err := cmd.PinAppState("repo1")
+	require.NoError(t, err)
+
+	st, _ := state.LoadState()
+	assert.True(t, st.Apps["test/repo1"].Pinned)
 }

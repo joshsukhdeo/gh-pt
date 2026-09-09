@@ -295,7 +295,7 @@ func RemoveApp(target string, purge bool) error {
 
 			repoParts := strings.Split(r, "/")
 			if len(repoParts) == 2 {
-					homeDir, _ := os.UserHomeDir()
+				homeDir, _ := os.UserHomeDir()
 				repoName := strings.ToLower(repoParts[1])
 				if repoName != "" {
 					configPath := filepath.Join(homeDir, ".config", repoName)
@@ -303,8 +303,8 @@ func RemoveApp(target string, purge bool) error {
 						log.Info().Msgf("Purged config directory %s", configPath)
 					}
 				}
-				}
-			} else {
+			}
+		} else {
 			// Normal rm just deletes script but not config
 			if app.CompileScript != "" {
 				if err := os.Remove(app.CompileScript); err != nil && !os.IsNotExist(err) {
@@ -316,9 +316,8 @@ func RemoveApp(target string, purge bool) error {
 		}
 
 		delete(st.Apps, r)
-		log.Info().Msgf("Removed %s from managed state.", r)
+		log.Info().Msgf("Removed %s from state tracking only.", r)
 	}
-
 	return st.Save()
 }
 
@@ -341,6 +340,7 @@ func PinAppState(target string) error {
 	}
 	return st.Save()
 }
+
 func EditState() error {
 	st, err := state.LoadState()
 	if err != nil {

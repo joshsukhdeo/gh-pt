@@ -26,11 +26,7 @@ type AIConfig struct {
 }
 
 type CoreConfig struct {
-	InstallTypes   string `yaml:"install_types"`
-
-
-
-
+	InstallTypes string `yaml:"install_types"`
 
 	AddDeps        bool   `yaml:"add_deps"`
 	NoDeps         bool   `yaml:"no_deps"`

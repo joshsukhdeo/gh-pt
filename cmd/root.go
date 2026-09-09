@@ -31,7 +31,6 @@ const (
 type RootCLI params.CLI
 
 func (r *RootCLI) Validate() error {
-
 	if runtime.GOOS == "windows" && r.Wine != "off" && r.Wine != "" {
 		pterm.Warning.Println("Wine is not supported on Windows. Continuing with wine disabled.")
 		r.Wine = "off"
@@ -242,7 +241,6 @@ func (r *RootCLI) Run() error {
 	if r.Update || r.UpdateAll {
 		return DoUpdate(r, ghClient)
 	}
-
 
 	if r.Overwrite {
 		// If overwrite/force is used, attempt to purge any existing installation first
