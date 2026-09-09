@@ -28,6 +28,7 @@ type InstalledApp struct {
 	Clone               bool              `json:"clone,omitempty"`
 	Fork                bool              `json:"fork,omitempty"`
 	CompileScript       string            `json:"compile_script,omitempty"`
+	IsPrerelease        bool              `json:"is_prerelease,omitempty"`
 }
 
 type StateManager interface {

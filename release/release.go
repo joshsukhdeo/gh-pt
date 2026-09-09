@@ -58,7 +58,6 @@ func (p PtermPrompter) Input(prompt string, defaultValue string) string {
 	return result
 }
 
-
 func MakeGithubRelease(cliParams *params.CLI, cli selector.GithubClient) *GithubRelease {
 
 	return &GithubRelease{
@@ -545,7 +544,12 @@ func (r *GithubRelease) installMac(binaryPath string) error {
 }
 
 func (r *GithubRelease) GetLatestRelease() (*selector.SelectorItem, error) {
-	releaseSelector, err := selector.ReleaseSelector(r.Client, r.CliParams.Repository, r.CliParams.ReleaseVersion, r.CliParams.Interactive)
+	var prerelease, stable bool
+	if r.CliParams != nil {
+		prerelease = r.CliParams.Prerelease
+		stable = r.CliParams.Stable
+	}
+	releaseSelector, err := selector.ReleaseSelector(r.Client, r.CliParams.Repository, r.CliParams.ReleaseVersion, r.CliParams.Interactive, prerelease, stable)
 	if err != nil {
 		return nil, err
 	}
@@ -557,7 +561,12 @@ func (r *GithubRelease) GetLatestRelease() (*selector.SelectorItem, error) {
 }
 
 func (r *GithubRelease) Install() error {
-	releaseSelector, err := selector.ReleaseSelector(r.Client, r.CliParams.Repository, r.CliParams.ReleaseVersion, r.CliParams.Interactive)
+	var prerelease, stable bool
+	if r.CliParams != nil {
+		prerelease = r.CliParams.Prerelease
+		stable = r.CliParams.Stable
+	}
+	releaseSelector, err := selector.ReleaseSelector(r.Client, r.CliParams.Repository, r.CliParams.ReleaseVersion, r.CliParams.Interactive, prerelease, stable)
 	if err != nil {
 		log.Error().
 			Str("repository", r.CliParams.Repository).
@@ -973,6 +982,7 @@ func (r *GithubRelease) Install() error {
 				PackageNames:        r.InstalledPackageNames,
 				Pinned:              r.CliParams.PinInstall,
 				NativeExtract:       r.CliParams.NativeExtract,
+				IsPrerelease:        releases[0].Prerelease,
 			})
 		} else {
 			log.Warn().Err(err).Msg("could not save installed app state")

@@ -2,13 +2,13 @@ package release
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
-	"encoding/json"
 
 	"github.com/joshsukhdeo/gh-install/params"
 	"github.com/stretchr/testify/assert"
@@ -35,7 +35,6 @@ func mockGhExec(args ...string) (bytes.Buffer, bytes.Buffer, error) {
 	return bytes.Buffer{}, bytes.Buffer{}, nil
 }
 
-
 type MockPrompter struct {
 	MockConfirm bool
 	MockInput   string
@@ -48,6 +47,7 @@ func (m MockPrompter) Confirm(message string) bool {
 func (m MockPrompter) Input(prompt string, defaultValue string) string {
 	return m.MockInput
 }
+
 type MockGithubClient struct {
 	GetResponses map[string]interface{}
 	ReqResponses map[string]*http.Response
@@ -84,8 +84,8 @@ func TestGetScore(t *testing.T) {
 }
 
 func TestGenerateStrictAssetRegex(t *testing.T) {
-    assert.Equal(t, "^app\\.tar\\.gz$", generateStrictAssetRegex("app.tar.gz", ""))
-    assert.Contains(t, generateStrictAssetRegex("app-v1.0.0.tar.gz", "v1.0.0"), ".*")
+	assert.Equal(t, "^app\\.tar\\.gz$", generateStrictAssetRegex("app.tar.gz", ""))
+	assert.Contains(t, generateStrictAssetRegex("app-v1.0.0.tar.gz", "v1.0.0"), ".*")
 }
 
 func TestGithubRelease_ResolveDestinationPath(t *testing.T) {
@@ -274,14 +274,14 @@ func TestGithubRelease_CompileFromSource(t *testing.T) {
 			CompileFromSource: true,
 			AI:                true,
 			DisablePrompts:    true,
-            AICmd:             "true", // mock success via shell
+			AICmd:             "true", // mock success via shell
 		},
 	}
-    // As it uses `os.UserHomeDir()`, let's just make sure it fails safely or executes gracefully without panics
-    // in our controlled stub. The actual method is `r.handleCompileFromSource` which is in `cmd/root.go`.
-    // Wait, the method is in `cmd/root.go`, not `release.go`!
-    // We shouldn't test `handleCompileFromSource` in `release_test.go`.
-    _ = gr
+	// As it uses `os.UserHomeDir()`, let's just make sure it fails safely or executes gracefully without panics
+	// in our controlled stub. The actual method is `r.handleCompileFromSource` which is in `cmd/root.go`.
+	// Wait, the method is in `cmd/root.go`, not `release.go`!
+	// We shouldn't test `handleCompileFromSource` in `release_test.go`.
+	_ = gr
 }
 
 func TestSuccessMessage(t *testing.T) {
@@ -293,11 +293,11 @@ func TestSuccessMessage(t *testing.T) {
 
 	gr := &GithubRelease{
 		CliParams: &params.CLI{
-			NoDeps: true,
-			Interactive: true,
+			NoDeps:         true,
+			Interactive:    true,
 			DisablePrompts: false,
 		},
-        Prompter: MockPrompter{MockConfirm: true, MockInput: "ok"},
+		Prompter: MockPrompter{MockConfirm: true, MockInput: "ok"},
 	}
 
 	// Test installation which prints pterm.Success.Println internally

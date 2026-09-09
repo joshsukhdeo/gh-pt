@@ -26,15 +26,17 @@ type AIConfig struct {
 }
 
 type CoreConfig struct {
-	InstallTypes   string `yaml:"install_types"`
-	AddDeps        bool   `yaml:"add_deps"`
-	NoDeps         bool   `yaml:"no_deps"`
-	DisablePrompts bool   `yaml:"disable_prompts"`
-	NoSaveState    bool   `yaml:"no_save_state"`
-	Wine           string `yaml:"wine"`
-	NativeExtract  bool   `yaml:"native_extract"`
-	KeepSuffixes   bool   `yaml:"keep_suffixes"`
-	VTApiKey       string `yaml:"vt_api_key"`
+	InstallTypes    string `yaml:"install_types"`
+	AddDeps         bool   `yaml:"add_deps"`
+	NoDeps          bool   `yaml:"no_deps"`
+	DisablePrompts  bool   `yaml:"disable_prompts"`
+	NoSaveState     bool   `yaml:"no_save_state"`
+	Wine            string `yaml:"wine"`
+	NativeExtract   bool   `yaml:"native_extract"`
+	KeepSuffixes    bool   `yaml:"keep_suffixes"`
+	VTApiKey        string `yaml:"vt_api_key"`
+	AllowPrerelease bool   `yaml:"allow_prerelease"`
+	DisableIcons    bool   `yaml:"disable_icons"`
 }
 
 func GetConfigPath() string {

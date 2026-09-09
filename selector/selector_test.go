@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"testing"
 	"runtime"
+	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -108,9 +108,9 @@ func TestAssetSelector(t *testing.T) {
 
 	t.Run("NonInteractive", func(t *testing.T) {
 		sel, err := AssetSelector(client, "owner/repo", AssetMatchCriteria{
-			ReleaseId: 1,
-			Name: "asset-linux",
-			Regexps: []string{".*linux.*"},
+			ReleaseId:   1,
+			Name:        "asset-linux",
+			Regexps:     []string{".*linux.*"},
 			Interactive: false,
 		})
 		require.NoError(t, err)

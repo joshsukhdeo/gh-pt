@@ -112,6 +112,13 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 		appParams.NativeExtract = app.NativeExtract
 		// Reset version to latest to ensure we get the latest
 		appParams.ReleaseVersion = "latest"
+		if app.IsPrerelease {
+			appParams.Prerelease = true
+		}
+		if r.CLI.Stable {
+			appParams.Prerelease = false
+			appParams.Stable = true
+		}
 
 		// Check if there's a new version before updating
 		installRelease := release.MakeGithubRelease(&appParams, ghClient)

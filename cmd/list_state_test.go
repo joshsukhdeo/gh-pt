@@ -1,4 +1,4 @@
-package tests
+package cmd_test
 
 import (
 	"github.com/adrg/xdg"

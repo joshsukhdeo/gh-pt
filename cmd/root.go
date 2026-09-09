@@ -49,7 +49,7 @@ func (r *RootCLI) Validate() error {
 		return fmt.Errorf("--compile-from-source can only be used with --ai")
 	}
 
-	if r.CLI.Clone || r.CLI.Fork || r.CLI.CompileFromSource {
+	if r.CLI.Clone || r.CLI.Fork || r.CLI.CompileFromSource || r.CLI.Show || r.CLI.ShowAssets || r.CLI.ShowVersions {
 		return nil
 	}
 
@@ -145,6 +145,12 @@ func (r *RootCLI) Run() error {
 		if r.CLI.VTApiKey == "" {
 			r.CLI.VTApiKey = cfg.Core.VTApiKey
 		}
+		if cfg.Core.AllowPrerelease {
+			r.CLI.Prerelease = true
+		}
+	}
+	if r.CLI.Stable {
+		r.CLI.Prerelease = false
 	}
 
 	if r.CLI.Global || r.CLI.UpdateAll || (r.CLI.Update && r.CLI.Global) {
@@ -188,8 +194,6 @@ func (r *RootCLI) Run() error {
 				if !r.CLI.KeepSuffixes {
 					r.CLI.KeepSuffixes = cfg.Core.KeepSuffixes
 				}
-
-
 
 			}
 		}
@@ -259,6 +263,10 @@ func (r *RootCLI) Run() error {
 	}
 	if r.CLI.Pin != "" {
 		return PinAppState(r.CLI.Pin)
+	}
+
+	if r.CLI.Show || r.CLI.ShowAssets || r.CLI.ShowVersions {
+		return ShowInfo(r)
 	}
 
 	if r.CLI.Update || r.CLI.UpdateAll {

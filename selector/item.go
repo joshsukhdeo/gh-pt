@@ -56,4 +56,5 @@ type SelectorItem struct {
 	DownloadPath string
 	FsPath       string
 	Fs           fs.FS
+	Prerelease   bool
 }

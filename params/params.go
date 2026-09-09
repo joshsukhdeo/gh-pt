@@ -53,4 +53,9 @@ type CLI struct {
 	LogQuietInteractive  bool              `default:"true" negatable:"" help:"Quiet log in interactive mode" group:"Interactive Mode"`
 	Verbose              bool              `short:"V" help:"Enable verbose output (sets log level to debug)."`
 	Version              kong.VersionFlag  `help:"Show version." env:""`
+	Show                 bool              `help:"Show available release versions (max 10) and latest/selected release assets (max 50)." group:"Information Mode"`
+	ShowAssets           bool              `help:"Show all available assets for the latest or selected release." group:"Information Mode"`
+	ShowVersions         bool              `help:"Show all available release versions." group:"Information Mode"`
+	Prerelease           bool              `help:"Include prereleases for install, updates, and list filters." group:"Non-interactive Mode"`
+	Stable               bool              `help:"Include only stable releases for install, updates, and list filters." group:"Non-interactive Mode"`
 }

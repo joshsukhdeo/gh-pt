@@ -15,7 +15,14 @@ import (
 
 var execCommand = exec.Command
 
-func ListState() error {
+func ListState(rList ...*RootCLI) error {
+	var r *RootCLI
+	if len(rList) > 0 && rList[0] != nil {
+		r = rList[0]
+	} else {
+		r = &RootCLI{}
+	}
+
 	st, err := state.LoadState()
 	if err != nil {
 		return err
@@ -77,6 +84,13 @@ func ListState() error {
 		// if r.AllowForeignArch { ... } // Stub for future allow-foreign-arch filter
 
 		if r.Pin != "" && !app.Pinned {
+			continue
+		}
+
+		if r.CLI.Prerelease && !app.IsPrerelease {
+			continue
+		}
+		if r.CLI.Stable && app.IsPrerelease {
 			continue
 		}
 

@@ -48,14 +48,23 @@ type ISelector interface {
 	Run() ([]*SelectorItem, error)
 }
 
-func ReleaseSelector(ghClient GithubClient, repo string, version string, interactive bool) (ISelector, error) {
+func ReleaseSelector(ghClient GithubClient, repo string, version string, interactive bool, opts ...bool) (ISelector, error) {
 	log.Info().
 		Str("repository", repo).
 		Msg("getting Github repository releases")
 
+	var prerelease, stable bool
+	if len(opts) > 0 {
+		prerelease = opts[0]
+	}
+	if len(opts) > 1 {
+		stable = opts[1]
+	}
+
 	response := []struct {
-		Tag_name string
-		Id       int
+		Tag_name   string
+		Id         int
+		Prerelease bool
 	}{}
 	err := ghClient.Get(fmt.Sprintf("repos/%s/releases", repo), &response)
 	if err != nil {
@@ -69,9 +78,10 @@ func ReleaseSelector(ghClient GithubClient, repo string, version string, interac
 			Str("repository", repo).
 			Str("release tag", val.Tag_name).
 			Int("release id", val.Id).
+			Bool("prerelease", val.Prerelease).
 			Msg("got release...")
 
-		items = append(items, &SelectorItem{Name: val.Tag_name, Id: val.Id})
+		items = append(items, &SelectorItem{Name: val.Tag_name, Id: val.Id, Prerelease: val.Prerelease})
 	}
 
 	if interactive {
@@ -86,22 +96,49 @@ func ReleaseSelector(ghClient GithubClient, repo string, version string, interac
 
 	versionMatcher := version
 	if versionMatcher == "latest" {
-		log.Debug().
-			Str("repository", repo).
-			Msg("needed release version is 'latest', getting actual version")
-		response := struct {
-			Tag_name string
-		}{}
+		if prerelease {
+			for _, val := range response {
+				if val.Prerelease {
+					versionMatcher = val.Tag_name
+					break
+				}
+			}
+			if versionMatcher == "latest" && len(response) > 0 {
+				versionMatcher = response[0].Tag_name
+			}
+		} else {
+			log.Debug().
+				Str("repository", repo).
+				Msg("needed release version is 'latest', getting actual version")
+			latestResp := struct {
+				Tag_name   string
+				Prerelease bool
+			}{}
 
-		err := ghClient.Get(fmt.Sprintf("repos/%s/releases/latest", repo), &response)
-		if err != nil {
-			return nil, err
+			err := ghClient.Get(fmt.Sprintf("repos/%s/releases/latest", repo), &latestResp)
+			if err == nil && latestResp.Tag_name != "" {
+				versionMatcher = latestResp.Tag_name
+			} else {
+				for _, val := range response {
+					if !val.Prerelease {
+						versionMatcher = val.Tag_name
+						break
+					}
+				}
+				if versionMatcher == "latest" {
+					if err != nil && (len(response) == 0 || stable) {
+						return nil, err
+					}
+					if len(response) > 0 && !stable {
+						versionMatcher = response[0].Tag_name
+					}
+				}
+			}
+			log.Debug().
+				Str("repository", repo).
+				Str("release tag", versionMatcher).
+				Msg("got 'latest' release")
 		}
-		versionMatcher = response.Tag_name
-		log.Debug().
-			Str("repository", repo).
-			Str("release tag", versionMatcher).
-			Msg("got 'latest' release")
 	}
 
 	log.Info().
