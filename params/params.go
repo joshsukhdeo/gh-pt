@@ -58,7 +58,7 @@ type CommonInstallFlags struct {
 }
 
 type InstallCmd struct {
-	Repository string `arg:"" optional:"" help:"Github repository in OWNER/REPOSITORY_NAME format."`
+	Repository string `arg:"" env:"GH_PT_REPOSITORY" optional:"" help:"Github repository in OWNER/REPOSITORY_NAME format."`
 	CommonInstallFlags
 }
 
@@ -112,13 +112,13 @@ type RepoCmd struct {
 }
 
 type RepoCloneCmd struct {
-	Repository string `arg:"" help:"Github repository."`
+	Repository string `arg:"" env:"GH_PT_REPOSITORY" help:"Github repository."`
 	Force      bool   `short:"f" help:"Overwrite existing."`
 	MaxDepth   int    `help:"Max clone depth."`
 }
 
 type RepoForkCmd struct {
-	Repository string `arg:"" help:"Github repository."`
+	Repository string `arg:"" env:"GH_PT_REPOSITORY" help:"Github repository."`
 	Force      bool   `short:"f" help:"Overwrite existing."`
 	MaxDepth   int    `help:"Max clone depth."`
 }
@@ -146,7 +146,7 @@ type VtSetKeyCmd struct {
 }
 
 type ShowCmd struct {
-	Repository string `arg:"" help:"Github repository."`
+	Repository string `arg:"" env:"GH_PT_REPOSITORY" help:"Github repository."`
 	Assets     bool   `help:"Show all available assets."`
 	Versions   bool   `help:"Show all release versions."`
 	Prerelease bool   `help:"Include prereleases."`
@@ -155,7 +155,7 @@ type ShowCmd struct {
 }
 
 type SourceCmd struct {
-	Repository string `arg:"" help:"Github repository."`
+	Repository string `arg:"" env:"GH_PT_REPOSITORY" help:"Github repository."`
 	AICmd      string `help:"Command template for AI execution."`
 	CommonInstallFlags
 }

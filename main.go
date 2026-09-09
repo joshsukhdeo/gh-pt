@@ -48,7 +48,7 @@ func main() {
 		kong.Name(filepath.Base(os.Args[0])),
 		kong.Description(`Install binaries for a Github repository release interactively or non-interactively.`),
 		kong.DefaultEnvars(cmd.GetEnvPrefix()),
-		kong.PostBuild(cmd.PostBuild),
+		
 		vars)
 
 	err := cmd.RunCommand(ctx.Command(), &cli)
