@@ -460,14 +460,14 @@ func (r *GithubRelease) installWindows(binaryPath string) error {
 	var args []string
 	if strings.HasSuffix(strings.ToLower(binaryPath), ".msi") {
 		args = []string{"/i", binaryPath, "/qn"}
-		if runtime.GOOS != "windows" && r.CliParams.AllowWine {
+		if runtime.GOOS != "windows" && (r.CliParams.Wine == "allow" || r.CliParams.Wine == "priority" || r.CliParams.Wine == "force") {
 			args = append([]string{"msiexec"}, args...)
 		} else {
 			args = append([]string{"msiexec"}, args...)
 		}
 	} else {
 		args = []string{"/S"}
-		if runtime.GOOS != "windows" && r.CliParams.AllowWine {
+		if runtime.GOOS != "windows" && (r.CliParams.Wine == "allow" || r.CliParams.Wine == "priority" || r.CliParams.Wine == "force") {
 			args = append([]string{binaryPath}, args...)
 			args = append([]string{"wine"}, args...)
 		} else {

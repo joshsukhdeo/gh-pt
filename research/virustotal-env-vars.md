@@ -16,7 +16,7 @@ According to the official [vt-cli GitHub Repository](https://github.com/VirusTot
 
 ## Official SDKs (`vt-py`, `vt-go`)
 
-Unlike the CLI, the official VirusTotal SDKs for Python and Go **do not** automatically read from a predefined environment variable. They require the API key to be explicitly passed during client initialization. 
+Unlike the CLI, the official VirusTotal SDKs for Python and Go **do not** automatically read from a predefined environment variable. They require the API key to be explicitly passed during client initialization.
 
 ### Python (`vt-py`)
 The official [vt-py library](https://github.com/VirusTotal/vt-py) requires you to pass the key directly:
@@ -25,7 +25,7 @@ import vt
 import os
 
 # Developers must manually implement the env var lookup
-api_key = os.environ.get("VT_API_KEY") 
+api_key = os.environ.get("VT_API_KEY")
 client = vt.Client(api_key)
 ```
 

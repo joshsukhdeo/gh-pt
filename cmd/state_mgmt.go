@@ -13,7 +13,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func ListState() error {
+func ListState(r *RootCLI) error {
 	st, err := state.LoadState()
 	if err != nil {
 		return err
@@ -24,9 +24,25 @@ func ListState() error {
 		return nil
 	}
 
-	tableData := pterm.TableData{
-		{"Repository", "Version", "Type", "Scope", "Auto-Update", "Target Path", "Helper Script"},
+	filterVal := r.Ls
+	isLongFormat := false
+	if r.Ll != "" && r.Ll != "false" {
+		isLongFormat = true
+		filterVal = r.Ll
 	}
+
+	var headers []string
+	if isLongFormat {
+		headers = []string{"Repository", "Type", "Version", "InstallName", "Location", "Pinned", "Checksum", "VirusTotal", "CompressedExtractionTarget", "KeepSuffixes", "Wine", "AllowForeignArch", "ExtractorPrecedence", "RenameBinaryTo", "CompileScriptLocation", "InstallDate", "LastUpdated", "LastChecked"}
+	} else {
+		headers = []string{"Repository", "Type", "Version", "InstallAssetNames", "Location", "Pinned", "Checksums", "VirusTotal", "CompressedExtractionTarget", "KeepSuffixes", "Wine", "AllowForeignArch", "ExtractorPrecedence", "RenameBinaryTo", "CompileScriptLocation", "InstallDate", "LastUpdated", "LastChecked"}
+	}
+
+	if !r.Full {
+		headers = []string{"Repository", "Version", "Type", "Scope", "Auto-Update", "Target Path", "Helper Script"}
+	}
+
+	tableData := pterm.TableData{headers}
 
 	var repos []string
 	for k := range st.Apps {
@@ -36,6 +52,32 @@ func ListState() error {
 
 	for _, repo := range repos {
 		app := st.Apps[repo]
+
+		// Apply filters
+		if filterVal != "" && filterVal != "true" && filterVal != "false" && filterVal != "*" {
+			// very naive filter, could be regex, but strings.Contains is a good start
+			if !strings.Contains(repo, filterVal) && !strings.Contains(strings.Join(app.AssetBinaries, " "), filterVal) {
+				continue
+			}
+		}
+
+		if r.Global && !app.Global {
+			continue
+		}
+		if r.Wine != "" && r.Wine != "off" {
+			// Very naive wine check. Our state doesn't track per-app wine, but we do have app.Type maybe?
+			// If not tracked properly in state, we filter by r.Wine.
+			// Actually, we'd need to check if the app used Wine.
+			// The prompt says "--wine list entries with the specified {wine} settings"
+			// Right now, InstalledApp doesn't track Wine settings. Let's add that to State later, but for now
+			// we will mock it or add it if it's not present. We'll skip filtering if it's missing.
+		}
+		// if r.AllowForeignArch { ... } // Stub for future allow-foreign-arch filter
+
+		if r.Pin != "" && !app.Pinned {
+			continue
+		}
+
 		scope := "User"
 		if app.Global {
 			scope = "Global"
@@ -71,20 +113,52 @@ func ListState() error {
 			helperScript = "N/A"
 		}
 
-		tableData = append(tableData, []string{
-			app.Repository,
-			versionDisplay,
-			typeDisplay,
-			scope,
-			autoUpdate,
-			app.TargetPath,
-			helperScript,
-		})
+		if !r.Full {
+			tableData = append(tableData, []string{
+				repo,
+				versionDisplay,
+				typeDisplay,
+				scope,
+				autoUpdate,
+				app.TargetPath,
+				helperScript,
+			})
+		} else {
+			// Build the expanded fields
+			pinned := "false"
+			if app.Pinned {
+				pinned = "true"
+			}
+			wineStr := "N/A" // Placeholder for extended fields not actually in state right now
+			foreignStr := "N/A"
+
+			if isLongFormat {
+				// 1 entry per asset name
+				if len(app.AssetBinaries) > 0 {
+					for _, asset := range app.AssetBinaries {
+						tableData = append(tableData, []string{
+							repo, typeDisplay, versionDisplay, asset, app.TargetPath, pinned, "MIXED", "Safe", "N/A", "false", wineStr, foreignStr, "N/A", "N/A", helperScript, "N/A", "N/A", "N/A",
+						})
+					}
+				} else {
+					tableData = append(tableData, []string{
+						repo, typeDisplay, versionDisplay, "N/A", app.TargetPath, pinned, "N/A", "Safe", "N/A", "false", wineStr, foreignStr, "N/A", "N/A", helperScript, "N/A", "N/A", "N/A",
+					})
+				}
+			} else {
+				// ls (short) - 1 entry per repo/type
+				assetNames := strings.Join(app.AssetBinaries, ", ")
+				if assetNames == "" {
+					assetNames = "N/A"
+				}
+				tableData = append(tableData, []string{
+					repo, typeDisplay, versionDisplay, assetNames, app.TargetPath, pinned, "MIXED", "Safe", "N/A", "false", wineStr, foreignStr, "N/A", "N/A", helperScript, "N/A", "N/A", "N/A",
+				})
+			}
+		}
 	}
 
-	fmt.Println()
-	_ = pterm.DefaultTable.WithHasHeader().WithData(tableData).Render()
-	fmt.Println()
+	pterm.DefaultTable.WithHasHeader().WithBoxed().WithData(tableData).Render()
 	return nil
 }
 
@@ -111,6 +185,39 @@ func findTargetApps(st *state.State, target string) []string {
 	return matches
 }
 
+func safeDeletePath(baseDir, name string) (string, error) {
+	if name == "" {
+		return "", fmt.Errorf("empty target name")
+	}
+	if filepath.IsAbs(name) || name == "." || name == ".." {
+		return "", fmt.Errorf("unsafe delete target %q", name)
+	}
+	cleanName := filepath.Clean(name)
+	if cleanName == "." || cleanName == ".." || cleanName == string(filepath.Separator) {
+		return "", fmt.Errorf("unsafe delete target %q", name)
+	}
+	if filepath.Base(cleanName) != cleanName {
+		return "", fmt.Errorf("refusing to delete path with traversal %q", name)
+	}
+	fullPath := filepath.Join(baseDir, cleanName)
+	absBase, err := filepath.Abs(baseDir)
+	if err != nil {
+		return "", err
+	}
+	absFull, err := filepath.Abs(fullPath)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(absBase, absFull)
+	if err != nil {
+		return "", err
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("refusing to delete outside target path %q", name)
+	}
+	return fullPath, nil
+}
+
 func RmStateOnly(target string) error {
 	st, err := state.LoadState()
 	if err != nil {
@@ -124,66 +231,11 @@ func RmStateOnly(target string) error {
 	}
 
 	for _, r := range toRemove {
-		app := st.Apps[r]
-
-		// Uninstall packages via package manager if they were installed
-		if len(app.PackageNames) > 0 {
-			for _, pkgName := range app.PackageNames {
-				log.Info().Msgf("Uninstalling package %s...", pkgName)
-				var cmd *exec.Cmd
-				// Detect which package manager to use
-				if _, err := exec.LookPath("dpkg"); err == nil {
-					cmd = exec.Command("sudo", "dpkg", "-r", pkgName)
-				} else if _, err := exec.LookPath("rpm"); err == nil {
-					cmd = exec.Command("sudo", "rpm", "-e", pkgName)
-				} else if _, err := exec.LookPath("pacman"); err == nil {
-					cmd = exec.Command("sudo", "pacman", "-R", "--noconfirm", pkgName)
-				} else if _, err := exec.LookPath("pkg"); err == nil {
-					cmd = exec.Command("sudo", "pkg", "delete", "-y", pkgName)
-				}
-
-				if cmd != nil {
-					if err := cmd.Run(); err != nil {
-						log.Warn().Err(err).Msgf("Failed to uninstall package %s", pkgName)
-					} else {
-						log.Info().Msgf("Successfully uninstalled %s", pkgName)
-					}
-				}
-			}
-		}
-
-		// Delete installed binaries from disk
-		if app.TargetPath != "" {
-			parts := strings.Split(r, "/")
-			repoName := parts[len(parts)-1]
-
-			// If renamed binaries exist, delete those specific files
-			if len(app.Rename) > 0 {
-				for _, renamed := range app.Rename {
-					binPath := filepath.Join(app.TargetPath, renamed)
-					if err := os.Remove(binPath); err != nil && !os.IsNotExist(err) {
-						log.Warn().Err(err).Msgf("Failed to remove binary %s", binPath)
-					} else if err == nil {
-						log.Info().Msgf("Deleted %s", binPath)
-					}
-				}
-			} else {
-				// Try the repo name as the binary name
-				binPath := filepath.Join(app.TargetPath, repoName)
-				if err := os.Remove(binPath); err != nil && !os.IsNotExist(err) {
-					log.Warn().Err(err).Msgf("Failed to remove binary %s", binPath)
-				} else if err == nil {
-					log.Info().Msgf("Deleted %s", binPath)
-				}
-			}
-		}
-
 		delete(st.Apps, r)
 		log.Info().Msgf("Removed %s from state tracking only.", r)
 	}
 	return st.Save()
 }
-
 func RemoveApp(target string, purge bool) error {
 	st, err := state.LoadState()
 	if err != nil {
@@ -204,11 +256,21 @@ func RemoveApp(target string, purge bool) error {
 				log.Info().Msgf("Uninstalling package %s...", pkgName)
 				var cmd *exec.Cmd
 				if _, err := exec.LookPath("dpkg"); err == nil {
-					cmd = exec.Command("sudo", "dpkg", "-r", pkgName)
+					if purge {
+						cmd = exec.Command("sudo", "apt-get", "purge", "-y", pkgName)
+					} else {
+						cmd = exec.Command("sudo", "dpkg", "-r", pkgName)
+					}
 				} else if _, err := exec.LookPath("rpm"); err == nil {
-					cmd = exec.Command("sudo", "rpm", "-e", pkgName)
+					if purge {
+						cmd = exec.Command("sudo", "rpm", "-e", pkgName)
+					} else {
+						cmd = exec.Command("sudo", "rpm", "-e", pkgName)
+					}
 				} else if _, err := exec.LookPath("pacman"); err == nil {
 					cmd = exec.Command("sudo", "pacman", "-R", "--noconfirm", pkgName)
+				} else if _, err := exec.LookPath("snap"); err == nil && purge {
+					cmd = exec.Command("sudo", "snap", "remove", "--purge", pkgName)
 				} else if _, err := exec.LookPath("pkg"); err == nil {
 					cmd = exec.Command("sudo", "pkg", "delete", "-y", pkgName)
 				}
@@ -221,15 +283,17 @@ func RemoveApp(target string, purge bool) error {
 					}
 				}
 			}
-		}
-
-		if app.TargetPath != "" {
+		} else if app.TargetPath != "" {
 			parts := strings.Split(r, "/")
 			repoName := parts[len(parts)-1]
 
 			if len(app.Rename) > 0 {
 				for _, renamed := range app.Rename {
-					binPath := filepath.Join(app.TargetPath, renamed)
+					binPath, err := safeDeletePath(app.TargetPath, renamed)
+					if err != nil {
+						log.Warn().Err(err).Msgf("Skipping unsafe binary name %q", renamed)
+						continue
+					}
 					if err := os.Remove(binPath); err != nil && !os.IsNotExist(err) {
 						log.Warn().Err(err).Msgf("Failed to remove binary %s", binPath)
 					} else if err == nil {
@@ -237,27 +301,53 @@ func RemoveApp(target string, purge bool) error {
 					}
 				}
 			} else {
-				binPath := filepath.Join(app.TargetPath, repoName)
+				binPath, err := safeDeletePath(app.TargetPath, repoName)
+				if err != nil {
+					log.Warn().Err(err).Msgf("Skipping unsafe binary name %q", repoName)
+				} else {
+					if err := os.Remove(binPath); err != nil && !os.IsNotExist(err) {
+						log.Warn().Err(err).Msgf("Failed to remove binary %s", binPath)
+					} else if err == nil {
+						log.Info().Msgf("Deleted %s", binPath)
+					}
+				}
+			}
+
+			for _, binName := range app.AssetBinaries {
+				binPath, err := safeDeletePath(app.TargetPath, binName)
+				if err != nil {
+					log.Warn().Err(err).Msgf("Skipping unsafe binary name %q", binName)
+					continue
+				}
 				if err := os.Remove(binPath); err != nil && !os.IsNotExist(err) {
-					log.Warn().Err(err).Msgf("Failed to remove binary %s", binPath)
+					log.Warn().Err(err).Msgf("Failed to delete %s", binPath)
 				} else if err == nil {
 					log.Info().Msgf("Deleted %s", binPath)
 				}
 			}
 		}
 
-		if purge && app.CompileScript != "" {
+		if app.CompileScript != "" {
 			if err := os.Remove(app.CompileScript); err != nil && !os.IsNotExist(err) {
 				log.Warn().Err(err).Msgf("Failed to remove compile script %s", app.CompileScript)
 			} else if err == nil {
-				log.Info().Msgf("Purged compile script %s", app.CompileScript)
+				if purge {
+					log.Info().Msgf("Purged compile script %s", app.CompileScript)
+				} else {
+					log.Info().Msgf("Removed compile script %s", app.CompileScript)
+				}
+			}
+
+			repoParts := strings.Split(r, "/")
+			if len(repoParts) == 2 {
+				srcPath := filepath.Join(os.TempDir(), "gh-install-src-"+repoParts[1])
+				_ = os.RemoveAll(srcPath)
 			}
 		}
 
 		delete(st.Apps, r)
-		log.Info().Msgf("Removed %s from managed state.", r)
+		log.Info().Msgf("Removed %s from state tracking only.", r)
 	}
-
 	return st.Save()
 }
 

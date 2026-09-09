@@ -26,17 +26,13 @@ type AIConfig struct {
 }
 
 type CoreConfig struct {
-	InstallTypes   string `yaml:"install_types"`
-	InstallPath    string `yaml:"install_path"`
-	GlobalPath     string `yaml:"global_path"`
-	ClonePath      string `yaml:"clone_path"`
-	ForkPath       string `yaml:"fork_path"`
-	AICmd          string `yaml:"ai_cmd"`
+	InstallTypes string `yaml:"install_types"`
+
 	AddDeps        bool   `yaml:"add_deps"`
 	NoDeps         bool   `yaml:"no_deps"`
 	DisablePrompts bool   `yaml:"disable_prompts"`
 	NoSaveState    bool   `yaml:"no_save_state"`
-	AllowWine      bool   `yaml:"allow_wine"`
+	Wine           string `yaml:"wine"`
 	NativeExtract  bool   `yaml:"native_extract"`
 	KeepSuffixes   bool   `yaml:"keep_suffixes"`
 	VTApiKey       string `yaml:"vt_api_key"`

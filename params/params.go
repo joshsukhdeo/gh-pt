@@ -7,7 +7,9 @@ type CLI struct {
 	Interactive          bool              `default:"false" short:"i" help:"Use interactive installation. If true, all non-log related flags are ignored." group:"Interactive Mode"`
 	UpdateAll            bool              `short:"U" help:"Update all installed applications (user and global)."`
 	Update               bool              `short:"u" help:"Update user installations (add -g for global only)."`
-	ListSavedState       bool              `help:"List saved state in a user-friendly format." group:"State Management"`
+	Ls                   string            `optional:"" help:"List saved state (short format). Provide optional filter." group:"State Management"`
+	Ll                   string            `optional:"" help:"List saved state (long format). Provide optional filter." group:"State Management"`
+	Full                 bool              `help:"Show full details in list view." group:"State Management"`
 	EditSavedState       bool              `help:"Edit saved state (enable/disable updates or remove apps)." group:"State Management"`
 	RmSavedState         string            `help:"Remove a saved app from state tracking only (does NOT uninstall)." group:"State Management"`
 	Rm                   string            `help:"Uninstall an application and remove it from state." group:"State Management"`
@@ -29,7 +31,7 @@ type CLI struct {
 	KeepSuffixes         bool              `short:"k" help:"Keep OS/hardware suffixes on extracted binaries instead of automatically stripping them." group:"Non-interactive Mode"`
 	DisablePrompts       bool              `short:"D" env:"GH_INSTALL_DISABLE_PROMPTS" help:"Disable all interactive prompts. Can be configured via GH_INSTALL_DISABLE_PROMPTS env var." group:"Non-interactive Mode"`
 	NoSaveState          bool              `short:"S" env:"GH_INSTALL_NO_SAVE_STATE" help:"Do not save installation to state (prevents tracking for updates). Can be configured via GH_INSTALL_NO_SAVE_STATE env var." group:"Non-interactive Mode"`
-	AllowWine            bool              `env:"GH_INSTALL_ALLOW_WINE" help:"Allow installing Windows executables on Linux/macOS/FreeBSD. Can be configured via GH_INSTALL_ALLOW_WINE env var." group:"Non-interactive Mode"`
+	Wine                 string            `default:"off" enum:"force,priority,allow,off" env:"GH_INSTALL_WINE" help:"Wine mode (force, priority, allow, off)." group:"Non-interactive Mode"`
 	AllowForeignArch     bool              `env:"GH_INSTALL_ALLOW_FOREIGN_ARCH" help:"Allow installing assets with foreign architectures (e.g., arm64 on amd64). Can be configured via GH_INSTALL_ALLOW_FOREIGN_ARCH env var." group:"Non-interactive Mode"`
 	AllowRootUserInstall bool              `help:"Allow installation to user-local paths when running as root (e.g. via sudo)." group:"Non-interactive Mode"`
 	NativeExtract        bool              `env:"GH_INSTALL_NATIVE_EXTRACT" help:"Use native OS utilities (tar/7z) for archive extraction instead of pure Go. Can be configured via GH_INSTALL_NATIVE_EXTRACT env var." group:"Non-interactive Mode"`
@@ -40,14 +42,14 @@ type CLI struct {
 	AISafetyScan         bool              `help:"Use AI to scan the repository for safety concerns before installation (requires --ai)." group:"AI Mode"`
 	CompileFromSource    bool              `help:"Compile repository from source via AI-generated build script (requires --ai)." group:"AI Mode"`
 	TargetPathCreate     bool              `default:"true" negatable:"" help:"Create target installation directory if it does not exist." group:"Non-interactive Mode"`
-	Overwrite            bool              `default:"false" short:"o" help:"Overwrite target binaries." group:"Non-interactive Mode"`
+	Overwrite            bool              `default:"false" short:"f" name:"force" aliases:"overwrite" help:"Overwrite target binaries and skip confirmation for destructive uninstall/purge actions." group:"Non-interactive Mode"`
 	PinInstall           bool              `name:"pin-install" default:"false" help:"Pin this installation to the current version (skip during updates)." group:"State Management"`
 	DryRun               bool              `default:"false" help:"Show what would be downloaded and installed without actually doing it." group:"Non-interactive Mode"`
 	VerifyChecksum       bool              `default:"true" help:"Verify asset checksums if checksum files are available in the release." group:"Non-interactive Mode"`
 	VTApiKey             string            `env:"VT_API_KEY" help:"VirusTotal API key for malicious binary checking." group:"Security Mode"`
 	SkipVtSandbox        bool              `help:"Bypass VirusTotal sandbox upload for unknown zero-day hashes." group:"Security Mode"`
 	LogLevel             string            `default:"info" enum:"error,warn,info,debug" short:"l" help:"Log level."`
-	LogFormat            string            `default:"console" enum:"console,json" short:"f" help:"Log output format."`
+	LogFormat            string            `default:"console" enum:"console,json" help:"Log output format."`
 	LogQuietInteractive  bool              `default:"true" negatable:"" help:"Quiet log in interactive mode" group:"Interactive Mode"`
 	Verbose              bool              `short:"V" help:"Enable verbose output (sets log level to debug)."`
 	Version              kong.VersionFlag  `help:"Show version." env:""`

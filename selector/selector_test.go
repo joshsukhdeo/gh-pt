@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"testing"
-    "os"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -108,11 +108,11 @@ func TestReleaseSelector(t *testing.T) {
 		s, ok := sel.(*Selector)
 		require.True(t, ok)
 		assert.Equal(t, []string{"v2.0.0"}, s.RegexpMatchers)
-        // Check items slice instead of map
-        var names []string
-        for _, it := range s.Items {
-            names = append(names, it.Name)
-        }
+		// Check items slice instead of map
+		var names []string
+		for _, it := range s.Items {
+			names = append(names, it.Name)
+		}
 		assert.Contains(t, names, "v2.0.0")
 	})
 
@@ -121,10 +121,10 @@ func TestReleaseSelector(t *testing.T) {
 		require.NoError(t, err)
 		is, ok := sel.(*InteractiveSelector)
 		require.True(t, ok)
-        var names []string
-        for _, it := range is.Items {
-            names = append(names, it.Name)
-        }
+		var names []string
+		for _, it := range is.Items {
+			names = append(names, it.Name)
+		}
 		assert.Contains(t, names, "v2.0.0")
 	})
 }
@@ -140,16 +140,20 @@ func TestAssetSelector(t *testing.T) {
 	}
 
 	t.Run("NonInteractive", func(t *testing.T) {
-		sel, err := AssetSelector(client, "owner/repo", 1, "asset-linux", []string{".*linux.*"}, false, false)
+		sel, err := AssetSelector(client, "owner/repo", AssetMatchCriteria{
+			ReleaseId: 1,
+			Name:      "asset-linux",
+			Regexps:   []string{".*linux.*"},
+		})
 		require.NoError(t, err)
 		assert.Equal(t, Asset, sel.GetKind())
 		s, ok := sel.(*Selector)
 		require.True(t, ok)
 		assert.Equal(t, []string{"asset-linux"}, s.NamesMatcher)
-        var names []string
-        for _, it := range s.Items {
-            names = append(names, it.Name)
-        }
+		var names []string
+		for _, it := range s.Items {
+			names = append(names, it.Name)
+		}
 		assert.Contains(t, names, "asset-linux-amd64.tar.gz")
 	})
 
@@ -161,14 +165,17 @@ func TestAssetSelector(t *testing.T) {
 				Header: http.Header{},
 			},
 		}
-		sel, err := AssetSelector(clientInteractive, "owner/repo", 1, "", []string{}, true, false)
+		sel, err := AssetSelector(clientInteractive, "owner/repo", AssetMatchCriteria{
+			ReleaseId:   1,
+			Interactive: true,
+		})
 		require.NoError(t, err)
 		is, ok := sel.(*InteractiveSelector)
 		require.True(t, ok)
-        var names []string
-        for _, it := range is.Items {
-            names = append(names, it.Name)
-        }
+		var names []string
+		for _, it := range is.Items {
+			names = append(names, it.Name)
+		}
 		assert.Contains(t, names, "asset-linux-amd64.tar.gz")
 	})
 }
@@ -181,27 +188,36 @@ func TestBinarySelector(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("NonInteractive", func(t *testing.T) {
-		sel, err := BinarySelector(path, []string{"dummy-binary"}, ".*", false, false)
+		sel, err := BinarySelector(BinaryMatchCriteria{
+			DownloadPath: path,
+			Names:        []string{"dummy-binary"},
+			Matcher:      ".*",
+		})
 		require.NoError(t, err)
 		assert.Equal(t, Binary, sel.GetKind())
 		s, ok := sel.(*Selector)
 		require.True(t, ok)
-        var names []string
-        for _, it := range s.Items {
-            names = append(names, it.Name)
-        }
+		var names []string
+		for _, it := range s.Items {
+			names = append(names, it.Name)
+		}
 		assert.Contains(t, names, "dummy-binary")
 	})
 
 	t.Run("Interactive", func(t *testing.T) {
-		sel, err := BinarySelector(path, []string{"dummy-binary"}, ".*", true, false)
+		sel, err := BinarySelector(BinaryMatchCriteria{
+			DownloadPath: path,
+			Names:        []string{"dummy-binary"},
+			Matcher:      ".*",
+			Interactive:  true,
+		})
 		require.NoError(t, err)
 		is, ok := sel.(*InteractiveSelector)
 		require.True(t, ok)
-        var names []string
-        for _, it := range is.Items {
-            names = append(names, it.Name)
-        }
+		var names []string
+		for _, it := range is.Items {
+			names = append(names, it.Name)
+		}
 		assert.Contains(t, names, "dummy-binary")
 	})
 }
@@ -220,13 +236,13 @@ func TestSelectorKind_String(t *testing.T) {
 
 func TestItem(t *testing.T) {
 	item := &SelectorItem{
-		Name: "myitem",
-		Selected: false,
-		Id: 1,
-		Compressed: true,
-		BinaryType: BinaryExecutable,
+		Name:         "myitem",
+		Selected:     false,
+		Id:           1,
+		Compressed:   true,
+		BinaryType:   BinaryExecutable,
 		DownloadPath: "/tmp/dwn",
-		FsPath: "sub/file",
+		FsPath:       "sub/file",
 	}
 
 	assert.Equal(t, 1, item.Id)

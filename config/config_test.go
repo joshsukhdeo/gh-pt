@@ -34,7 +34,7 @@ clone_path: /custom/src
 fork_path: /custom/projects
 ai_cmd: "my-ai -p '%s'"
 add_deps: true
-prompt_rename: true
+wine: "allow"
 no_save_state: true
 `)
 		configPath := filepath.Join(configDir, "config.yml")
@@ -96,8 +96,7 @@ install_types: [invalid yaml
 		xdg.Reload()
 
 		cfg := &Config{
-			InstallTypes: "deb",
-			VTApiKey: "my-key",
+			Core: CoreConfig{InstallTypes: "deb", VTApiKey: "my-key"},
 		}
 
 		err := SaveConfig(cfg)
@@ -105,8 +104,8 @@ install_types: [invalid yaml
 
 		loaded, err := LoadConfig()
 		require.NoError(t, err)
-		assert.Equal(t, "deb", loaded.InstallTypes)
-		assert.Equal(t, "my-key", loaded.VTApiKey)
+		assert.Equal(t, "deb", loaded.Core.InstallTypes)
+		assert.Equal(t, "my-key", loaded.Core.VTApiKey)
 	})
 
 	t.Run("SaveConfig_MkdirError", func(t *testing.T) {
