@@ -37,7 +37,7 @@ func doVTRequestWithRetry(client *http.Client, req *http.Request) (*http.Respons
 	}
 }
 
-func verifyHashWithVirusTotal(hash string, filePath string, apiKey string, interactive bool, skipSandbox bool) error {
+func VerifyHashWithVirusTotal(hash string, filePath string, apiKey string, interactive bool, skipSandbox bool) error {
 RetryVT:
 	if apiKey == "" {
 		return nil
@@ -141,7 +141,7 @@ RetryVT:
 	return nil
 }
 
-func calculateSHA256(filePath string) (string, error) {
+func CalculateSHA256(filePath string) (string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return "", err

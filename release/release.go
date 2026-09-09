@@ -752,11 +752,11 @@ func (r *GithubRelease) Install() error {
 		}
 
 		if r.CliParams.VTApiKey != "" {
-			vtHash, hashErr := calculateSHA256(downloadedAssetPath)
+			vtHash, hashErr := CalculateSHA256(downloadedAssetPath)
 			if hashErr != nil {
 				return fmt.Errorf("failed to calculate SHA-256 for VirusTotal: %w", hashErr)
 			}
-			if err := verifyHashWithVirusTotal(vtHash, downloadedAssetPath, r.CliParams.VTApiKey, r.CliParams.Interactive && !r.CliParams.DisablePrompts, r.CliParams.SkipVtSandbox); err != nil {
+			if err := VerifyHashWithVirusTotal(vtHash, downloadedAssetPath, r.CliParams.VTApiKey, r.CliParams.Interactive && !r.CliParams.DisablePrompts, r.CliParams.SkipVtSandbox); err != nil {
 				return err
 			}
 		}

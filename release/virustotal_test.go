@@ -19,7 +19,7 @@ func TestVerifyHashWithVirusTotal_Unknown_SkipSandbox(t *testing.T) {
 	defer server.Close()
 	vtBaseURL = server.URL
 
-	err := verifyHashWithVirusTotal("unknownhash", "dummy.txt", "test-api-key", false, true)
+	err := VerifyHashWithVirusTotal("unknownhash", "dummy.txt", "test-api-key", false, true)
 	assert.NoError(t, err)
 }
 
@@ -53,7 +53,7 @@ func TestVerifyHashWithVirusTotal_Unknown_Upload(t *testing.T) {
 	defer server.Close()
 	vtBaseURL = server.URL
 
-	err := verifyHashWithVirusTotal("unknownhash", f.Name(), "test-api-key", false, false)
+	err := VerifyHashWithVirusTotal("unknownhash", f.Name(), "test-api-key", false, false)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "malicious")
 }
@@ -97,6 +97,6 @@ func TestVerifyHashWithVirusTotal_Unknown_UploadLarge(t *testing.T) {
 	defer server.Close()
 	vtBaseURL = server.URL
 
-	err := verifyHashWithVirusTotal("unknownhash_large", f.Name(), "test-api-key", false, false)
+	err := VerifyHashWithVirusTotal("unknownhash_large", f.Name(), "test-api-key", false, false)
 	assert.NoError(t, err)
 }

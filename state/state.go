@@ -30,6 +30,8 @@ type InstalledApp struct {
 	MaxDepth            int               `json:"max_depth,omitempty"`
 	CompileScript       string            `json:"compile_script,omitempty"`
 	IsPrerelease        bool              `json:"is_prerelease,omitempty"`
+	LastVTScan          string            `json:"last_vt_scan,omitempty"`
+	LastAIScan          string            `json:"last_ai_scan,omitempty"`
 }
 
 type StateManager interface {
