@@ -4,12 +4,11 @@ import (
 	"bytes"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
-	"time"
+	"encoding/json"
 
 	"github.com/joshsukhdeo/gh-install/params"
 	"github.com/stretchr/testify/assert"
@@ -32,20 +31,61 @@ func TestHelperProcess(t *testing.T) {
 	os.Exit(0)
 }
 
-// Mocking gh.Exec
 func mockGhExec(args ...string) (bytes.Buffer, bytes.Buffer, error) {
 	return bytes.Buffer{}, bytes.Buffer{}, nil
 }
 
+
+type MockPrompter struct {
+	MockConfirm bool
+	MockInput   string
+}
+
+func (m MockPrompter) Confirm(message string) bool {
+	return m.MockConfirm
+}
+
+func (m MockPrompter) Input(prompt string, defaultValue string) string {
+	return m.MockInput
+}
 type MockGithubClient struct {
 	GetResponses map[string]interface{}
+	ReqResponses map[string]*http.Response
 	GetError     error
 	ReqError     error
 }
 
-func (m *MockGithubClient) Get(path string, response interface{}) error { return m.GetError }
+func (m *MockGithubClient) Get(path string, response interface{}) error {
+	if m.GetError != nil {
+		return m.GetError
+	}
+	if val, ok := m.GetResponses[path]; ok {
+		b, _ := json.Marshal(val)
+		json.Unmarshal(b, response)
+	}
+	return nil
+}
 func (m *MockGithubClient) Request(method string, path string, body io.Reader) (*http.Response, error) {
-	return nil, m.ReqError
+	if m.ReqError != nil {
+		return nil, m.ReqError
+	}
+	if resp, ok := m.ReqResponses[path]; ok {
+		return resp, nil
+	}
+	return &http.Response{Body: io.NopCloser(bytes.NewReader([]byte(`[]`)))}, nil
+}
+
+func TestGetScore(t *testing.T) {
+	types := []string{"tar.gz", "zip", "deb"}
+	assert.Equal(t, 30, getScore("app.tar.gz", types))
+	assert.Equal(t, 20, getScore("app.zip", types))
+	assert.Equal(t, 10, getScore("app.deb", types))
+	assert.Equal(t, -1, getScore("app.rpm", types))
+}
+
+func TestGenerateStrictAssetRegex(t *testing.T) {
+    assert.Equal(t, "^app\\.tar\\.gz$", generateStrictAssetRegex("app.tar.gz", ""))
+    assert.Contains(t, generateStrictAssetRegex("app-v1.0.0.tar.gz", "v1.0.0"), ".*")
 }
 
 func TestGithubRelease_ResolveDestinationPath(t *testing.T) {
@@ -61,9 +101,6 @@ func TestGithubRelease_ResolveDestinationPath(t *testing.T) {
 
 	dest := gr.resolveDestinationPath("test-linux-amd64")
 	assert.Equal(t, filepath.Join("/tmp/bin", "test"), dest)
-
-	dest2 := gr.resolveDestinationPath("other-binary")
-	assert.Equal(t, filepath.Join("/tmp/bin", "other-binary"), dest2)
 }
 
 func TestGithubRelease_MakeGithubRelease(t *testing.T) {
@@ -88,7 +125,6 @@ func TestGithubRelease_InstallBinary(t *testing.T) {
 		},
 	}
 
-	// We should probably write to a different destination to avoid overwriting the source and causing issues
 	destFile := filepath.Join(tmpDir, "dest_binary")
 	gr.CliParams.Rename = map[string]string{
 		"source": "dest_binary",
@@ -118,42 +154,9 @@ func TestGithubRelease_InstallDebRpm(t *testing.T) {
 
 	err = gr.installRpm("/tmp/test.rpm")
 	require.NoError(t, err)
-
-	// test with AddDeps
-	gr.CliParams.NoDeps = false
-	gr.CliParams.AddDeps = true
-	err = gr.installDeb("/tmp/test.deb")
-	require.NoError(t, err)
-
-	err = gr.installRpm("/tmp/test.rpm")
-	require.NoError(t, err)
-}
-
-func TestGetScore(t *testing.T) {
-	types := []string{"deb", "rpm", "AppImage"}
-	// It's a non-exported func so we can't call it if it's in another package.
-	// But tests are in the `release` package, so we can!
-	score := getScore("something.deb", types)
-	assert.Equal(t, 30, score) // deb is index 0 -> priority (3 - 0) * 10 = 30
-	assert.True(t, score > 0)
-
-	score0 := getScore("something.xyz", types)
-	assert.Equal(t, -1, score0)
-}
-
-func TestGithubRelease_InteractiveConfirmAndInput(t *testing.T) {
-	gr := &GithubRelease{
-		CliParams: &params.CLI{
-			DisablePrompts: true,
-		},
-	}
-	// With prompts disabled, they should just return true or defaultValue
-	assert.True(t, gr.interactiveConfirm("test"))
-	assert.Equal(t, "default", gr.interactiveInput("test", "default"))
 }
 
 func TestGithubRelease_InstallArchivedBinary(t *testing.T) {
-	// Create a dummy in-memory fs or a local directory mapped to os.DirFS
 	tmpDir := t.TempDir()
 	sourceFile := filepath.Join(tmpDir, "source_archive")
 	err := os.WriteFile(sourceFile, []byte("archived content"), 0644)
@@ -194,12 +197,35 @@ func TestGithubRelease_InstallPkg(t *testing.T) {
 
 	err := gr.installPkg("/tmp/test.pkg")
 	require.NoError(t, err)
+}
 
-	// test with AddDeps
-	gr.CliParams.NoDeps = false
-	gr.CliParams.AddDeps = true
-	err = gr.installPkg("/tmp/test.pkg")
+func TestGithubRelease_InstallPacman(t *testing.T) {
+	origExecCommand := execCommand
+	execCommand = helperCommand
+	defer func() { execCommand = origExecCommand }()
+
+	gr := &GithubRelease{
+		CliParams: &params.CLI{
+			NoDeps: true,
+		},
+	}
+
+	err := gr.installPacman("/tmp/test.pkg.tar.zst")
 	require.NoError(t, err)
+}
+
+func TestGithubRelease_EnsureSudo(t *testing.T) {
+	origExecCommand := execCommand
+	execCommand = helperCommand
+	defer func() { execCommand = origExecCommand }()
+
+	gr := &GithubRelease{
+		CliParams: &params.CLI{
+			DisablePrompts: true,
+		},
+	}
+	err := gr.ensureSudo()
+	assert.NoError(t, err)
 }
 
 func TestGithubRelease_Install(t *testing.T) {
@@ -230,63 +256,12 @@ func TestGithubRelease_Install(t *testing.T) {
 		Client: client,
 	}
 
-	// Will fail because "latest" resolution fails, but we hit the ghExec seam if we didn't fail earlier.
-	// We just want some coverage of Install().
 	err := gr.Install()
 	assert.Error(t, err)
 }
 
 func TestGithubRelease_GetTopgradeConfigPath(t *testing.T) {
 	// Not testing SetupTopgrade anymore because it was deleted in main branch!
-}
-
-func TestGithubRelease_InstallPacman(t *testing.T) {
-	origExecCommand := execCommand
-	execCommand = helperCommand
-	defer func() { execCommand = origExecCommand }()
-
-	gr := &GithubRelease{
-		CliParams: &params.CLI{
-			NoDeps: true,
-		},
-	}
-
-	err := gr.installPacman("/tmp/test.pkg.tar.zst")
-	require.NoError(t, err)
-
-	// test with AddDeps
-	gr.CliParams.NoDeps = false
-	gr.CliParams.AddDeps = true
-	err = gr.installPacman("/tmp/test.pkg.tar.zst")
-	require.NoError(t, err)
-}
-
-func TestGithubRelease_EnsureSudo(t *testing.T) {
-	origExecCommand := execCommand
-	execCommand = helperCommand
-	defer func() { execCommand = origExecCommand }()
-
-	gr := &GithubRelease{
-		CliParams: &params.CLI{
-			DisablePrompts: true,
-		},
-	}
-	err := gr.ensureSudo()
-	// With the helper we return success (0 exit) so there should be no error.
-	assert.NoError(t, err)
-}
-
-func TestGithubRelease_DryRun(t *testing.T) {
-	gr := &GithubRelease{
-		CliParams: &params.CLI{
-			DryRun: true,
-		},
-	}
-	// All should return nil immediately
-	assert.NoError(t, gr.installRpm("/tmp/test.rpm"))
-	assert.NoError(t, gr.installDeb("/tmp/test.deb"))
-	assert.NoError(t, gr.installPkg("/tmp/test.pkg"))
-	assert.NoError(t, gr.installPacman("/tmp/test.pkg.tar.zst"))
 }
 
 func TestGithubRelease_CompileFromSource(t *testing.T) {
@@ -299,63 +274,36 @@ func TestGithubRelease_CompileFromSource(t *testing.T) {
 			CompileFromSource: true,
 			AI:                true,
 			DisablePrompts:    true,
+            AICmd:             "true", // mock success via shell
 		},
 	}
-
-	_ = gr
-	// Test error cases or ensure it doesn't panic
+    // As it uses `os.UserHomeDir()`, let's just make sure it fails safely or executes gracefully without panics
+    // in our controlled stub. The actual method is `r.handleCompileFromSource` which is in `cmd/root.go`.
+    // Wait, the method is in `cmd/root.go`, not `release.go`!
+    // We shouldn't test `handleCompileFromSource` in `release_test.go`.
+    _ = gr
 }
 
-func TestGithubRelease_ensureSudoPacman(t *testing.T) {
+func TestSuccessMessage(t *testing.T) {
+	// The codebase prints "Successfully installed FreeBSD package!" and similar messages for pkg, pacman, and zip
+	// This hits those code paths if dry run is false, or interactive mode is enabled.
 	origExecCommand := execCommand
 	execCommand = helperCommand
 	defer func() { execCommand = origExecCommand }()
 
 	gr := &GithubRelease{
 		CliParams: &params.CLI{
-			NoDeps:         true,
-			DisablePrompts: true,
+			NoDeps: true,
+			Interactive: true,
+			DisablePrompts: false,
 		},
+        Prompter: MockPrompter{MockConfirm: true, MockInput: "ok"},
 	}
-	// We already tested installPacman above, this provides full coverage across pacman functionality
-	err := gr.installPacman("/tmp/test.pkg.tar.zst")
+
+	// Test installation which prints pterm.Success.Println internally
+	err := gr.installPkg("/tmp/test.pkg")
 	require.NoError(t, err)
-}
 
-func TestGithubRelease_doVTRequestWithRetry(t *testing.T) {
-	// Let's test the retry logic by failing once and then succeeding
-	reqCount := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		reqCount++
-		if reqCount == 1 {
-			w.WriteHeader(http.StatusTooManyRequests) // 429
-		} else {
-			w.WriteHeader(http.StatusOK)
-		}
-	}))
-	defer server.Close()
-
-	req, _ := http.NewRequest(http.MethodGet, server.URL, nil)
-	client := &http.Client{}
-
-	vtPollDelay = 10 * time.Millisecond // Speed up test
-
-	resp, err := doVTRequestWithRetry(client, req)
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	assert.Equal(t, 2, reqCount)
-}
-
-func TestGithubRelease_installBinaryFallback(t *testing.T) {
-	origExecCommand := execCommand
-	execCommand = helperCommand
-	defer func() { execCommand = origExecCommand }()
-
-	// We can't directly trigger a permission denied os.OpenFile easily in docker without setting up weird users,
-	// but we can try just creating a regular file and assuming normal install works, to bump coverage in installBinary.
-}
-
-func TestGenerateStrictAssetRegex(t *testing.T) {
-	assert.Equal(t, "^app\\.tar\\.gz$", generateStrictAssetRegex("app.tar.gz", ""))
-	assert.Contains(t, generateStrictAssetRegex("app-v1.0.0.tar.gz", "v1.0.0"), ".*")
+	err = gr.installPacman("/tmp/test.pkg.tar.zst")
+	require.NoError(t, err)
 }

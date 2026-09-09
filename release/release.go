@@ -38,13 +38,33 @@ type GithubRelease struct {
 	InstalledPackageNames []string
 	PendingDebs           []string
 	PendingRpms           []string
+	Prompter              Prompter
 }
+
+type Prompter interface {
+	Confirm(message string) bool
+	Input(prompt string, defaultValue string) string
+}
+
+type PtermPrompter struct{}
+
+func (p PtermPrompter) Confirm(message string) bool {
+	result, _ := pterm.DefaultInteractiveConfirm.WithDefaultValue(true).Show(message)
+	return result
+}
+
+func (p PtermPrompter) Input(prompt string, defaultValue string) string {
+	result, _ := pterm.DefaultInteractiveTextInput.WithDefaultValue(defaultValue).Show(prompt)
+	return result
+}
+
 
 func MakeGithubRelease(cliParams *params.CLI, cli selector.GithubClient) *GithubRelease {
 
 	return &GithubRelease{
 		CliParams: cliParams,
 		Client:    cli,
+		Prompter:  PtermPrompter{},
 	}
 }
 
@@ -52,20 +72,20 @@ func (r *GithubRelease) interactiveConfirm(prompt string) bool {
 	if r.CliParams.DisablePrompts {
 		return true
 	}
-	result, _ := pterm.DefaultInteractiveConfirm.
-		WithDefaultValue(true).
-		Show(prompt)
-	return result
+	if r.Prompter == nil {
+		r.Prompter = PtermPrompter{}
+	}
+	return r.Prompter.Confirm(prompt)
 }
 
 func (r *GithubRelease) interactiveInput(prompt string, defaultValue string) string {
 	if r.CliParams.DisablePrompts {
 		return defaultValue
 	}
-	result, _ := pterm.DefaultInteractiveTextInput.
-		WithDefaultValue(defaultValue).
-		Show(prompt)
-	return result
+	if r.Prompter == nil {
+		r.Prompter = PtermPrompter{}
+	}
+	return r.Prompter.Input(prompt, defaultValue)
 }
 
 func (r *GithubRelease) resolveDestinationPath(binaryPath string) string {

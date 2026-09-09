@@ -188,15 +188,9 @@ func (r *RootCLI) Run() error {
 				if !r.CLI.KeepSuffixes {
 					r.CLI.KeepSuffixes = cfg.Core.KeepSuffixes
 				}
-				if r.CLI.Wine == "off" && cfg.Core.Wine != "" && cfg.Core.Wine != "off" {
-					r.CLI.Wine = cfg.Core.Wine
-				}
-				if !r.CLI.NativeExtract {
-					r.CLI.NativeExtract = cfg.Core.NativeExtract
-				}
-				if !r.CLI.KeepSuffixes {
-					r.CLI.KeepSuffixes = cfg.Core.KeepSuffixes
-				}
+
+
+
 			}
 		}
 	}

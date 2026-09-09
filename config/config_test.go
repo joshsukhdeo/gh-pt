@@ -26,16 +26,17 @@ func TestConfigManagement(t *testing.T) {
 		err := os.MkdirAll(configDir, 0755)
 		require.NoError(t, err)
 
+		// yaml.v3 inline structs map to the same top-level root keys, so we don't nest them in the yaml
 		yamlContent := []byte(`
 install_types: deb,rpm
+add_deps: true
+disable_prompts: false
+no_save_state: true
 install_path: /custom/bin
 global_path: /custom/global
 clone_path: /custom/src
 fork_path: /custom/projects
 ai_cmd: "my-ai -p '%s'"
-add_deps: true
-wine: "allow"
-no_save_state: true
 `)
 		configPath := filepath.Join(configDir, "config.yml")
 		err = os.WriteFile(configPath, yamlContent, 0644)
@@ -96,7 +97,10 @@ install_types: [invalid yaml
 		xdg.Reload()
 
 		cfg := &Config{
-			Core: CoreConfig{InstallTypes: "deb", VTApiKey: "my-key"},
+			Core: CoreConfig{
+				InstallTypes: "deb",
+				VTApiKey:     "my-key",
+			},
 		}
 
 		err := SaveConfig(cfg)

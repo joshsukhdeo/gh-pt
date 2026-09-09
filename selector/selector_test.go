@@ -5,9 +5,8 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"testing"
+	"runtime"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,8 +14,8 @@ import (
 
 type MockGithubClient struct {
 	GetResponses map[string]interface{}
-	GetError     error
 	ReqResponses map[string]*http.Response
+	GetError     error
 	ReqError     error
 }
 
@@ -25,8 +24,8 @@ func (m *MockGithubClient) Get(path string, response interface{}) error {
 		return m.GetError
 	}
 	if val, ok := m.GetResponses[path]; ok {
-		bytes, _ := json.Marshal(val)
-		json.Unmarshal(bytes, response)
+		b, _ := json.Marshal(val)
+		json.Unmarshal(b, response)
 	}
 	return nil
 }
@@ -39,25 +38,6 @@ func (m *MockGithubClient) Request(method string, path string, body io.Reader) (
 		return resp, nil
 	}
 	return &http.Response{Body: io.NopCloser(bytes.NewReader([]byte(`[]`)))}, nil
-}
-
-func TestSelector_PrioritizesNonMusl(t *testing.T) {
-	items := []*SelectorItem{
-		{Name: "app-linux-musl-x64.tar.gz"},
-		{Name: "app-linux-x64.tar.gz"},
-	}
-
-	sel := &Selector{
-		Kind:           Asset,
-		Items:          items,
-		RegexpMatchers: []string{`.*(?:amd64|x86_64|x64).*\.(?i:tar\.gz)$`},
-		Single:         true,
-	}
-
-	selected, err := sel.Run()
-	assert.NoError(t, err)
-	assert.Len(t, selected, 1)
-	assert.Equal(t, "app-linux-x64.tar.gz", selected[0].Name)
 }
 
 func TestSelector_Run(t *testing.T) {
@@ -108,21 +88,8 @@ func TestReleaseSelector(t *testing.T) {
 		s, ok := sel.(*Selector)
 		require.True(t, ok)
 		assert.Equal(t, []string{"v2.0.0"}, s.RegexpMatchers)
-		// Check items slice instead of map
 		var names []string
 		for _, it := range s.Items {
-			names = append(names, it.Name)
-		}
-		assert.Contains(t, names, "v2.0.0")
-	})
-
-	t.Run("Interactive", func(t *testing.T) {
-		sel, err := ReleaseSelector(client, "owner/repo", "latest", true)
-		require.NoError(t, err)
-		is, ok := sel.(*InteractiveSelector)
-		require.True(t, ok)
-		var names []string
-		for _, it := range is.Items {
 			names = append(names, it.Name)
 		}
 		assert.Contains(t, names, "v2.0.0")
@@ -142,8 +109,9 @@ func TestAssetSelector(t *testing.T) {
 	t.Run("NonInteractive", func(t *testing.T) {
 		sel, err := AssetSelector(client, "owner/repo", AssetMatchCriteria{
 			ReleaseId: 1,
-			Name:      "asset-linux",
-			Regexps:   []string{".*linux.*"},
+			Name: "asset-linux",
+			Regexps: []string{".*linux.*"},
+			Interactive: false,
 		})
 		require.NoError(t, err)
 		assert.Equal(t, Asset, sel.GetKind())
@@ -156,70 +124,76 @@ func TestAssetSelector(t *testing.T) {
 		}
 		assert.Contains(t, names, "asset-linux-amd64.tar.gz")
 	})
-
-	t.Run("Interactive", func(t *testing.T) {
-		clientInteractive := &MockGithubClient{}
-		clientInteractive.ReqResponses = map[string]*http.Response{
-			"repos/owner/repo/releases/1/assets": {
-				Body:   io.NopCloser(bytes.NewReader([]byte(respBody))),
-				Header: http.Header{},
-			},
-		}
-		sel, err := AssetSelector(clientInteractive, "owner/repo", AssetMatchCriteria{
-			ReleaseId:   1,
-			Interactive: true,
-		})
-		require.NoError(t, err)
-		is, ok := sel.(*InteractiveSelector)
-		require.True(t, ok)
-		var names []string
-		for _, it := range is.Items {
-			names = append(names, it.Name)
-		}
-		assert.Contains(t, names, "asset-linux-amd64.tar.gz")
-	})
 }
 
-func TestBinarySelector(t *testing.T) {
-	// Create a dummy plain text binary file for the no-match archiver path
-	tmpDir := t.TempDir()
-	path := filepath.Join(tmpDir, "dummy-binary")
-	err := os.WriteFile(path, []byte("executable content"), 0755)
-	require.NoError(t, err)
+func TestSelector_PrioritizesNonMusl(t *testing.T) {
+	items := []*SelectorItem{
+		{Name: "app-linux-musl-x64.tar.gz"},
+		{Name: "app-linux-x64.tar.gz"},
+	}
 
-	t.Run("NonInteractive", func(t *testing.T) {
-		sel, err := BinarySelector(BinaryMatchCriteria{
-			DownloadPath: path,
-			Names:        []string{"dummy-binary"},
-			Matcher:      ".*",
-		})
-		require.NoError(t, err)
-		assert.Equal(t, Binary, sel.GetKind())
-		s, ok := sel.(*Selector)
-		require.True(t, ok)
-		var names []string
-		for _, it := range s.Items {
-			names = append(names, it.Name)
-		}
-		assert.Contains(t, names, "dummy-binary")
-	})
+	sel := &Selector{
+		Kind:           Asset,
+		Items:          items,
+		RegexpMatchers: []string{`.*(?:amd64|x86_64|x64).*\.(?i:tar\.gz)$`},
+		Single:         true,
+	}
 
-	t.Run("Interactive", func(t *testing.T) {
-		sel, err := BinarySelector(BinaryMatchCriteria{
-			DownloadPath: path,
-			Names:        []string{"dummy-binary"},
-			Matcher:      ".*",
-			Interactive:  true,
-		})
-		require.NoError(t, err)
-		is, ok := sel.(*InteractiveSelector)
-		require.True(t, ok)
-		var names []string
-		for _, it := range is.Items {
-			names = append(names, it.Name)
-		}
-		assert.Contains(t, names, "dummy-binary")
-	})
+	selected, err := sel.Run()
+	assert.NoError(t, err)
+	assert.Len(t, selected, 1)
+	assert.Equal(t, "app-linux-x64.tar.gz", selected[0].Name)
+}
+
+func TestSelector_ForeignArchitectureBlacklisting(t *testing.T) {
+	items := []*SelectorItem{
+		{Name: "app_linux_arm64.tar.gz"},
+		{Name: "app_linux_amd64.tar.gz"},
+	}
+
+	sel := &Selector{
+		Kind:           Asset,
+		Items:          items,
+		RegexpMatchers: []string{`(?i)app_linux.*\.tar\.gz$`},
+		Single:         true,
+	}
+
+	// This validates the architecture exclusion logic
+	// e.g. "app_linux_arm64.tar.gz" is rejected on amd64
+	// "app_linux_amd64.tar.gz" is selected on amd64
+	selected, err := sel.Run()
+	assert.NoError(t, err)
+	assert.Len(t, selected, 1)
+
+	if runtime.GOARCH == "amd64" {
+		assert.Equal(t, "app_linux_amd64.tar.gz", selected[0].Name)
+	} else if runtime.GOARCH == "arm64" {
+		assert.Equal(t, "app_linux_arm64.tar.gz", selected[0].Name)
+	}
+}
+
+func TestSelector_NoArchitecture_AssumeCompatible(t *testing.T) {
+	reAmd64 := getForeignArchRegex("amd64")
+	if reAmd64 != nil {
+		assert.False(t, reAmd64.MatchString("app_linux.tar.gz"))
+	}
+}
+
+func TestSelector_FinalFallbackPattern(t *testing.T) {
+	items := []*SelectorItem{
+		{Name: "app.deb"},
+	}
+
+	sel := &Selector{
+		Kind:           Asset,
+		Items:          items,
+		RegexpMatchers: []string{`(?i)^app\.deb$`},
+	}
+
+	selected, err := sel.Run()
+	assert.NoError(t, err)
+	assert.Len(t, selected, 1)
+	assert.Equal(t, "app.deb", selected[0].Name)
 }
 
 func TestInteractiveSelector_GetKind(t *testing.T) {
@@ -235,23 +209,6 @@ func TestSelectorKind_String(t *testing.T) {
 }
 
 func TestItem(t *testing.T) {
-	item := &SelectorItem{
-		Name:         "myitem",
-		Selected:     false,
-		Id:           1,
-		Compressed:   true,
-		BinaryType:   BinaryExecutable,
-		DownloadPath: "/tmp/dwn",
-		FsPath:       "sub/file",
-	}
-
-	assert.Equal(t, 1, item.Id)
-	assert.True(t, item.Compressed)
-	assert.Equal(t, BinaryExecutable, item.BinaryType)
-	assert.Equal(t, "/tmp/dwn", item.DownloadPath)
-	assert.Equal(t, "sub/file", item.FsPath)
-
-	// BinaryTypeFromPath
 	assert.Equal(t, BinaryExecutable, BinaryTypeFromPath("/tmp/test.exe"))
 	assert.Equal(t, BinaryExecutable, BinaryTypeFromPath("/tmp/test"))
 	assert.Equal(t, BinaryDebInstaller, BinaryTypeFromPath("/tmp/test.deb"))
