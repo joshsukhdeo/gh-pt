@@ -3,59 +3,179 @@ package params
 import "github.com/alecthomas/kong"
 
 type CLI struct {
-	Repository           string            `arg:"" optional:"" help:"Github repository in OWNER/REPOSITORY_NAME format."`
-	Interactive          bool              `default:"false" short:"i" help:"Use interactive installation. If true, all non-log related flags are ignored." group:"Interactive Mode"`
+	// Subcommands
+	Install InstallCmd `cmd:"" default:"withargs" help:"Install a GitHub release or clone a repository (default)."`
+	State   StateCmd   `cmd:"" help:"Manage saved state and installations."`
+	Config  ConfigCmd  `cmd:"" help:"Manage configuration."`
+	Repo    RepoCmd    `cmd:"" help:"Manage source repositories."`
+	Scan    ScanCmd    `cmd:"" help:"Security and AI scanning."`
+	Vt      VtCmd      `cmd:"" help:"VirusTotal integration."`
+	Show    ShowCmd    `cmd:"" help:"Show release information."`
+	Source  SourceCmd  `cmd:"" help:"Compile repository from source."`
+
+	// Global flags
+	LogLevel            string           `default:"info" enum:"error,warn,info,debug" short:"l" help:"Log level."`
+	LogFormat           string           `default:"console" enum:"console,json" help:"Log output format."`
+	LogQuietInteractive bool             `default:"true" negatable:"" help:"Quiet log in interactive mode"`
+	Verbose             bool             `short:"V" help:"Enable verbose output (sets log level to debug)."`
+	Version             kong.VersionFlag `help:"Show version." env:""`
+}
+
+// Shared flags across commands
+type CommonInstallFlags struct {
+	Interactive          bool              `default:"false" short:"i" help:"Use interactive installation."`
 	UpdateAll            bool              `short:"U" help:"Update all installed applications (user and global)."`
 	Update               bool              `short:"u" help:"Update user installations (add -g for global only)."`
-	Ls                   string            `optional:"" help:"List saved state (short format). Provide optional filter." group:"State Management"`
-	Ll                   string            `optional:"" help:"List saved state (long format). Provide optional filter." group:"State Management"`
-	Full                 bool              `help:"Show full details in list view." group:"State Management"`
-	EditSavedState       bool              `help:"Edit saved state (enable/disable updates or remove apps)." group:"State Management"`
-	RmSavedState         string            `help:"Remove a saved app from state tracking only (does NOT uninstall)." group:"State Management"`
-	Rm                   string            `help:"Uninstall an application and remove it from state." group:"State Management"`
-	Purge                string            `help:"Completely uninstall an app, remove cached compile scripts, and remove from state." group:"State Management"`
-	Pin                  string            `help:"Pin a specific version in the saved state." group:"State Management"`
-	ReleaseVersion       string            `default:"latest" short:"v" help:"Repository release tag (version) to install." group:"Non-interactive Mode"`
-	ReleaseAsset         string            `optional:"" short:"a" help:"Name of repository release asset to download. If not set, --release-asset-regexp is used." group:"Non-interactive Mode"`
-	ReleaseAssetRegexp   string            `optional:"" short:"A" help:"Regular expression matching release asset to download." group:"Non-interactive Mode"`
+	ReleaseVersion       string            `default:"latest" short:"v" help:"Repository release tag (version) to install."`
+	ReleaseAsset         string            `optional:"" short:"a" help:"Name of repository release asset to download."`
+	ReleaseAssetRegexp   string            `optional:"" short:"A" help:"Regular expression matching release asset to download."`
 	ReleaseAssetRegexps  []string          `kong:"-"`
-	Type                 []string          `default:"${install_types}" short:"T" name:"format" env:"GH_INSTALL_TYPE" help:"Comma-separated list of types to match and prioritize. Can be configured via GH_INSTALL_TYPE env var." group:"Non-interactive Mode"`
-	All                  bool              `default:"false" help:"Install all matched assets instead of just the first one." group:"Non-interactive Mode"`
-	AssetBinaries        []string          `optional:"" short:"b" help:"If release asset is an archive - names of a binaries in the archive to install. If not set, --install-binary-regexp is used." group:"Non-interactive Mode"`
-	AssetBinariesRegexp  string            `optional:"" short:"B" help:"If release asset is an archive - regular expression matching binaries in the archive to install. If not set, repository name is used." group:"Non-interactive Mode"`
+	Type                 []string          `default:"${install_types}" short:"T" name:"format" env:"GH_PT_TYPE" help:"Comma-separated list of types to match and prioritize."`
+	All                  bool              `default:"false" help:"Install all matched assets instead of just the first one."`
+	AssetBinaries        []string          `optional:"" short:"b" help:"If release asset is an archive - names of a binaries in the archive to install."`
+	AssetBinariesRegexp  string            `optional:"" short:"B" help:"If release asset is an archive - regular expression matching binaries in the archive to install."`
 	TargetPath           string            `default:"${install_path}" short:"p" type:"path" help:"Target installation directory (default: ~/.local/bin or /usr/local/bin if --global)."`
-	Global               bool              `short:"g" help:"Install globally (e.g. /usr/local/bin) instead of user bin." group:"Non-interactive Mode"`
-	AddDeps              bool              `short:"y" help:"Automatically resolve and install dependencies without prompting." group:"Non-interactive Mode"`
-	NoDeps               bool              `short:"n" help:"Do not install dependencies (use dpkg/rpm directly)." group:"Non-interactive Mode"`
-	Rename               map[string]string `optional:"" short:"t" help:"Rename binaries installed at target path, \"<asset archive binary | asset>=<renamed binary>;...\"" group:"Non-interactive Mode"`
-	KeepSuffixes         bool              `short:"k" help:"Keep OS/hardware suffixes on extracted binaries instead of automatically stripping them." group:"Non-interactive Mode"`
-	DisablePrompts       bool              `short:"D" env:"GH_INSTALL_DISABLE_PROMPTS" help:"Disable all interactive prompts. Can be configured via GH_INSTALL_DISABLE_PROMPTS env var." group:"Non-interactive Mode"`
-	NoSaveState          bool              `short:"S" env:"GH_INSTALL_NO_SAVE_STATE" help:"Do not save installation to state (prevents tracking for updates). Can be configured via GH_INSTALL_NO_SAVE_STATE env var." group:"Non-interactive Mode"`
-	Wine                 string            `default:"off" enum:"force,priority,allow,off" env:"GH_INSTALL_WINE" help:"Wine mode (force, priority, allow, off)." group:"Non-interactive Mode"`
-	AllowForeignArch     bool              `env:"GH_INSTALL_ALLOW_FOREIGN_ARCH" help:"Allow installing assets with foreign architectures (e.g., arm64 on amd64). Can be configured via GH_INSTALL_ALLOW_FOREIGN_ARCH env var." group:"Non-interactive Mode"`
-	AllowRootUserInstall bool              `help:"Allow installation to user-local paths when running as root (e.g. via sudo)." group:"Non-interactive Mode"`
-	NativeExtract        bool              `env:"GH_INSTALL_NATIVE_EXTRACT" help:"Use native OS utilities (tar/7z) for archive extraction instead of pure Go. Can be configured via GH_INSTALL_NATIVE_EXTRACT env var." group:"Non-interactive Mode"`
-	Clone                bool              `help:"Clone the repository into clone path (default: ~/src) and track for updates via git pull." group:"Repository Mode"`
-	Fork                 bool              `help:"Fork and clone the repository into fork path (default: ~/projects) and track for updates." group:"Repository Mode"`
-	AI                   bool              `help:"Enable AI-assisted installation." group:"AI Mode"`
-	AICmd                string            `default:"agy -p \"%s\"" env:"GH_INSTALL_AI_CMD" help:"Command template for AI agent prompt execution. Can be configured via GH_INSTALL_AI_CMD env var." group:"AI Mode"`
-	AISafetyScan         bool              `help:"Use AI to scan the repository for safety concerns before installation (requires --ai)." group:"AI Mode"`
-	CompileFromSource    bool              `help:"Compile repository from source via AI-generated build script (requires --ai)." group:"AI Mode"`
-	TargetPathCreate     bool              `default:"true" negatable:"" help:"Create target installation directory if it does not exist." group:"Non-interactive Mode"`
-	Overwrite            bool              `default:"false" short:"f" name:"force" aliases:"overwrite" help:"Overwrite target binaries and skip confirmation for destructive uninstall/purge actions." group:"Non-interactive Mode"`
-	PinInstall           bool              `name:"pin-install" default:"false" help:"Pin this installation to the current version (skip during updates)." group:"State Management"`
-	DryRun               bool              `default:"false" help:"Show what would be downloaded and installed without actually doing it." group:"Non-interactive Mode"`
-	VerifyChecksum       bool              `default:"true" help:"Verify asset checksums if checksum files are available in the release." group:"Non-interactive Mode"`
-	VTApiKey             string            `env:"VT_API_KEY" help:"VirusTotal API key for malicious binary checking." group:"Security Mode"`
-	SkipVtSandbox        bool              `help:"Bypass VirusTotal sandbox upload for unknown zero-day hashes." group:"Security Mode"`
-	LogLevel             string            `default:"info" enum:"error,warn,info,debug" short:"l" help:"Log level."`
-	LogFormat            string            `default:"console" enum:"console,json" help:"Log output format."`
-	LogQuietInteractive  bool              `default:"true" negatable:"" help:"Quiet log in interactive mode" group:"Interactive Mode"`
-	Verbose              bool              `short:"V" help:"Enable verbose output (sets log level to debug)."`
-	Version              kong.VersionFlag  `help:"Show version." env:""`
-	Show                 bool              `help:"Show available release versions (max 10) and latest/selected release assets (max 50)." group:"Information Mode"`
-	ShowAssets           bool              `help:"Show all available assets for the latest or selected release." group:"Information Mode"`
-	ShowVersions         bool              `help:"Show all available release versions." group:"Information Mode"`
-	Prerelease           bool              `help:"Include prereleases for install, updates, and list filters." group:"Non-interactive Mode"`
-	Stable               bool              `help:"Include only stable releases for install, updates, and list filters." group:"Non-interactive Mode"`
+	Global               bool              `short:"g" help:"Install globally (e.g. /usr/local/bin) instead of user bin."`
+	AddDeps              bool              `short:"y" help:"Automatically resolve and install dependencies without prompting."`
+	NoDeps               bool              `short:"n" help:"Do not install dependencies."`
+	Rename               map[string]string `optional:"" short:"t" help:"Rename binaries installed at target path."`
+	KeepSuffixes         bool              `short:"k" help:"Keep OS/hardware suffixes on extracted binaries."`
+	DisablePrompts       bool              `short:"D" env:"GH_PT_DISABLE_PROMPTS" help:"Disable all interactive prompts."`
+	NoSaveState          bool              `short:"S" env:"GH_PT_NO_SAVE_STATE" help:"Do not save installation to state."`
+	Wine                 string            `default:"off" enum:"force,priority,allow,off" env:"GH_PT_WINE" help:"Wine mode."`
+	AllowForeignArch     bool              `env:"GH_PT_ALLOW_FOREIGN_ARCH" help:"Allow installing assets with foreign architectures."`
+	AllowRootUserInstall bool              `help:"Allow installation to user-local paths when running as root."`
+	NativeExtract        bool              `env:"GH_PT_NATIVE_EXTRACT" help:"Use native OS utilities for archive extraction."`
+	TargetPathCreate     bool              `default:"true" negatable:"" help:"Create target installation directory if it does not exist."`
+	Overwrite            bool              `default:"false" short:"f" name:"force" aliases:"overwrite" help:"Overwrite target binaries."`
+	PinInstall           bool              `name:"pin-install" default:"false" help:"Pin this installation to the current version."`
+	DryRun               bool              `default:"false" help:"Show what would be downloaded."`
+	VerifyChecksum       bool              `default:"true" help:"Verify asset checksums."`
+	SkipVtSandbox        bool              `help:"Bypass VirusTotal sandbox upload for unknown zero-day hashes."`
+	Prerelease           bool              `help:"Include prereleases for install, updates, and list filters."`
+	Stable               bool              `help:"Include only stable releases."`
+	AI                   bool              `help:"Enable AI-assisted installation."`
+}
+
+type InstallCmd struct {
+	Repository string `arg:"" optional:"" help:"Github repository in OWNER/REPOSITORY_NAME format."`
+	CommonInstallFlags
+}
+
+type StateCmd struct {
+	Ls   StateLsCmd   `cmd:"" help:"List saved state (short format)."`
+	Ll   StateLlCmd   `cmd:"" help:"List saved state (long format)."`
+	Rm   StateRmCmd   `cmd:"" help:"Uninstall an application and remove it from state."`
+	Edit StateEditCmd `cmd:"" help:"Edit saved state interactively."`
+}
+
+type StateLsCmd struct {
+	Filter string `arg:"" optional:"" help:"Optional filter."`
+	Global bool   `short:"g" help:"Show global installs only."`
+}
+
+type StateLlCmd struct {
+	Filter string `arg:"" optional:"" help:"Optional filter."`
+	Global bool   `short:"g" help:"Show global installs only."`
+}
+
+type StateRmCmd struct {
+	Target string `arg:"" help:"Application to remove."`
+	Purge  bool   `help:"Completely uninstall and purge."`
+}
+
+type StateEditCmd struct {}
+
+type ConfigCmd struct {
+	Ls   ConfigLsCmd   `cmd:"" help:"List config settings."`
+	Get  ConfigGetCmd  `cmd:"" help:"Get config setting."`
+	Set  ConfigSetCmd  `cmd:"" help:"Set config setting."`
+	Rm   ConfigRmCmd   `cmd:"" help:"Remove config setting."`
+	Menu ConfigMenuCmd `cmd:"" default:"withargs" help:"Interactive config menu (default)."`
+}
+type ConfigLsCmd struct {}
+type ConfigGetCmd struct { Key string `arg:""` }
+type ConfigSetCmd struct { Key string `arg:""`; Value string `arg:""` }
+type ConfigRmCmd struct { Key string `arg:""` }
+type ConfigMenuCmd struct {}
+
+type RepoCmd struct {
+	Clone RepoCloneCmd `cmd:"" help:"Clone the repository."`
+	Fork  RepoForkCmd  `cmd:"" help:"Fork and clone the repository."`
+}
+
+type RepoCloneCmd struct {
+	Repository string `arg:"" help:"Github repository."`
+	Force      bool   `short:"f" help:"Overwrite existing."`
+	MaxDepth   int    `help:"Max clone depth."`
+}
+
+type RepoForkCmd struct {
+	Repository string `arg:"" help:"Github repository."`
+	Force      bool   `short:"f" help:"Overwrite existing."`
+	MaxDepth   int    `help:"Max clone depth."`
+}
+
+type ScanCmd struct {
+	Ai ScanAiCmd `cmd:"" help:"AI safety scan."`
+	Vt ScanVtCmd `cmd:"" help:"VirusTotal scan."`
+}
+
+type ScanAiCmd struct {
+	Target string `arg:"" optional:"" help:"Target to scan."`
+	AICmd  string `help:"Command template for AI execution."`
+}
+
+type ScanVtCmd struct {
+	Target string `arg:"" optional:"" help:"Target to scan."`
+}
+
+type VtCmd struct {
+	SetKey VtSetKeyCmd `cmd:"" help:"Set VirusTotal API key."`
+}
+type VtSetKeyCmd struct {
+	Key string `arg:"" help:"VirusTotal API key."`
+}
+
+type ShowCmd struct {
+	Repository string `arg:"" help:"Github repository."`
+	Assets     bool   `help:"Show all available assets."`
+	Versions   bool   `help:"Show all release versions."`
+	Prerelease bool   `help:"Include prereleases."`
+	Stable     bool   `help:"Include only stable releases."`
+	Version    string `short:"v" default:"latest" help:"Version to show."`
+}
+
+type SourceCmd struct {
+	Repository string `arg:"" help:"Github repository."`
+	AICmd      string `help:"Command template for AI execution."`
+	CommonInstallFlags
+}
+
+// ExecContext holds the flattened execution parameters
+type ExecContext struct {
+	CommonInstallFlags
+	Repository        string
+	Clone             bool
+	Fork              bool
+	CompileFromSource bool
+	AI                bool
+	AICmd             string
+	AISafetyScan      bool
+	LogLevel          string
+	LogFormat         string
+	LogQuietInteractive bool
+	Verbose           bool
+	VTApiKey          string
+	Ls                string
+	Ll                string
+	Full              bool
+	EditSavedState    bool
+	RmSavedState      string
+	Rm                string
+	Purge             string
+	Pin               string
+	Show              bool
+	ShowAssets        bool
+	ShowVersions      bool
 }

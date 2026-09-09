@@ -20,7 +20,7 @@ gh extension install joshsukhdeo/gh-pt
   - **MacOS & Windows Support:** Custom installation pipelines for `.dmg`, `.pkg`, `.msi`, and Windows `setup.exe` executables natively or via Wine.
   - **Fallback:** AppImage, Flatpak, Snap, or raw binary extraction for distros without native package managers.
 - **State Management & Updates:** Tracks installed binaries in `state.json` so you can update them all later with a single command. All installation flags (`-T`, `--all`, `--asset-binaries-regexp`) are persisted so updates reproduce the exact same installation behavior.
-- **State Management:** Use `--ls` or `--ll` to list saved installations, `--full` for expanded metadata, `--edit-saved-state` to manage update participation, `--rm-saved-state` to remove tracking only, `--rm` to uninstall, and `--purge` to uninstall and remove cached compile scripts.
+- **State Management:** Use `state ls` or `state ll` to list saved installations, `--full` for expanded metadata, `--edit-saved-state` to manage update participation, `state rm-saved-state` to remove tracking only, `state rm` to uninstall, and `--purge` to uninstall and remove cached compile scripts.
 - **Pinned Versions:** Use `--pin-install` during installation or `--pin REPOSITORY` afterward to skip an application during updates.
 - **Dependency Resolution:** Automatically resolves and installs dependencies for `.deb` (via `apt`), `.rpm` (via `dnf`), and `.pkg.tar.zst` (via `pacman`) with the `-y` flag.
 - **Cross-Platform:** Supports Linux, macOS, Windows, and FreeBSD.
@@ -28,7 +28,7 @@ gh extension install joshsukhdeo/gh-pt
 - **Architecture Safety:** Rejects release assets for foreign architectures by default; use `--allow-foreign-arch` when a cross-architecture asset is intentional.
 - **Checksum Verification:** Verifies downloaded assets against release checksum files when available.
 - **Safe Extraction and Removal:** Supports native `tar`/`7z` extraction with `--native-extract`, protects uninstall paths from traversal, and offers `--dry-run` for previewing an installation.
-- **AI-Assisted Installation:** `--ai` enables repository analysis, `--ai-safety-scan` checks source before installation, and `--compile-from-source` generates and runs a build script for repositories without usable release binaries.
+- **AI-Assisted Installation:** `--ai` enables repository analysis, `scan --ai` checks source before installation, and `source` generates and runs a build script for repositories without usable release binaries.
 - **VirusTotal Checks:** Optional VirusTotal binary scanning with `--vt-api-key`; `--skip-vt-sandbox` bypasses sandbox uploads for unknown hashes.
 - **Clean Naming:** Automatically strips messy hardware/OS tags (like `-x86_64-linux`) and redundant version strings from the final installed binary name.
 - **Sudo Safety:** Before running any `sudo` command, verifies that a sudo session is cached. In headless mode (`-D`), fails fast with a clear error instead of silently hanging waiting for a password prompt.
@@ -74,16 +74,16 @@ Interactive Mode
                          ($GH_INSTALL_LOG_QUIET_INTERACTIVE)
 
 State Management
-  --ls=STRING                List saved state in short format, optionally
+  state ls=STRING                List saved state in short format, optionally
                              filtered by repository or asset.
-  --ll=STRING                List saved state in long format, optionally
+  state ll=STRING                List saved state in long format, optionally
                              filtered by repository or asset.
   --full                     Show expanded installation metadata in list views.
   --edit-saved-state         Edit saved state (enable/disable updates or remove
                              apps) ($GH_INSTALL_EDIT_SAVED_STATE).
-  --rm-saved-state=STRING    Remove a saved app from state tracking only
+  state rm-saved-state=STRING    Remove a saved app from state tracking only
                              ($GH_INSTALL_RM_SAVED_STATE).
-  --rm=STRING                Uninstall an application and remove it from state
+  state rm=STRING                Uninstall an application and remove it from state
                              ($GH_INSTALL_RM).
   --purge=STRING             Uninstall an app, remove cached compile scripts, and
                              remove it from state ($GH_INSTALL_PURGE).
@@ -154,18 +154,18 @@ Non-interactive Mode
                                    ($GH_INSTALL_VERIFY_CHECKSUM).
 
 Repository Mode
-  --clone                          Clone and track the repository in ~/src
+  repo clone                          Clone and track the repository in ~/src
                                    ($GH_INSTALL_CLONE).
-  --fork                           Fork, clone, and track the repository in
+  repo fork                           Fork, clone, and track the repository in
                                    ~/projects ($GH_INSTALL_FORK).
 
 AI Mode
   --ai                             Enable AI-assisted installation
                                    ($GH_INSTALL_AI).
   --ai-cmd=STRING                  AI command template ($GH_INSTALL_AI_CMD).
-  --ai-safety-scan                 Scan the repository before installation
+  scan --ai                 Scan the repository before installation
                                    ($GH_INSTALL_AI_SAFETY_SCAN).
-  --compile-from-source            Build from source with an AI-generated script
+  source            Build from source with an AI-generated script
                                    ($GH_INSTALL_COMPILE_FROM_SOURCE).
 
 Security Mode
@@ -206,10 +206,10 @@ gh install -U
 
 To view and manage your current state:
 - `gh install --edit-saved-state`: Launches an interactive terminal UI to enable/disable automatic updates for specific apps, or delete them from the tracker.
-- `gh install --ls="fzf"`: Lists saved installations matching a repository or asset filter.
-- `gh install --ll="fzf" --full`: Shows expanded metadata for matching saved installations.
-- `gh install --rm-saved-state="fzf"`: Removes the application from state tracking without uninstalling it.
-- `gh install --rm="fzf"`: Uninstalls the application and removes it from state.
+- `gh install state ls="fzf"`: Lists saved installations matching a repository or asset filter.
+- `gh install state ll="fzf" --full`: Shows expanded metadata for matching saved installations.
+- `gh install state rm-saved-state="fzf"`: Removes the application from state tracking without uninstalling it.
+- `gh install state rm="fzf"`: Uninstalls the application and removes it from state.
 - `gh install --purge="fzf"`: Uninstalls the application, removes cached compile scripts, and removes it from state.
 - `gh install --pin="fzf"`: Pins the saved installation so update commands skip it.
 
@@ -217,8 +217,8 @@ If you are running `gh install` in a temporary script and don't want to track it
 
 ---
 
-- **Repository Tracking (Clone / Fork):** Supports cloning (`--clone`) or forking (`--fork`) git repositories into configurable base directories (defaults: `~/src` and `~/projects`), tracking them in `state.json` and automatically syncing them via `gh repo sync` during `gh install -U` / `-u`.
-- **AI Compilation from Source:** Supports `--compile-from-source` (with `--ai` and configurable `--ai-cmd 'agy -p "%s"'`) which clones the target repository to a temporary directory, invokes the AI agent to produce an automated build script saved at `~/.config/gh-pt/scripts/compile-<pkgname>.sh` (or `.ps1` on Windows), executes compilation and installation, purges the temporary workspace, and tracks `compile_script` in state for replay during `-U`/`-u` updates.
+- **Repository Tracking (Clone / Fork):** Supports cloning (`repo clone`) or forking (`repo fork`) git repositories into configurable base directories (defaults: `~/src` and `~/projects`), tracking them in `state.json` and automatically syncing them via `gh repo sync` during `gh install -U` / `-u`.
+- **AI Compilation from Source:** Supports `source` (with `--ai` and configurable `--ai-cmd 'agy -p "%s"'`) which clones the target repository to a temporary directory, invokes the AI agent to produce an automated build script saved at `~/.config/gh-pt/scripts/compile-<pkgname>.sh` (or `.ps1` on Windows), executes compilation and installation, purges the temporary workspace, and tracks `compile_script` in state for replay during `-U`/`-u` updates.
 - **Pinned updates:** Pinned entries remain tracked but are skipped by `-U` and `-u` until the pin is removed.
 
 ---

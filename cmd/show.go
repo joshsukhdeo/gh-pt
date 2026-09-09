@@ -40,7 +40,7 @@ func ShowInfo(r *RootCLI) error {
 }
 
 func showInfoWithClient(r *RootCLI, client ghRestClient) error {
-	repo := r.CLI.Repository
+	repo := r.ExecContext.Repository
 	if repo == "" {
 		return fmt.Errorf("repository must be provided")
 	}
@@ -66,8 +66,8 @@ func showInfoWithClient(r *RootCLI, client ghRestClient) error {
 	var disableIcons bool
 	if cfg != nil {
 		disableIcons = cfg.Core.DisableIcons
-		if cfg.Core.AllowPrerelease && !r.CLI.Stable {
-			r.CLI.Prerelease = true
+		if cfg.Core.AllowPrerelease && !r.ExecContext.Stable {
+			r.ExecContext.Prerelease = true
 		}
 	}
 
@@ -108,20 +108,20 @@ func showInfoWithClient(r *RootCLI, client ghRestClient) error {
 	}
 
 	pickTargetRelease := func() *Release {
-		if r.CLI.ReleaseVersion != "" && r.CLI.ReleaseVersion != "latest" {
+		if r.ExecContext.ReleaseVersion != "" && r.ExecContext.ReleaseVersion != "latest" {
 			for i := range releases {
-				if releases[i].TagName == r.CLI.ReleaseVersion ||
-					strings.TrimPrefix(releases[i].TagName, "v") == strings.TrimPrefix(r.CLI.ReleaseVersion, "v") {
+				if releases[i].TagName == r.ExecContext.ReleaseVersion ||
+					strings.TrimPrefix(releases[i].TagName, "v") == strings.TrimPrefix(r.ExecContext.ReleaseVersion, "v") {
 					return &releases[i]
 				}
 			}
 			var single Release
-			if err := client.Get(fmt.Sprintf("repos/%s/releases/tags/%s", repo, r.CLI.ReleaseVersion), &single); err == nil && single.TagName != "" {
+			if err := client.Get(fmt.Sprintf("repos/%s/releases/tags/%s", repo, r.ExecContext.ReleaseVersion), &single); err == nil && single.TagName != "" {
 				return &single
 			}
 			return nil
 		}
-		if r.CLI.Prerelease {
+		if r.ExecContext.Prerelease {
 			if latestPrerelease != nil {
 				return latestPrerelease
 			}
@@ -157,14 +157,14 @@ func showInfoWithClient(r *RootCLI, client ghRestClient) error {
 		return assets, nil
 	}
 
-	if r.CLI.ShowVersions {
+	if r.ExecContext.ShowVersions {
 		for i := range releases {
 			printRelease(&releases[i])
 		}
 		return nil
 	}
 
-	if r.CLI.ShowAssets {
+	if r.ExecContext.ShowAssets {
 		target := pickTargetRelease()
 		if target == nil {
 			return fmt.Errorf("no release found for %s", repo)
@@ -179,7 +179,7 @@ func showInfoWithClient(r *RootCLI, client ghRestClient) error {
 		return nil
 	}
 
-	if r.CLI.Show {
+	if r.ExecContext.Show {
 		limit := len(releases)
 		if limit > 10 {
 			limit = 10

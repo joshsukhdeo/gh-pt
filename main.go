@@ -8,6 +8,7 @@ import (
 	"github.com/alecthomas/kong"
 	"github.com/joshsukhdeo/gh-pt/cmd"
 	"github.com/joshsukhdeo/gh-pt/config"
+	"github.com/joshsukhdeo/gh-pt/params"
 )
 
 func main() {
@@ -16,8 +17,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	var cli cmd.RootCLI
-
+	var cli params.CLI
 	cfg, _ := config.LoadConfig()
 
 	vars := kong.Vars{
@@ -41,24 +41,16 @@ func main() {
 		if cfg.Paths.ForkPath != "" {
 			vars["fork_path"] = cfg.Paths.ForkPath
 		}
-		if cfg.Paths.ClonePath != "" {
-			vars["clone_path"] = cfg.Paths.ClonePath
-		}
-		if cfg.Paths.ForkPath != "" {
-			vars["fork_path"] = cfg.Paths.ForkPath
-		}
 	}
 
 	ctx := kong.Parse(&cli,
 		kong.Name("gh-pt"),
-		kong.Description(`Install binaries for a Github repository release interactively or non-interactively.  
-			Intended for quickly installing release binaries for projects that do not distribute 
-			using Homebrew or other package managers.`),
+		kong.Description(`Install binaries for a Github repository release interactively or non-interactively.`),
 		kong.DefaultEnvars(cmd.GetEnvPrefix()),
 		kong.PostBuild(cmd.PostBuild),
 		vars)
 
-	err := ctx.Run()
+	err := cmd.RunCommand(ctx.Command(), &cli)
 	if err != nil {
 		os.Exit(1)
 	}

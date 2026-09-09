@@ -19,9 +19,9 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 	}
 
 	for _, app := range st.Apps {
-		specificallyTargeted := (r.CLI.Repository != "" && strings.EqualFold(r.CLI.Repository, app.Repository))
+		specificallyTargeted := (r.ExecContext.Repository != "" && strings.EqualFold(r.ExecContext.Repository, app.Repository))
 
-		if r.CLI.Repository != "" && !specificallyTargeted {
+		if r.ExecContext.Repository != "" && !specificallyTargeted {
 			continue // specifically targeted another app
 		}
 
@@ -34,11 +34,11 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 			continue
 		}
 
-		if r.CLI.Update && !r.CLI.UpdateAll {
-			if r.CLI.Global && !app.Global {
+		if r.ExecContext.Update && !r.ExecContext.UpdateAll {
+			if r.ExecContext.Global && !app.Global {
 				continue // wants global only, this is user
 			}
-			if !r.CLI.Global && app.Global {
+			if !r.ExecContext.Global && app.Global {
 				continue // wants user only, this is global
 			}
 		}
@@ -46,7 +46,7 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 		log.Info().Msgf("Updating %s...", app.Repository)
 
 		if app.CompileScript != "" {
-			if r.CLI.DryRun {
+			if r.ExecContext.DryRun {
 				log.Info().Msgf("[dry-run] Would execute compile script %s for %s", app.CompileScript, app.Repository)
 				continue
 			}
@@ -71,7 +71,7 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 		}
 
 		if app.Clone || app.Fork {
-			if r.CLI.DryRun {
+			if r.ExecContext.DryRun {
 				log.Info().Msgf("[dry-run] Would sync repo %s at %s", app.Repository, app.TargetPath)
 				continue
 			}
@@ -97,7 +97,7 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 		}
 
 		// Create fresh params for this app based on stored state
-		appParams := r.CLI
+		appParams := r.ExecContext
 		appParams.Repository = app.Repository
 		appParams.TargetPath = app.TargetPath
 		appParams.Global = app.Global
@@ -117,7 +117,7 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 		if app.IsPrerelease {
 			appParams.Prerelease = true
 		}
-		if r.CLI.Stable {
+		if r.ExecContext.Stable {
 			appParams.Prerelease = false
 			appParams.Stable = true
 		}

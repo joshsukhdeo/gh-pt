@@ -282,7 +282,7 @@ func TestShowInfo_Errors(t *testing.T) {
 
 	// Releases fetch failure
 	mockErr := &mockGhClient{err: fmt.Errorf("api network error")}
-	r.CLI.Repository = "test/repo"
+	r.ExecContext.Repository = "test/repo"
 	err = showInfoWithClient(r, mockErr)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to fetch releases")
@@ -293,7 +293,7 @@ func TestShowInfo_Errors(t *testing.T) {
 			{ID: 1, TagName: "v1.0.0"},
 		},
 	}
-	r.CLI.ReleaseVersion = "v9.9.9"
+	r.ExecContext.ReleaseVersion = "v9.9.9"
 	err = showInfoWithClient(r, mock)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "no release found")

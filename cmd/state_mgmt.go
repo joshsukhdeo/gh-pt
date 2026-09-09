@@ -87,10 +87,10 @@ func ListState(rList ...*RootCLI) error {
 			continue
 		}
 
-		if r.CLI.Prerelease && !app.IsPrerelease {
+		if r.ExecContext.Prerelease && !app.IsPrerelease {
 			continue
 		}
-		if r.CLI.Stable && app.IsPrerelease {
+		if r.ExecContext.Stable && app.IsPrerelease {
 			continue
 		}
 

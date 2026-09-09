@@ -32,7 +32,7 @@ var (
 )
 
 type GithubRelease struct {
-	CliParams             *params.CLI
+	CliParams             *params.ExecContext
 	Client                selector.GithubClient
 	ResolvedVersion       string
 	InstalledPackageNames []string
@@ -58,7 +58,7 @@ func (p PtermPrompter) Input(prompt string, defaultValue string) string {
 	return result
 }
 
-func MakeGithubRelease(cliParams *params.CLI, cli selector.GithubClient) *GithubRelease {
+func MakeGithubRelease(cliParams *params.ExecContext, cli selector.GithubClient) *GithubRelease {
 
 	return &GithubRelease{
 		CliParams: cliParams,
