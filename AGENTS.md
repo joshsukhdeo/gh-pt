@@ -5,7 +5,7 @@
 
 ## Agent Initialization - New Chat
 
-- Load the following skills: tdd, using-superpowers, golang-pro, ast-grep, golang-lint, golang-cli, gopls, verification-before-completion, concise-output, ponytail, wayfinders
+- Load the following skills: tdd, using-superpowers, ast-grep, golang-how-to, verification-before-completion, concise-output, ponytail, wayfinders
 
 - Activate gh-pt with serena mcp
 

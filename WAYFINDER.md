@@ -15,11 +15,11 @@ Rename the project and CLI from `gh-pt` to `gh-pt` (supporting `gh pt`, `ghpt`),
 
 ## Open Tickets
 
-- [Ticket 1: Codebase and Namespace Renaming](#ticket-1) (Frontier)
-- [Ticket 2: CLI Command Router Refactor](#ticket-2) (Blocked by 1)
-- [Ticket 3: State File Splitting and Migration Architecture](#ticket-3) (Blocked by 1)
-- [Ticket 4: TUI Interactive Editors for Config and State](#ticket-4) (Blocked by 2, 3)
-- [Ticket 5: VirusTotal and AI Scan Engine](#ticket-5) (Blocked by 2)
+- [Ticket 1: Codebase and Namespace Renaming](#ticket-1) : Done
+- [Ticket 2: CLI Command Router Refactor](#ticket-2) (Frontier)
+- [Ticket 3: State File Splitting and Migration Architecture](#ticket-3) (Frontier)
+- [Ticket 4: TUI Interactive Editors for Config and State](#ticket-4) (Offloaded to Jules)
+- [Ticket 5: VirusTotal and AI Scan Engine](#ticket-5) (Offloaded to Jules)
 
 ## Not yet specified
 
