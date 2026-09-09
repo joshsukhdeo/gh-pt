@@ -460,14 +460,14 @@ func (r *GithubRelease) installWindows(binaryPath string) error {
 	var args []string
 	if strings.HasSuffix(strings.ToLower(binaryPath), ".msi") {
 		args = []string{"/i", binaryPath, "/qn"}
-		if runtime.GOOS != "windows" && r.CliParams.AllowWine {
+		if runtime.GOOS != "windows" && (r.CliParams.Wine == "allow" || r.CliParams.Wine == "priority" || r.CliParams.Wine == "force") {
 			args = append([]string{"msiexec"}, args...)
 		} else {
 			args = append([]string{"msiexec"}, args...)
 		}
 	} else {
 		args = []string{"/S"}
-		if runtime.GOOS != "windows" && r.CliParams.AllowWine {
+		if runtime.GOOS != "windows" && (r.CliParams.Wine == "allow" || r.CliParams.Wine == "priority" || r.CliParams.Wine == "force") {
 			args = append([]string{binaryPath}, args...)
 			args = append([]string{"wine"}, args...)
 		} else {
@@ -557,8 +557,13 @@ func (r *GithubRelease) Install() error {
 	}
 	r.ResolvedVersion = releases[0].Name
 
-	assetSelector, err := selector.AssetSelector(r.Client, r.CliParams.Repository, releases[0].Id,
-		r.CliParams.ReleaseAsset, r.CliParams.ReleaseAssetRegexps, r.CliParams.Interactive, r.CliParams.AllowForeignArch)
+	assetSelector, err := selector.AssetSelector(r.Client, r.CliParams.Repository, selector.AssetMatchCriteria{
+		ReleaseId:        releases[0].Id,
+		Name:             r.CliParams.ReleaseAsset,
+		Regexps:          r.CliParams.ReleaseAssetRegexps,
+		Interactive:      r.CliParams.Interactive,
+		AllowForeignArch: r.CliParams.AllowForeignArch,
+	})
 	if err != nil {
 		log.Error().
 			Str("repository", r.CliParams.Repository).
@@ -727,8 +732,13 @@ func (r *GithubRelease) Install() error {
 			}
 		}
 
-		binarySelector, execErr := selector.BinarySelector(filepath.Join(downloadDir,
-			asset.Name), r.CliParams.AssetBinaries, r.CliParams.AssetBinariesRegexp, r.CliParams.Interactive, r.CliParams.NativeExtract)
+		binarySelector, execErr := selector.BinarySelector(selector.BinaryMatchCriteria{
+			DownloadPath:  filepath.Join(downloadDir, asset.Name),
+			Names:         r.CliParams.AssetBinaries,
+			Matcher:       r.CliParams.AssetBinariesRegexp,
+			Interactive:   r.CliParams.Interactive,
+			NativeExtract: r.CliParams.NativeExtract,
+		})
 		if execErr != nil {
 			log.Error().
 				Str("repository", r.CliParams.Repository).
@@ -941,7 +951,7 @@ func (r *GithubRelease) Install() error {
 				AssetBinaries:       r.CliParams.AssetBinaries,
 				AssetBinariesRegexp: r.CliParams.AssetBinariesRegexp,
 				PackageNames:        r.InstalledPackageNames,
-				Pinned:              r.CliParams.Pin,
+				Pinned:              r.CliParams.PinInstall,
 				NativeExtract:       r.CliParams.NativeExtract,
 			})
 		} else {

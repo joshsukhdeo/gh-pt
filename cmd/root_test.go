@@ -17,7 +17,7 @@ func TestBuildRegexFromTypes_PrioritizationAndMusl(t *testing.T) {
 	}
 
 	types := []string{"deb", "snap", "flatpak", "appimage", "7z", "tar.gz", "zip", "none"}
-	matchers := buildRegexFromTypes(types, false)
+	matchers := buildRegexFromTypes(types, "off")
 
 	// Sample assets from PowerShell/PowerShell
 	assets := []string{

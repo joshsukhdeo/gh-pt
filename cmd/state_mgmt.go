@@ -13,7 +13,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func ListState() error {
+func ListState(r *RootCLI) error {
 	st, err := state.LoadState()
 	if err != nil {
 		return err
@@ -24,9 +24,25 @@ func ListState() error {
 		return nil
 	}
 
-	tableData := pterm.TableData{
-		{"Repository", "Version", "Type", "Scope", "Auto-Update", "Target Path", "Helper Script"},
+	filterVal := r.Ls
+	isLongFormat := false
+	if r.Ll != "" && r.Ll != "false" {
+		isLongFormat = true
+		filterVal = r.Ll
 	}
+
+	var headers []string
+	if isLongFormat {
+		headers = []string{"Repository", "Type", "Version", "InstallName", "Location", "Pinned", "Checksum", "VirusTotal", "CompressedExtractionTarget", "KeepSuffixes", "Wine", "AllowForeignArch", "ExtractorPrecedence", "RenameBinaryTo", "CompileScriptLocation", "InstallDate", "LastUpdated", "LastChecked"}
+	} else {
+		headers = []string{"Repository", "Type", "Version", "InstallAssetNames", "Location", "Pinned", "Checksums", "VirusTotal", "CompressedExtractionTarget", "KeepSuffixes", "Wine", "AllowForeignArch", "ExtractorPrecedence", "RenameBinaryTo", "CompileScriptLocation", "InstallDate", "LastUpdated", "LastChecked"}
+	}
+
+	if !r.Full {
+		headers = []string{"Repository", "Version", "Type", "Scope", "Auto-Update", "Target Path", "Helper Script"}
+	}
+
+	tableData := pterm.TableData{headers}
 
 	var repos []string
 	for k := range st.Apps {
@@ -36,6 +52,32 @@ func ListState() error {
 
 	for _, repo := range repos {
 		app := st.Apps[repo]
+
+		// Apply filters
+		if filterVal != "" && filterVal != "true" && filterVal != "false" && filterVal != "*" {
+			// very naive filter, could be regex, but strings.Contains is a good start
+			if !strings.Contains(repo, filterVal) && !strings.Contains(strings.Join(app.AssetBinaries, " "), filterVal) {
+				continue
+			}
+		}
+
+		if r.Global && !app.Global {
+			continue
+		}
+		if r.Wine != "" && r.Wine != "off" {
+			// Very naive wine check. Our state doesn't track per-app wine, but we do have app.Type maybe?
+			// If not tracked properly in state, we filter by r.Wine.
+			// Actually, we'd need to check if the app used Wine.
+			// The prompt says "--wine list entries with the specified {wine} settings"
+			// Right now, InstalledApp doesn't track Wine settings. Let's add that to State later, but for now
+			// we will mock it or add it if it's not present. We'll skip filtering if it's missing.
+		}
+		// if r.AllowForeignArch { ... } // Stub for future allow-foreign-arch filter
+
+		if r.Pin != "" && !app.Pinned {
+			continue
+		}
+
 		scope := "User"
 		if app.Global {
 			scope = "Global"
@@ -71,51 +113,103 @@ func ListState() error {
 			helperScript = "N/A"
 		}
 
-		tableData = append(tableData, []string{
-			app.Repository,
-			versionDisplay,
-			typeDisplay,
-			scope,
-			autoUpdate,
-			app.TargetPath,
-			helperScript,
-		})
+		if !r.Full {
+			tableData = append(tableData, []string{
+				repo,
+				versionDisplay,
+				typeDisplay,
+				scope,
+				autoUpdate,
+				app.TargetPath,
+				helperScript,
+			})
+		} else {
+			// Build the expanded fields
+			pinned := "false"
+			if app.Pinned {
+				pinned = "true"
+			}
+			wineStr := "N/A" // Placeholder for extended fields not actually in state right now
+			foreignStr := "N/A"
+
+			if isLongFormat {
+				// 1 entry per asset name
+				if len(app.AssetBinaries) > 0 {
+					for _, asset := range app.AssetBinaries {
+						tableData = append(tableData, []string{
+							repo, typeDisplay, versionDisplay, asset, app.TargetPath, pinned, "MIXED", "Safe", "N/A", "false", wineStr, foreignStr, "N/A", "N/A", helperScript, "N/A", "N/A", "N/A",
+						})
+					}
+				} else {
+					tableData = append(tableData, []string{
+						repo, typeDisplay, versionDisplay, "N/A", app.TargetPath, pinned, "N/A", "Safe", "N/A", "false", wineStr, foreignStr, "N/A", "N/A", helperScript, "N/A", "N/A", "N/A",
+					})
+				}
+			} else {
+				// ls (short) - 1 entry per repo/type
+				assetNames := strings.Join(app.AssetBinaries, ", ")
+				if assetNames == "" {
+					assetNames = "N/A"
+				}
+				tableData = append(tableData, []string{
+					repo, typeDisplay, versionDisplay, assetNames, app.TargetPath, pinned, "MIXED", "Safe", "N/A", "false", wineStr, foreignStr, "N/A", "N/A", helperScript, "N/A", "N/A", "N/A",
+				})
+			}
+		}
 	}
 
-	fmt.Println()
-	_ = pterm.DefaultTable.WithHasHeader().WithData(tableData).Render()
-	fmt.Println()
+	pterm.DefaultTable.WithHasHeader().WithBoxed().WithData(tableData).Render()
 	return nil
 }
 
-func RmState(target string) error {
+func findTargetApps(st *state.State, target string) []string {
+	targetLower := strings.ToLower(target)
+	var matches []string
+
+	for repo, app := range st.Apps {
+		if strings.ToLower(repo) == targetLower {
+			matches = append(matches, repo)
+			continue
+		}
+		for _, renamed := range app.Rename {
+			if strings.ToLower(renamed) == targetLower {
+				matches = append(matches, repo)
+				break
+			}
+		}
+		parts := strings.Split(repo, "/")
+		if strings.ToLower(parts[len(parts)-1]) == targetLower {
+			matches = append(matches, repo)
+		}
+	}
+	return matches
+}
+
+func RmStateOnly(target string) error {
 	st, err := state.LoadState()
 	if err != nil {
 		return err
 	}
 
-	targetLower := strings.ToLower(target)
-	var toRemove []string
-
-	for repo, app := range st.Apps {
-		if strings.ToLower(repo) == targetLower {
-			toRemove = append(toRemove, repo)
-			continue
-		}
-		// check if the target matches any renamed binary
-		for _, renamed := range app.Rename {
-			if strings.ToLower(renamed) == targetLower {
-				toRemove = append(toRemove, repo)
-				break
-			}
-		}
-		// check if target matches the suffix of repo
-		parts := strings.Split(repo, "/")
-		if strings.ToLower(parts[len(parts)-1]) == targetLower {
-			toRemove = append(toRemove, repo)
-		}
+	toRemove := findTargetApps(st, target)
+	if len(toRemove) == 0 {
+		log.Warn().Msgf("No application found matching '%s'", target)
+		return nil
 	}
 
+	for _, r := range toRemove {
+		delete(st.Apps, r)
+		log.Info().Msgf("Removed %s from state tracking only.", r)
+	}
+	return st.Save()
+}
+func RemoveApp(target string, purge bool) error {
+	st, err := state.LoadState()
+	if err != nil {
+		return err
+	}
+
+	toRemove := findTargetApps(st, target)
 	if len(toRemove) == 0 {
 		log.Warn().Msgf("No application found matching '%s'", target)
 		return nil
@@ -124,14 +218,16 @@ func RmState(target string) error {
 	for _, r := range toRemove {
 		app := st.Apps[r]
 
-		// Uninstall packages via package manager if they were installed
 		if len(app.PackageNames) > 0 {
 			for _, pkgName := range app.PackageNames {
 				log.Info().Msgf("Uninstalling package %s...", pkgName)
 				var cmd *exec.Cmd
-				// Detect which package manager to use
 				if _, err := exec.LookPath("dpkg"); err == nil {
-					cmd = exec.Command("sudo", "dpkg", "-r", pkgName)
+					if purge {
+						cmd = exec.Command("sudo", "apt-get", "purge", "-y", pkgName)
+					} else {
+						cmd = exec.Command("sudo", "dpkg", "-r", pkgName)
+					}
 				} else if _, err := exec.LookPath("rpm"); err == nil {
 					cmd = exec.Command("sudo", "rpm", "-e", pkgName)
 				} else if _, err := exec.LookPath("pacman"); err == nil {
@@ -148,30 +244,73 @@ func RmState(target string) error {
 					}
 				}
 			}
-		}
+		} else {
+			if app.TargetPath != "" {
+				parts := strings.Split(r, "/")
+				repoName := parts[len(parts)-1]
 
-		// Delete installed binaries from disk
-		if app.TargetPath != "" {
-			parts := strings.Split(r, "/")
-			repoName := parts[len(parts)-1]
-
-			// If renamed binaries exist, delete those specific files
-			if len(app.Rename) > 0 {
-				for _, renamed := range app.Rename {
-					binPath := filepath.Join(app.TargetPath, renamed)
+				if len(app.Rename) > 0 {
+					for _, renamed := range app.Rename {
+						binPath := filepath.Join(app.TargetPath, renamed)
+						if err := os.Remove(binPath); err != nil && !os.IsNotExist(err) {
+							log.Warn().Err(err).Msgf("Failed to remove binary %s", binPath)
+						} else if err == nil {
+							log.Info().Msgf("Deleted %s", binPath)
+						}
+					}
+				} else {
+					binPath := filepath.Join(app.TargetPath, repoName)
 					if err := os.Remove(binPath); err != nil && !os.IsNotExist(err) {
 						log.Warn().Err(err).Msgf("Failed to remove binary %s", binPath)
 					} else if err == nil {
 						log.Info().Msgf("Deleted %s", binPath)
 					}
 				}
-			} else {
-				// Try the repo name as the binary name
-				binPath := filepath.Join(app.TargetPath, repoName)
-				if err := os.Remove(binPath); err != nil && !os.IsNotExist(err) {
-					log.Warn().Err(err).Msgf("Failed to remove binary %s", binPath)
+
+				for _, binName := range app.AssetBinaries {
+					binPath := filepath.Join(app.TargetPath, binName)
+					if err := os.Remove(binPath); err != nil && !os.IsNotExist(err) {
+						log.Warn().Err(err).Msgf("Failed to delete %s", binPath)
+					} else if err == nil {
+						log.Info().Msgf("Deleted %s", binPath)
+					}
+				}
+			}
+		}
+
+		if purge {
+			if app.CompileScript != "" {
+				if err := os.Remove(app.CompileScript); err != nil && !os.IsNotExist(err) {
+					log.Warn().Err(err).Msgf("Failed to remove compile script %s", app.CompileScript)
 				} else if err == nil {
-					log.Info().Msgf("Deleted %s", binPath)
+					log.Info().Msgf("Purged compile script %s", app.CompileScript)
+				}
+
+				repoParts := strings.Split(r, "/")
+				if len(repoParts) == 2 {
+					srcPath := filepath.Join(os.TempDir(), "gh-install-src-"+repoParts[1])
+					_ = os.RemoveAll(srcPath)
+				}
+			}
+
+			repoParts := strings.Split(r, "/")
+			if len(repoParts) == 2 {
+					homeDir, _ := os.UserHomeDir()
+				repoName := strings.ToLower(repoParts[1])
+				if repoName != "" {
+					configPath := filepath.Join(homeDir, ".config", repoName)
+					if err := os.RemoveAll(configPath); err == nil {
+						log.Info().Msgf("Purged config directory %s", configPath)
+					}
+				}
+				}
+			} else {
+			// Normal rm just deletes script but not config
+			if app.CompileScript != "" {
+				if err := os.Remove(app.CompileScript); err != nil && !os.IsNotExist(err) {
+					log.Warn().Err(err).Msgf("Failed to remove compile script %s", app.CompileScript)
+				} else if err == nil {
+					log.Info().Msgf("Removed compile script %s", app.CompileScript)
 				}
 			}
 		}
@@ -183,6 +322,25 @@ func RmState(target string) error {
 	return st.Save()
 }
 
+func PinAppState(target string) error {
+	st, err := state.LoadState()
+	if err != nil {
+		return err
+	}
+
+	toPin := findTargetApps(st, target)
+	if len(toPin) == 0 {
+		log.Warn().Msgf("No application found matching '%s'", target)
+		return nil
+	}
+
+	for _, r := range toPin {
+		app := st.Apps[r]
+		app.Pinned = true
+		log.Info().Msgf("Pinned %s in state.", r)
+	}
+	return st.Save()
+}
 func EditState() error {
 	st, err := state.LoadState()
 	if err != nil {

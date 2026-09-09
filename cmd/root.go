@@ -31,7 +31,13 @@ const (
 type RootCLI params.CLI
 
 func (r *RootCLI) Validate() error {
-	if !r.Update && !r.UpdateAll && !r.ListSavedState && !r.EditSavedState && r.RmSavedState == "" {
+
+	if runtime.GOOS == "windows" && r.Wine != "off" && r.Wine != "" {
+		pterm.Warning.Println("Wine is not supported on Windows. Continuing with wine disabled.")
+		r.Wine = "off"
+	}
+
+	if !r.Update && !r.UpdateAll && r.Ls == "" && r.Ll == "" && !r.EditSavedState && r.RmSavedState == "" && r.Rm == "" && r.Purge == "" && r.Pin == "" {
 		match, _ := regexp.MatchString(`.+/.+`, r.Repository)
 		if !match {
 			return fmt.Errorf("repository must be in 'user/repository' format (provided: '%s')", r.Repository)
@@ -133,10 +139,10 @@ func (r *RootCLI) Run() error {
 		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout})
 	}
 
-	cfg, _ := config.LoadConfig()
+	cfg := loadConfig()
 	if cfg != nil {
 		if r.VTApiKey == "" {
-			r.VTApiKey = cfg.VTApiKey
+			r.VTApiKey = cfg.Core.VTApiKey
 		}
 	}
 
@@ -164,24 +170,31 @@ func (r *RootCLI) Run() error {
 		case "FALSE":
 			r.NoDeps = true
 		default:
-			cfg, _ := config.LoadConfig()
 			if cfg != nil {
-				r.AddDeps = cfg.AddDeps
-				r.NoDeps = cfg.NoDeps
+				r.AddDeps = cfg.Core.AddDeps
+				r.NoDeps = cfg.Core.NoDeps
 				if !r.DisablePrompts {
-					r.DisablePrompts = cfg.DisablePrompts
+					r.DisablePrompts = cfg.Core.DisablePrompts
 				}
 				if !r.NoSaveState {
-					r.NoSaveState = cfg.NoSaveState
+					r.NoSaveState = cfg.Core.NoSaveState
 				}
-				if !r.AllowWine {
-					r.AllowWine = cfg.AllowWine
+				if r.Wine == "off" && cfg.Core.Wine != "" && cfg.Core.Wine != "off" {
 				}
 				if !r.NativeExtract {
-					r.NativeExtract = cfg.NativeExtract
+					r.NativeExtract = cfg.Core.NativeExtract
 				}
 				if !r.KeepSuffixes {
-					r.KeepSuffixes = cfg.KeepSuffixes
+					r.KeepSuffixes = cfg.Core.KeepSuffixes
+				}
+				if r.Wine == "off" && cfg.Core.Wine != "" && cfg.Core.Wine != "off" {
+					r.Wine = cfg.Core.Wine
+				}
+				if !r.NativeExtract {
+					r.NativeExtract = cfg.Core.NativeExtract
+				}
+				if !r.KeepSuffixes {
+					r.KeepSuffixes = cfg.Core.KeepSuffixes
 				}
 			}
 		}
@@ -207,18 +220,33 @@ func (r *RootCLI) Run() error {
 		return err
 	}
 
-	if r.ListSavedState {
-		return ListState()
+	if r.Ls != "" || r.Ll != "" {
+		return ListState(r)
 	}
 	if r.EditSavedState {
 		return EditState()
 	}
 	if r.RmSavedState != "" {
-		return RmState(r.RmSavedState)
+		return RmStateOnly(r.RmSavedState)
+	}
+	if r.Rm != "" {
+		return RemoveApp(r.Rm, false)
+	}
+	if r.Purge != "" {
+		return RemoveApp(r.Purge, true)
+	}
+	if r.Pin != "" {
+		return PinAppState(r.Pin)
 	}
 
 	if r.Update || r.UpdateAll {
 		return DoUpdate(r, ghClient)
+	}
+
+
+	if r.Overwrite {
+		// If overwrite/force is used, attempt to purge any existing installation first
+		_ = RemoveApp(r.Repository, true)
 	}
 
 	if r.Repository == "" {
@@ -226,19 +254,22 @@ func (r *RootCLI) Run() error {
 	}
 
 	if r.AI && r.AISafetyScan {
-		cfg, _ := config.LoadConfig()
 		if err := r.handleAISafetyScan(cfg); err != nil {
 			return err
 		}
 	}
 
 	if r.Clone || r.Fork {
-		cfg, _ := config.LoadConfig()
+		if cfg == nil {
+			cfg, _ = config.LoadConfig()
+		}
 		return r.handleRepoCloneOrFork(cfg)
 	}
 
 	if r.CompileFromSource {
-		cfg, _ := config.LoadConfig()
+		if cfg == nil {
+			cfg, _ = config.LoadConfig()
+		}
 		return r.handleCompileFromSource(cfg)
 	}
 
@@ -247,7 +278,7 @@ func (r *RootCLI) Run() error {
 	}
 
 	if r.ReleaseAssetRegexp == "" {
-		r.ReleaseAssetRegexps = buildRegexFromTypes(r.Type, r.AllowWine)
+		r.ReleaseAssetRegexps = buildRegexFromTypes(r.Type, r.Wine)
 		r.ReleaseAssetRegexp = strings.Join(r.ReleaseAssetRegexps, " | ")
 	} else {
 		r.ReleaseAssetRegexps = []string{r.ReleaseAssetRegexp}
@@ -327,8 +358,8 @@ func (r *RootCLI) handleRepoCloneOrFork(cfg *config.Config) error {
 	var cloneBase string
 	var forkBase string
 	if cfg != nil {
-		cloneBase = cfg.ClonePath
-		forkBase = cfg.ForkPath
+		cloneBase = cfg.Paths.ClonePath
+		forkBase = cfg.Paths.ForkPath
 	}
 
 	targetDir := resolveRepoPath(r.Repository, r.Clone, r.Fork, cloneBase, forkBase)
@@ -378,7 +409,7 @@ func (r *RootCLI) handleRepoCloneOrFork(cfg *config.Config) error {
 				Global:     r.Global,
 				Clone:      r.Clone,
 				Fork:       r.Fork,
-				Pinned:     r.Pin,
+				Pinned:     r.PinInstall,
 			})
 			if err != nil {
 				log.Warn().Err(err).Msg("could not save repository state")
@@ -443,8 +474,8 @@ func runAIAgent(aiCmdTemplate, prompt, dir string) error {
 
 func (r *RootCLI) handleAISafetyScan(cfg *config.Config) error {
 	aiCmdTemplate := r.AICmd
-	if cfg != nil && cfg.AICmd != "" && (r.AICmd == "" || r.AICmd == "agy -p \"%s\"") {
-		aiCmdTemplate = cfg.AICmd
+	if cfg != nil && cfg.AI.AICmd != "" && (r.AICmd == "" || r.AICmd == "agy -p \"%s\"") {
+		aiCmdTemplate = cfg.AI.AICmd
 	}
 	if aiCmdTemplate == "" {
 		aiCmdTemplate = "agy -p \"%s\""
@@ -511,6 +542,47 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 	}
 	log.Info().Str("output", stdOut.String()).Msg("cloned repository to builds directory")
 
+	// 0. Initial check: try existing compile script if it exists
+	if _, err := os.Stat(scriptPath); err == nil {
+		log.Info().Str("script", scriptPath).Msg("found existing compile script, attempting to run it first")
+
+		var preExecCmd *exec.Cmd
+		if runtime.GOOS == "windows" {
+			preExecCmd = exec.Command("powershell", "-ExecutionPolicy", "Bypass", "-File", scriptPath)
+		} else {
+			preExecCmd = exec.Command("sh", scriptPath)
+		}
+		preExecCmd.Dir = repoDir
+
+		outputBytes, runErr := preExecCmd.CombinedOutput()
+		if len(outputBytes) > 0 {
+			_, _ = os.Stdout.Write(outputBytes)
+		}
+
+		if runErr == nil {
+			log.Info().Msgf("Existing compile script succeeded for %s", r.Repository)
+			if !r.NoSaveState {
+				st, err := state.LoadState()
+				if err == nil {
+					err = st.AddApp(&state.InstalledApp{
+						Repository:    r.Repository,
+						TargetPath:    targetPath,
+						Global:        r.Global,
+						CompileScript: scriptPath,
+						Pinned:        r.PinInstall,
+					})
+					if err != nil {
+						log.Warn().Err(err).Msg("could not save repository state")
+					} else {
+						log.Info().Msgf("Saved %s with compileScript to state tracking.", r.Repository)
+					}
+				}
+			}
+			return nil
+		}
+		log.Warn().Err(runErr).Msg("existing compile script failed, will regenerate with AI")
+	}
+
 	// 2. Ensure scripts directory exists
 	if err := os.MkdirAll(filepath.Dir(scriptPath), 0755); err != nil {
 		return fmt.Errorf("failed to create scripts directory: %w", err)
@@ -518,8 +590,8 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 
 	// 3. Resolve AI command template
 	aiCmdTemplate := r.AICmd
-	if cfg != nil && cfg.AICmd != "" && (r.AICmd == "" || r.AICmd == `agy -p "%s"`) {
-		aiCmdTemplate = cfg.AICmd
+	if cfg != nil && cfg.AI.AICmd != "" && (r.AICmd == "" || r.AICmd == `agy -p "%s"`) {
+		aiCmdTemplate = cfg.AI.AICmd
 	}
 	if aiCmdTemplate == "" {
 		aiCmdTemplate = `agy -p "%s"`
@@ -590,7 +662,7 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 				TargetPath:    targetPath,
 				Global:        r.Global,
 				CompileScript: scriptPath,
-				Pinned:        r.Pin,
+				Pinned:        r.PinInstall,
 			})
 			if err != nil {
 				log.Warn().Err(err).Msg("could not save repository state")
@@ -671,7 +743,7 @@ func GetDefaultInstallTypes() string {
 		return fmt.Sprintf("7z,%s,zip,none", tarballRgx)
 	}
 }
-func buildRegexFromTypes(types []string, allowWine bool) []string {
+func buildRegexFromTypes(types []string, wine string) []string {
 	archRegex := runtime.GOARCH
 	switch runtime.GOARCH {
 	case "amd64":
@@ -777,12 +849,28 @@ func buildRegexFromTypes(types []string, allowWine bool) []string {
 		}
 	}
 
-	if allowWine && runtime.GOOS != "windows" {
+	var normalMatchers []string
+	// Copy current matchers to normalMatchers
+	normalMatchers = append(normalMatchers, matchers...)
+	matchers = []string{} // Reset matchers
+
+	var winMatchers []string
+	if (wine == "allow" || wine == "priority" || wine == "force") && runtime.GOOS != "windows" {
 		winOsRegex := "(?:windows|win)"
 		winBaseRegex := fmt.Sprintf(`.*(?:%s.+%s|%s.+%s).*`, archRegex, winOsRegex, winOsRegex, archRegex)
 		for _, t := range append([]string{"exe", "msi"}, types...) {
-			matchers = append(matchers, buildFinal(winBaseRegex, t))
+			winMatchers = append(winMatchers, buildFinal(winBaseRegex, t))
 		}
+	}
+
+	if wine == "force" && runtime.GOOS != "windows" {
+		matchers = append(matchers, winMatchers...)
+	} else if wine == "priority" && runtime.GOOS != "windows" {
+		matchers = append(matchers, winMatchers...)
+		matchers = append(matchers, normalMatchers...)
+	} else {
+		matchers = append(matchers, normalMatchers...)
+		matchers = append(matchers, winMatchers...)
 	}
 
 	return matchers
@@ -795,4 +883,9 @@ func GetEnvPrefix() string {
 	}
 
 	return strings.ToUpper(envPrefix)
+}
+
+func loadConfig() *config.Config {
+	cfg, _ := config.LoadConfig()
+	return cfg
 }
