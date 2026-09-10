@@ -19,12 +19,20 @@ func RunCommand(cmdStr string, cli *params.CLI) error {
 		r.CommonInstallFlags = cli.Install.CommonInstallFlags
 		r.Repository = cli.Install.Repository
 		return r.RunInstall()
-	case "state ls":
-		return ListState(&RootCLI{ExecContext: params.ExecContext{Ls: cli.State.Ls.Filter, CommonInstallFlags: params.CommonInstallFlags{Global: cli.State.Ls.Global}}})
-	case "state ll":
-		return ListState(&RootCLI{ExecContext: params.ExecContext{Ll: cli.State.Ll.Filter, Full: true, CommonInstallFlags: params.CommonInstallFlags{Global: cli.State.Ll.Global}}})
-	case "state rm":
-		return RemoveApp(cli.State.Rm.Target, cli.State.Rm.Purge)
+	case "ls":
+		return ListState(&RootCLI{ExecContext: params.ExecContext{Ls: cli.Ls.Filter, CommonInstallFlags: params.CommonInstallFlags{Global: cli.Ls.Global}}})
+	case "ll":
+		return ListState(&RootCLI{ExecContext: params.ExecContext{Ll: cli.Ll.Filter, Full: true, CommonInstallFlags: params.CommonInstallFlags{Global: cli.Ll.Global}}})
+	case "rm":
+		return RemoveApp(cli.Rm.Target, cli.Rm.Purge)
+	case "upgrade":
+		if !cli.Upgrade.User && !cli.Upgrade.Global {
+			r.UpdateAll = true
+		} else {
+			r.Update = true
+			r.Global = cli.Upgrade.Global
+		}
+		return r.RunInstall()
 	case "state edit":
 		return EditState()
 	case "show":

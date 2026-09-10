@@ -5,6 +5,10 @@ import "github.com/alecthomas/kong"
 type CLI struct {
 	// Subcommands
 	Install InstallCmd `cmd:"" default:"withargs" help:"Install a GitHub release or clone a repository (default)."`
+	Ls      StateLsCmd `cmd:"" help:"List saved state (short format)."`
+	Ll      StateLlCmd `cmd:"" help:"List saved state (long format)."`
+	Rm      StateRmCmd `cmd:"" help:"Uninstall an application and remove it from state."`
+	Upgrade UpgradeCmd `cmd:"" help:"Update installations."`
 	State   StateCmd   `cmd:"" help:"Manage saved state and installations."`
 	Config  ConfigCmd  `cmd:"" help:"Manage configuration."`
 	Repo    RepoCmd    `cmd:"" help:"Manage source repositories."`
@@ -63,10 +67,12 @@ type InstallCmd struct {
 }
 
 type StateCmd struct {
-	Ls   StateLsCmd   `cmd:"" help:"List saved state (short format)."`
-	Ll   StateLlCmd   `cmd:"" help:"List saved state (long format)."`
-	Rm   StateRmCmd   `cmd:"" help:"Uninstall an application and remove it from state."`
 	Edit StateEditCmd `cmd:"" help:"Edit saved state interactively."`
+}
+
+type UpgradeCmd struct {
+	User   bool `short:"u" name:"user" help:"Update only user installations."`
+	Global bool `short:"g" name:"global" help:"Update only global installations."`
 }
 
 type StateLsCmd struct {
