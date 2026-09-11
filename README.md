@@ -77,6 +77,14 @@ gh pt rm <target> [flags]
 ```
 * `--purge`: Completely uninstall and purge any cached files or compile scripts.
 
+### `search`
+Searches GitHub repositories directly from the CLI.
+
+```bash
+gh pt search <query> [flags]
+```
+* `-d, --description`: Broadens the search to include repository descriptions in addition to repository names.
+
 ### Repository Management: `repo clone` & `repo fork`
 Clones or forks a repository into a structured directory (configured via `clone_path` and `fork_path`). Tracked repositories are synced during `gh pt upgrade`.
 
