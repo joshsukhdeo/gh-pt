@@ -52,19 +52,38 @@ func predictInstalledApps(args complete.Args) []string {
 }
 
 func predictGithubRepos(args complete.Args) []string {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	if !strings.Contains(args.Last, "/") {
-		return []string{}
+		if len(args.Last) < 2 {
+			return []string{}
+		}
+		q := args.Last
+		cmd := exec.CommandContext(ctx, "gh", "api", "-X", "GET", "search/repositories", "-f", "q="+q, "-f", "per_page=15", "-q", ".items[].full_name")
+		out, err := cmd.Output()
+		if err != nil {
+			return []string{}
+		}
+
+		scanner := bufio.NewScanner(bytes.NewReader(out))
+		var repos []string
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line != "" {
+				repos = append(repos, line)
+			}
+		}
+		return repos
 	}
-	parts := strings.Split(args.Last, "/")
+
+	parts := strings.SplitN(args.Last, "/", 2)
 	owner := parts[0]
 	if owner == "" {
 		return []string{}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "gh", "api", fmt.Sprintf("users/%s/repos", owner), "-q", ".[].full_name")
+	cmd := exec.CommandContext(ctx, "gh", "api", fmt.Sprintf("users/%s/repos", owner), "-f", "per_page=100", "-q", ".[].full_name")
 	out, err := cmd.Output()
 	if err != nil {
 		return []string{}
