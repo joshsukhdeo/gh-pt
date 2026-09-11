@@ -14,7 +14,8 @@ func TestCLIFlags_CloneAndFork(t *testing.T) {
 		"install_types": "deb,rpm",
 		"install_path":  "/test/path",
 		"clone_path":    "~/src",
-		"fork_path":     "~/projects", "extractor": "default",
+		"fork_path":     "~/projects",
+		"extractor": "default",
 	})
 	require.NoError(t, err)
 
@@ -27,7 +28,8 @@ func TestCLIFlags_CloneAndFork(t *testing.T) {
 		"install_types": "deb,rpm",
 		"install_path":  "/test/path",
 		"clone_path":    "~/src",
-		"fork_path":     "~/projects", "extractor": "default",
+		"fork_path":     "~/projects",
+		"extractor": "default",
 	})
 	require.NoError(t, err)
 
@@ -40,7 +42,8 @@ func TestCLIFlags_CloneAndFork(t *testing.T) {
 		"install_types": "deb,rpm",
 		"install_path":  "/test/path",
 		"clone_path":    "~/src",
-		"fork_path":     "~/projects", "extractor": "default",
+		"fork_path":     "~/projects",
+		"extractor": "default",
 	})
 	require.NoError(t, err)
 
@@ -57,7 +60,8 @@ func TestCLIDefaults(t *testing.T) {
 		"install_types": "deb,rpm",
 		"install_path":  "/test/path",
 		"clone_path":    "~/src",
-		"fork_path":     "~/projects", "extractor": "default",
+		"fork_path":     "~/projects",
+		"extractor": "default",
 	})
 	require.NoError(t, err)
 
@@ -82,14 +86,14 @@ func TestCLIParse(t *testing.T) {
 		"install_types": "deb,rpm",
 		"install_path":  "/test/path",
 		"clone_path":    "~/src",
-		"fork_path":     "~/projects", "extractor": "default",
+		"fork_path":     "~/projects",
+		"extractor": "default",
 	})
 	require.NoError(t, err)
 
-	_, err = parser.Parse([]string{"joshsukhdeo/gh-pt", "-i", })
+	_, err = parser.Parse([]string{"joshsukhdeo/gh-pt", "-i", "--all"})
 	require.NoError(t, err)
 
 	assert.Equal(t, "joshsukhdeo/gh-pt", cli.Install.Repository)
 	assert.True(t, cli.Install.Interactive)
-
 }
