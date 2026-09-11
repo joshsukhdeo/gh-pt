@@ -69,6 +69,8 @@ func TestCLIDefaults(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.False(t, cli.Install.Interactive)
+
+
 	assert.Equal(t, "latest", cli.Install.ReleaseVersion)
 	assert.False(t, cli.Install.All)
 	assert.True(t, cli.Install.TargetPathCreate)
