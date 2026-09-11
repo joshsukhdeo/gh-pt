@@ -1,6 +1,16 @@
 # gh-pt
 
+[![Go Report Card](https://goreportcard.com/badge/github.com/joshsukhdeo/gh-pt)](https://goreportcard.com/report/github.com/joshsukhdeo/gh-pt)
+
+`gh-pt` is a powerful, cross-platform GitHub CLI extension designed to radically simplify the installation and management of release binaries across Linux, macOS, Windows, and FreeBSD.
+
+It acts as an intelligent package manager on top of GitHub Releases, automatically resolving the best asset for your architecture and OS, dynamically routing to native package managers (like `apt`, `dnf`, `pacman`), safely extracting archives, and keeping your installations updated in a centralized state.
+
+---
+
 ## Installation
+
+Ensure you have the [GitHub CLI (`gh`)](https://cli.github.com/) installed and authenticated, then install the extension:
 
 ```bash
 gh extension install joshsukhdeo/gh-pt
@@ -8,190 +18,150 @@ gh extension install joshsukhdeo/gh-pt
 
 ---
 
-## Features & Capabilities
+## Key Features
 
-- **Intelligent Asset Selection:** Automatically detects your Linux distribution via `/etc/os-release` and prioritizes distro-specific assets (e.g. `ubuntu` or `fedora` tagged releases) over generic `linux` ones.
-- **Native Package Manager Routing:** Detects which package managers are available on your system and routes installations accordingly:
-  - **Ubuntu/Debian** (`dpkg`): `.deb` → `apt-get install` or `dpkg -i`
-  - **Fedora/RHEL/CentOS** (`rpm`): `.rpm` → `dnf install` or `rpm -i`
-  - **Arch Linux** (`pacman`): `.pkg.tar.zst` / `.pkg.tar.xz` → `pacman -U`
-  - **FreeBSD** (`pkg`): `.pkg` / `.txz` → `pkg install` or `pkg add`
-  - **Archive Embedded Installers:** Automatically extracts and routes native installers (e.g. `.deb`, `.rpm`, `.msi`) embedded within generic archives.
-  - **MacOS & Windows Support:** Custom installation pipelines for `.dmg`, `.pkg`, `.msi`, and Windows `setup.exe` executables natively or via Wine.
-  - **Fallback:** AppImage, Flatpak, Snap, or raw binary extraction for distros without native package managers.
-- **State Management & Updates:** Tracks installed binaries in `state.json` so you can update them all later with a single command. All installation flags (`-T`, `--all`, `--asset-binaries-regexp`) are persisted so updates reproduce the exact same installation behavior.
-- **State Management:** Use `state ls` or `state ll` to list saved installations, `--full` for expanded metadata, `--edit-saved-state` to manage update participation, `state rm-saved-state` to remove tracking only, `state rm` to uninstall, and `--purge` to uninstall and remove cached compile scripts.
-- **Pinned Versions:** Use `--pin-install` during installation or `--pin REPOSITORY` afterward to skip an application during updates.
-- **Dependency Resolution:** Automatically resolves and installs dependencies for `.deb` (via `apt`), `.rpm` (via `dnf`), and `.pkg.tar.zst` (via `pacman`) with the `-y` flag.
-- **Cross-Platform:** Supports Linux, macOS, Windows, and FreeBSD.
-- **Wine Support:** Can pull and install Windows `.exe`/`.msi` binaries on Linux and FreeBSD with `--wine allow`, `--wine priority`, or `--wine force`.
-- **Architecture Safety:** Rejects release assets for foreign architectures by default; use `--allow-foreign-arch` when a cross-architecture asset is intentional.
-- **Checksum Verification:** Verifies downloaded assets against release checksum files when available.
-- **Safe Extraction and Removal:** Supports customizable extraction precedence (ouch, native, internal) via `--extractor`, protects uninstall paths from traversal, and offers `--dry-run` for previewing an installation.
-- **AI-Assisted Installation:** `--ai` enables repository analysis, `scan --ai` checks source before installation, and `source` generates and runs a build script for repositories without usable release binaries.
-- **VirusTotal Checks:** Optional VirusTotal binary scanning with `--vt-api-key`; `--skip-vt-sandbox` bypasses sandbox uploads for unknown hashes.
-- **Clean Naming:** Automatically strips messy hardware/OS tags (like `-x86_64-linux`) and redundant version strings from the final installed binary name.
-- **Sudo Safety:** Before running any `sudo` command, verifies that a sudo session is cached. In headless mode (`-D`), fails fast with a clear error instead of silently hanging waiting for a password prompt.
-- **Prerequisite Validation:** Checks that the GitHub CLI (`gh`) is installed and in PATH before doing anything, with a clear error and install link if missing.
+- **Intelligent Asset Resolution:** Automatically detects your OS and architecture, filtering out incompatible assets while prioritizing distro-specific tags (e.g., `ubuntu` over generic `linux`).
+- **Native Package Manager Routing:** Seamlessly bridges GitHub releases with your system's package manager (`apt`, `dnf`, `pacman`, `pkg`).
+- **Advanced Extraction Engine (`--extractor`):** Configurable extraction pipelines supporting `ouch`, native commands (`tar`, `unzip`), and internal Go libraries.
+- **Robust State Management (`state.json`):** Tracks all installations, including flags and custom configurations, enabling seamless one-command upgrades.
+- **Dependency Resolution (`-y`):** Automatically resolves and installs dependencies for `.deb`, `.rpm`, and `.pkg.tar.zst` files.
+- **Source Compilation (`source`):** AI-assisted generation and execution of build scripts for repositories without pre-compiled binaries.
+- **Security & Integrity:** VirusTotal scanning integration and automatic checksum verification.
 
 ---
 
-## Usage
+## Command Reference
+
+### `install`
+Installs a GitHub release asset.
 
 ```bash
-$ gh pt --help
-Usage: gh-pt <command> [flags]
+gh pt install <owner/repo> [flags]
+```
+* **Asset Selection:**
+  * `-v, --release-version`: Specify a version tag (default: `latest`).
+  * `-a, --release-asset`: Exact asset name to download.
+  * `-A, --release-asset-regexp`: Regex matching the asset name.
+  * `-T, --type`: Comma-separated list of preferred formats (e.g., `deb,appimage,tar.gz`).
+* **Extraction & Target:**
+  * `-p, --target-path`: Installation directory. Defaults to `~/.local/bin` (or `/usr/local/bin` with `-g`).
+  * `-g, --global`: Install globally (requires sudo if applicable).
+  * `-b, --asset-binaries`: Specific binaries to extract from an archive.
+  * `--extractor`: Define extraction engine precedence (default: `ouch,native,internal`).
+* **State & Tracking:**
+  * `-S, --no-save-state`: Perform installation without tracking in `state.json`.
+  * `--pin-install`: Install and immediately pin the version to prevent automatic updates.
 
-Install binaries for a Github repository release interactively or
-non-interactively.
+### `upgrade`
+Updates all tracked installations in `state.json` to their latest versions, preserving all original installation flags.
 
-Flags:
-  -h, --help                    Show context-sensitive help.
-  -l, --log-level="info"        Log level ($GH_INSTALL_LOG_LEVEL).
-      --log-format="console"    Log output format ($GH_INSTALL_LOG_FORMAT).
-      --[no-]log-quiet-interactive
-                                Quiet log in interactive mode
-                                ($GH_INSTALL_LOG_QUIET_INTERACTIVE)
-  -V, --verbose                 Enable verbose output (sets log level to debug)
-                                ($GH_INSTALL_VERBOSE).
-      --version                 Show version ($GH_INSTALL_VERSION).
+```bash
+gh pt upgrade [flags]
+```
+* `-u, --user`: Only update user-level installations.
+* `-g, --global`: Only update global-level installations.
 
-Commands:
-  install [<repository>] [flags]
-    Install a GitHub release or clone a repository (default).
+### `ls` / `ll`
+List currently saved installations. `ll` provides extended metadata.
 
-  ls [<filter>] [flags]
-    List saved state (short format).
+```bash
+gh pt ls [filter]
+gh pt ll [filter]
+```
 
-  ll [<filter>] [flags]
-    List saved state (long format).
+### `rm`
+Uninstalls an application and removes it from the state tracker.
 
-  rm <target> [flags]
-    Uninstall an application and remove it from state.
+```bash
+gh pt rm <target> [flags]
+```
+* `--purge`: Completely uninstall and purge any cached files or compile scripts.
 
-  upgrade [flags]
-    Update installations.
+### Repository Management: `repo clone` & `repo fork`
+Clones or forks a repository into a structured directory (configured via `clone_path` and `fork_path`). Tracked repositories are synced during `gh pt upgrade`.
 
-  state edit
-    Edit saved state interactively.
+```bash
+gh pt repo clone <owner/repo>
+gh pt repo fork <owner/repo>
+```
 
-  config ls
-    List config settings.
+### `source`
+Clones a repository to a temporary workspace, leverages an AI agent to write a build script, compiles the binary, installs it, and saves the script in state for future updates.
 
-  config get <key>
-    Get config setting.
-
-  config set <key> <value>
-    Set config setting.
-
-  config rm <key>
-    Remove config setting.
-
-  config menu
-    Interactive config menu (default).
-
-  repo clone <repository> [flags]
-    Clone the repository.
-
-  repo fork <repository> [flags]
-    Fork and clone the repository.
-
-  scan ai [<target>] [flags]
-    AI safety scan.
-
-  scan vt [<target>]
-    VirusTotal scan.
-
-  vt set-key <key>
-    Set VirusTotal API key.
-
-  show <repository> [flags]
-    Show release information.
-
-  source <repository> [flags]
-    Compile repository from source.
-
-Run "gh-pt <command> --help" for more information on a command.
-
+```bash
+gh pt source <owner/repo> --ai-cmd 'agy -p "%s"'
 ```
 
 ---
 
-## Package Manager Detection
+## Mechanics & Architecture
 
-On Linux, `gh-pt` dynamically detects which package managers are available on your system using `exec.LookPath` and adjusts the default asset priority accordingly:
+### Package Manager Detection
+On Linux and FreeBSD, `gh-pt` detects available package managers via `exec.LookPath` and adjusts the default asset preference:
 
-| Distribution | Detected via | Default priority |
+| Environment | Detected Via | Default Priority Routing |
 |---|---|---|
-| Ubuntu / Debian | `dpkg` in PATH | `deb > snap > flatpak > appimage > tar.gz` |
-| Fedora / RHEL / CentOS | `rpm` in PATH | `rpm > snap > flatpak > appimage > tar.gz` |
-| Arch Linux / Manjaro | Neither `dpkg` nor `rpm` | `appimage > flatpak > snap > tar.gz` |
-| FreeBSD | `GOOS=freebsd` | `pkg > txz > tar.gz` |
-| macOS | `GOOS=darwin` | `dmg > tar.gz > zip` |
+| **Debian/Ubuntu** | `dpkg` in PATH | `.deb` → `apt-get install` or `dpkg -i` |
+| **RHEL/Fedora** | `rpm` in PATH | `.rpm` → `dnf install` or `rpm -i` |
+| **Arch Linux** | Neither `dpkg`/`rpm` | `.pkg.tar.zst` / `.pkg.tar.xz` → `pacman -U` |
+| **FreeBSD** | `GOOS=freebsd` | `.pkg` / `.txz` → `pkg install` |
+| **macOS** | `GOOS=darwin` | `.dmg` > `.tar.gz` > `.zip` |
 
-Additionally, `.pkg.tar.zst` and `.pkg.tar.xz` files are intercepted before archive extraction and routed directly to `sudo pacman -U` on Arch-based systems.
+### The Extraction Engine (`--extractor`)
+`gh-pt` uses a cascading fallback system for extracting archives (e.g., `tar.gz`, `zip`), defined by the `--extractor` flag or config setting. The default precedence is `ouch,native,internal`.
 
-The default priority can always be overridden with `-T` (e.g. `-T rpm,deb,tar.gz`).
+1. **`ouch`**: If the [ouch](https://github.com/ouch-org/ouch) utility is installed, it is used first. It is extremely fast and handles almost every format securely.
+2. **`native`**: Falls back to native OS binaries like `tar` and `unzip`.
+3. **`internal`**: As a last resort, uses the embedded `mholt/archiver/v4` Go library.
 
----
+*You can force a specific extractor, e.g., `--extractor="internal"`, or reorder them: `--extractor="native,internal"`.*
 
-## State Management & Update System
+### State Management (`state.json`)
+By default, successful operations are recorded in a state file located in your XDG Data directory (`~/.local/share/gh-pt/state.json`).
 
-By default, every successful installation is saved to an internal `state.json` file inside your XDG Data directory. This tracks the repository, current version, target path, scope (User/Global), and all installation flags (format types, `--all`, `--asset-binaries-regexp`).
+This file tracks:
+- **Application Metadata:** Version, installed path, and source repository.
+- **Replay State:** All flags used during the initial installation (e.g., `--type`, `--asset-binaries-regexp`, `--global`).
+- **Pins:** Applications marked to be ignored during `upgrade`.
+- **Compile Scripts:** Custom scripts generated by the `source` command.
 
-You can instantly update all tracked applications by running:
-```bash
-gh pt upgrade
-```
-*(Updates all global and user packages. Pass `-u` to update only user packages, or `-g` to update only global packages).*
+Use `gh pt state edit` for an interactive UI to manage pins and tracked apps.
 
-To view and manage your current state:
-- `gh pt state edit`: Launches an interactive terminal UI to enable/disable automatic updates (pinning) for specific apps, or delete them from the tracker.
-- `gh pt ls`: Lists saved installations.
-- `gh pt ll`: Shows expanded metadata for saved installations.
-- `gh pt rm <target>`: Uninstalls the application and removes it from state. Add `--purge` to completely obliterate it.
-- `gh pt install <target> -S`: Install without tracking.
-- `gh pt install <target> --pin-install`: Install and immediately pin the version.
+### Configuration (`config.yml`)
+Configuration is stored in `~/.config/gh-pt/config.yml`. It defines defaults that can be overridden by CLI flags or `GH_INSTALL_` prefixed environment variables.
 
-If you are running `gh pt` in a temporary script and don't want to track it for updates, pass the `-S` (`--no-save-state`) flag.
+**Configuration Precedence:** CLI Flag > Environment Variable > `config.yml` > Hardcoded Default.
 
----
-
-- **Repository Tracking (Clone / Fork):** Supports cloning (`repo clone`) or forking (`repo fork`) git repositories into configurable base directories (defaults: `~/src` and `~/projects`), tracking them in `state.json` and automatically syncing them via `gh repo sync` during `gh pt upgrade` / `-u`.
-- **AI Compilation from Source:** Supports `source` (with `--ai` and configurable `--ai-cmd 'agy -p "%s"'`) which clones the target repository to a temporary directory, invokes the AI agent to produce an automated build script saved at `~/.config/gh-pt/scripts/compile-<pkgname>.sh` (or `.ps1` on Windows), executes compilation and installation, purges the temporary workspace, and tracks `compile_script` in state for replay during `-U`/`-u` updates.
-- **Pinned updates:** Pinned entries remain tracked but are skipped by `-U` and `-u` until the pin is removed.
-
----
-
-## Configuration & Environment Variables
-
-All CLI flags can be set via environment variables (prefixed with `GH_INSTALL_`) or a YAML configuration file located at `~/.config/gh-pt/config.yml`.
-
-Example `config.yml`:
+**Schema Example:**
 ```yaml
-install_types: "deb,appimage,tar.gz,zip"
+# ~/.config/gh-pt/config.yml
+install_path: "~/.local/bin"
+global_path: "/usr/local/bin"
 clone_path: "~/src"
 fork_path: "~/projects"
-ai_cmd: 'agy -p "%s"'
+
+# AI Configuration
+ai_cmd: "agy -p \"%s\""
+ai_interactive_cmd: ""
+
+# Core Behavior
+install_types: "deb,appimage,tar.gz,zip"
 add_deps: true
-allow_wine: false
-prompt_rename: true
+no_deps: false
+disable_prompts: false
+no_save_state: false
 wine: "off"
-verify_checksum: true
 extractor: "default"
+keep_suffixes: false
+vt_api_key: ""
+allow_prerelease: false
+disable_icons: false
+log_to_file: false
 ```
 
-The configuration precedence is: `CLI Argument > Environment Variable > config.yml > Default`.
-
----
-
-## Topgrade Integration
-
-`gh-pt` can easily be integrated with [Topgrade](https://github.com/topgrade-rs/topgrade) to keep all your installed binaries up to date automatically alongside your system packages. Just add the following to your `topgrade.toml` under the `[commands]` block:
-
-```toml
-[commands]
-"gh-pt" = "gh pt upgrade"
+Use the `config` commands to manage settings:
+```bash
+gh pt config menu         # Interactive menu
+gh pt config ls           # View all settings
+gh pt config set <k> <v>  # Set a specific key
 ```
-
-*Project maintained with model switch to nemotron-3.5-lightning-free for active development.*
