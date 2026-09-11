@@ -7,11 +7,35 @@ import (
 	"github.com/pterm/pterm"
 )
 
+type Prompter interface {
+	Select(options []string, prompt string) (string, error)
+	MultiSelect(options []string, prompt string) ([]string, error)
+}
+
+type PtermPrompter struct{}
+
+func (p PtermPrompter) Select(options []string, prompt string) (string, error) {
+	return pterm.DefaultInteractiveSelect.
+		WithOptions(options).
+		WithDefaultText(prompt).Show()
+}
+
+func (p PtermPrompter) MultiSelect(options []string, prompt string) ([]string, error) {
+	return pterm.DefaultInteractiveMultiselect.
+		WithOptions(options).
+		WithDefaultText(prompt).
+		WithKeyConfirm(keys.Enter).
+		WithKeySelect(keys.Space).
+		WithFilter(false).
+		Show()
+}
+
 type InteractiveSelector struct {
-	Kind   SelectorKind
-	Items  []*SelectorItem
-	Prompt string
-	Single bool
+	Kind     SelectorKind
+	Items    []*SelectorItem
+	Prompt   string
+	Single   bool
+	Prompter Prompter
 }
 
 func (s *InteractiveSelector) showPrompt() ([]string, error) {
@@ -20,23 +44,22 @@ func (s *InteractiveSelector) showPrompt() ([]string, error) {
 		itemOrder = append(itemOrder, item.Name)
 	}
 
+	if s.Prompter == nil {
+		s.Prompter = PtermPrompter{}
+	}
+
 	if s.Single {
-		selectedItem, err := pterm.DefaultInteractiveSelect.
-			WithOptions(itemOrder).
-			WithDefaultText(s.Prompt).Show()
+		selectedItem, err := s.Prompter.Select(itemOrder, s.Prompt)
 		if err != nil {
 			return nil, err
+		}
+		if selectedItem == "" {
+			return []string{}, nil
 		}
 		return []string{selectedItem}, nil
 	}
 
-	selectedItems, err := pterm.DefaultInteractiveMultiselect.
-		WithOptions(itemOrder).
-		WithDefaultText(s.Prompt).
-		WithKeyConfirm(keys.Enter).
-		WithKeySelect(keys.Space).
-		WithFilter(false).
-		Show()
+	selectedItems, err := s.Prompter.MultiSelect(itemOrder, s.Prompt)
 	if err != nil {
 		return nil, err
 	}

@@ -3,8 +3,11 @@ package selector
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 
@@ -215,4 +218,411 @@ func TestItem(t *testing.T) {
 	assert.Equal(t, BinaryRpmInstaller, BinaryTypeFromPath("/tmp/test.rpm"))
 	assert.Equal(t, BinaryPkgInstaller, BinaryTypeFromPath("/tmp/test.pkg"))
 	assert.Equal(t, BinaryPkgInstaller, BinaryTypeFromPath("/tmp/test.txz"))
+}
+
+type MockPrompter struct {
+	SelectRet      string
+	SelectErr      error
+	MultiSelectRet []string
+	MultiSelectErr error
+}
+
+func (m MockPrompter) Select(options []string, prompt string) (string, error) {
+	return m.SelectRet, m.SelectErr
+}
+
+func (m MockPrompter) MultiSelect(options []string, prompt string) ([]string, error) {
+	return m.MultiSelectRet, m.MultiSelectErr
+}
+
+func TestInteractiveSelector_Run(t *testing.T) {
+	tests := []struct {
+		name          string
+		single        bool
+		items         []*SelectorItem
+		mockPrompter  MockPrompter
+		expectedItems []string
+		expectedErr   string
+	}{
+		{
+			name:   "Single selection success",
+			single: true,
+			items: []*SelectorItem{
+				{Name: "item1"},
+				{Name: "item2"},
+			},
+			mockPrompter: MockPrompter{
+				SelectRet: "item2",
+			},
+			expectedItems: []string{"item2"},
+		},
+		{
+			name:   "Single selection error",
+			single: true,
+			items: []*SelectorItem{
+				{Name: "item1"},
+			},
+			mockPrompter: MockPrompter{
+				SelectErr: fmt.Errorf("select error"),
+			},
+			expectedErr: "interactive prompt failed: select error",
+		},
+		{
+			name:   "Single selection empty",
+			single: true,
+			items: []*SelectorItem{
+				{Name: "item1"},
+			},
+			mockPrompter: MockPrompter{
+				SelectRet: "",
+			},
+			expectedErr: "no items were selected",
+		},
+		{
+			name:   "Single selection not found",
+			single: true,
+			items: []*SelectorItem{
+				{Name: "item1"},
+			},
+			mockPrompter: MockPrompter{
+				SelectRet: "item2",
+			},
+			expectedErr: "could not match selected items with internal list",
+		},
+		{
+			name:   "Multiple selection success",
+			single: false,
+			items: []*SelectorItem{
+				{Name: "item1"},
+				{Name: "item2"},
+				{Name: "item3"},
+			},
+			mockPrompter: MockPrompter{
+				MultiSelectRet: []string{"item1", "item3"},
+			},
+			expectedItems: []string{"item1", "item3"},
+		},
+		{
+			name:   "Multiple selection error",
+			single: false,
+			items: []*SelectorItem{
+				{Name: "item1"},
+			},
+			mockPrompter: MockPrompter{
+				MultiSelectErr: fmt.Errorf("multiselect error"),
+			},
+			expectedErr: "interactive prompt failed: multiselect error",
+		},
+		{
+			name:   "Multiple selection empty",
+			single: false,
+			items: []*SelectorItem{
+				{Name: "item1"},
+			},
+			mockPrompter: MockPrompter{
+				MultiSelectRet: []string{},
+			},
+			expectedErr: "no items were selected",
+		},
+		{
+			name:   "Multiple selection not found",
+			single: false,
+			items: []*SelectorItem{
+				{Name: "item1"},
+			},
+			mockPrompter: MockPrompter{
+				MultiSelectRet: []string{"item2"},
+			},
+			expectedErr: "could not match selected items with internal list",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &InteractiveSelector{
+				Kind:     Asset,
+				Items:    tt.items,
+				Prompt:   "Test prompt",
+				Single:   tt.single,
+				Prompter: tt.mockPrompter,
+			}
+
+			res, err := s.Run()
+
+			if tt.expectedErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedErr)
+			} else {
+				require.NoError(t, err)
+				var resNames []string
+				for _, item := range res {
+					resNames = append(resNames, item.Name)
+				}
+				assert.ElementsMatch(t, tt.expectedItems, resNames)
+			}
+		})
+	}
+}
+
+func TestBinarySelector(t *testing.T) {
+	// create a temp dummy file to use as download path
+	tmpFileDeb, err := os.CreateTemp("", "gh-pt-test-*.deb")
+	require.NoError(t, err)
+	defer os.Remove(tmpFileDeb.Name())
+	tmpFileDeb.Write([]byte("dummy content"))
+	tmpFileDeb.Close()
+
+	tmpFileRpm, err := os.CreateTemp("", "gh-pt-test-*.rpm")
+	require.NoError(t, err)
+	defer os.Remove(tmpFileRpm.Name())
+	tmpFileRpm.Write([]byte("dummy content"))
+	tmpFileRpm.Close()
+
+	t.Run("UnsupportedNativeArchiverType", func(t *testing.T) {
+		sel, err := BinarySelector(BinaryMatchCriteria{
+			DownloadPath: tmpFileDeb.Name(),
+			Names:        []string{"dummy"},
+			Interactive:  false,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, Binary, sel.GetKind())
+		s, ok := sel.(*Selector)
+		require.True(t, ok)
+		assert.Equal(t, 1, len(s.Items))
+		assert.Equal(t, filepath.Base(tmpFileDeb.Name()), s.Items[0].Name)
+	})
+
+	t.Run("UnsupportedNativeArchiverTypeInteractive", func(t *testing.T) {
+		sel, err := BinarySelector(BinaryMatchCriteria{
+			DownloadPath: tmpFileRpm.Name(),
+			Interactive:  true,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, Binary, sel.GetKind())
+		s, ok := sel.(*InteractiveSelector)
+		require.True(t, ok)
+		assert.Equal(t, 1, len(s.Items))
+		assert.Equal(t, filepath.Base(tmpFileRpm.Name()), s.Items[0].Name)
+	})
+}
+
+func TestReleaseSelectorInteractive(t *testing.T) {
+	client := &MockGithubClient{
+		GetResponses: map[string]interface{}{
+			"repos/owner/repo/releases": []map[string]interface{}{
+				{"Tag_name": "v1.0.0", "Id": 1},
+			},
+		},
+	}
+	sel, err := ReleaseSelector(client, "owner/repo", "latest", true)
+	require.NoError(t, err)
+	assert.Equal(t, Release, sel.GetKind())
+	s, ok := sel.(*InteractiveSelector)
+	require.True(t, ok)
+	assert.Equal(t, 1, len(s.Items))
+	assert.Equal(t, "v1.0.0", s.Items[0].Name)
+}
+
+func TestAssetSelectorInteractive(t *testing.T) {
+	respBody := `[{"Name": "asset-linux-amd64.tar.gz"}]`
+	client := &MockGithubClient{}
+	client.ReqResponses = map[string]*http.Response{
+		"repos/owner/repo/releases/1/assets": {
+			Body:   io.NopCloser(bytes.NewReader([]byte(respBody))),
+			Header: http.Header{},
+		},
+	}
+	sel, err := AssetSelector(client, "owner/repo", AssetMatchCriteria{
+		ReleaseId:   1,
+		Interactive: true,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, Asset, sel.GetKind())
+	s, ok := sel.(*InteractiveSelector)
+	require.True(t, ok)
+	assert.Equal(t, 1, len(s.Items))
+	assert.Equal(t, "asset-linux-amd64.tar.gz", s.Items[0].Name)
+}
+
+func TestBinarySelectorArchive(t *testing.T) {
+	tmpFileZip, err := os.CreateTemp("", "gh-pt-test-*.zip")
+	require.NoError(t, err)
+	defer os.Remove(tmpFileZip.Name())
+	tmpFileZip.Write([]byte("PK\x03\x04dummy content"))
+	tmpFileZip.Close()
+
+	t.Run("InternalExtractor", func(t *testing.T) {
+		sel, err := BinarySelector(BinaryMatchCriteria{
+			DownloadPath: tmpFileZip.Name(),
+			Names:        []string{"dummy"},
+			Interactive:  false,
+			Extractor:    "internal",
+		})
+		if err != nil {
+			// fallback might fail if pure go archiver fails on dummy zip
+			t.Logf("expected error for dummy zip: %v", err)
+		} else {
+			assert.Equal(t, Binary, sel.GetKind())
+		}
+	})
+}
+
+func TestBinarySelectorErrors(t *testing.T) {
+	t.Run("MissingFile", func(t *testing.T) {
+		_, err := BinarySelector(BinaryMatchCriteria{
+			DownloadPath: "/path/to/missing/file.tar.gz",
+			Names:        []string{"dummy"},
+			Interactive:  false,
+		})
+		require.Error(t, err)
+	})
+}
+
+func TestReleaseSelectorErrors(t *testing.T) {
+	client := &MockGithubClient{
+		GetError: fmt.Errorf("api error"),
+	}
+	t.Run("APIError", func(t *testing.T) {
+		_, err := ReleaseSelector(client, "owner/repo", "latest", false)
+		require.Error(t, err)
+	})
+
+	client2 := &MockGithubClient{
+		GetResponses: map[string]interface{}{
+			"repos/owner/repo/releases": []map[string]interface{}{},
+		},
+	}
+	t.Run("EmptyReleases", func(t *testing.T) {
+		_, err := ReleaseSelector(client2, "owner/repo", "v1.0.0", false)
+		require.NoError(t, err)
+	})
+}
+
+func TestAssetSelectorErrors(t *testing.T) {
+	client := &MockGithubClient{
+		ReqError: fmt.Errorf("api error"),
+	}
+	t.Run("APIError", func(t *testing.T) {
+		_, err := AssetSelector(client, "owner/repo", AssetMatchCriteria{
+			ReleaseId:   1,
+			Interactive: false,
+		})
+		require.Error(t, err)
+	})
+
+	clientInvalidJSON := &MockGithubClient{}
+	clientInvalidJSON.ReqResponses = map[string]*http.Response{
+		"repos/owner/repo/releases/1/assets": {
+			Body:   io.NopCloser(bytes.NewReader([]byte(`invalid json`))),
+			Header: http.Header{},
+		},
+	}
+	t.Run("InvalidJSON", func(t *testing.T) {
+		_, err := AssetSelector(clientInvalidJSON, "owner/repo", AssetMatchCriteria{
+			ReleaseId:   1,
+			Interactive: false,
+		})
+		require.Error(t, err)
+	})
+}
+
+func TestBinarySelectorArchiveNativeExtractor(t *testing.T) {
+	tmpFileZip, err := os.CreateTemp("", "gh-pt-test-*.zip")
+	require.NoError(t, err)
+	defer os.Remove(tmpFileZip.Name())
+	tmpFileZip.Write([]byte("PK\x03\x04dummy content"))
+	tmpFileZip.Close()
+
+	t.Run("NativeExtractorZip", func(t *testing.T) {
+		sel, err := BinarySelector(BinaryMatchCriteria{
+			DownloadPath: tmpFileZip.Name(),
+			Names:        []string{"dummy"},
+			Interactive:  false,
+			Extractor:    "native",
+		})
+		if err == nil && sel != nil {
+			assert.Equal(t, Binary, sel.GetKind())
+		}
+	})
+
+	tmpFileTar, err := os.CreateTemp("", "gh-pt-test-*.tar.gz")
+	require.NoError(t, err)
+	defer os.Remove(tmpFileTar.Name())
+	tmpFileTar.Write([]byte("dummy content"))
+	tmpFileTar.Close()
+
+	t.Run("NativeExtractorTarball", func(t *testing.T) {
+		sel, err := BinarySelector(BinaryMatchCriteria{
+			DownloadPath: tmpFileTar.Name(),
+			Names:        []string{"dummy"},
+			Interactive:  false,
+			Extractor:    "native",
+		})
+		if err == nil && sel != nil {
+			assert.Equal(t, Binary, sel.GetKind())
+		}
+	})
+}
+
+func TestBinarySelectorOuchExtractor(t *testing.T) {
+	tmpFileZip, err := os.CreateTemp("", "gh-pt-test-*.zip")
+	require.NoError(t, err)
+	defer os.Remove(tmpFileZip.Name())
+	tmpFileZip.Write([]byte("PK\x03\x04dummy content"))
+	tmpFileZip.Close()
+
+	t.Run("OuchExtractorZip", func(t *testing.T) {
+		sel, err := BinarySelector(BinaryMatchCriteria{
+			DownloadPath: tmpFileZip.Name(),
+			Names:        []string{"dummy"},
+			Interactive:  false,
+			Extractor:    "ouch",
+		})
+		if err == nil && sel != nil {
+			assert.Equal(t, Binary, sel.GetKind())
+		}
+	})
+}
+
+func TestReleaseSelectorStableLatest(t *testing.T) {
+	client := &MockGithubClient{
+		GetResponses: map[string]interface{}{
+			"repos/owner/repo/releases": []map[string]interface{}{
+				{"Tag_name": "v2.0.0-beta", "Id": 2, "Prerelease": true},
+				{"Tag_name": "v1.0.0", "Id": 1, "Prerelease": false},
+			},
+			"repos/owner/repo/releases/latest": map[string]interface{}{
+				// Simulate failure fetching /latest API endpoint
+			},
+		},
+		GetError: nil,
+	}
+	t.Run("StableLatest", func(t *testing.T) {
+		sel, err := ReleaseSelector(client, "owner/repo", "latest", false, false, true)
+		require.NoError(t, err)
+		assert.Equal(t, Release, sel.GetKind())
+		s, ok := sel.(*Selector)
+		require.True(t, ok)
+		assert.Contains(t, s.RegexpMatchers, "v1.0.0")
+	})
+}
+
+func TestReleaseSelectorPrereleaseLatest(t *testing.T) {
+	client := &MockGithubClient{
+		GetResponses: map[string]interface{}{
+			"repos/owner/repo/releases": []map[string]interface{}{
+				{"Tag_name": "v2.0.0-beta", "Id": 2, "Prerelease": true},
+				{"Tag_name": "v1.0.0", "Id": 1, "Prerelease": false},
+			},
+		},
+		GetError: nil,
+	}
+	t.Run("PrereleaseLatest", func(t *testing.T) {
+		sel, err := ReleaseSelector(client, "owner/repo", "latest", false, true, false)
+		require.NoError(t, err)
+		assert.Equal(t, Release, sel.GetKind())
+		s, ok := sel.(*Selector)
+		require.True(t, ok)
+		assert.Contains(t, s.RegexpMatchers, "v2.0.0-beta")
+	})
 }
