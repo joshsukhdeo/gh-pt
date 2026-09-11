@@ -163,11 +163,11 @@ type AssetMatchCriteria struct {
 }
 
 type BinaryMatchCriteria struct {
-	DownloadPath  string
-	Names         []string
-	Matcher       string
-	Interactive   bool
-	Extractor string
+	DownloadPath string
+	Names        []string
+	Matcher      string
+	Interactive  bool
+	Extractor    string
 }
 
 func AssetSelector(ghClient GithubClient, repo string, criteria AssetMatchCriteria) (ISelector, error) {

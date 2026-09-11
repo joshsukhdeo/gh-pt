@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 
 	"github.com/alecthomas/kong"
-	"github.com/posener/complete"
-	"github.com/willabides/kongplete"
 	"github.com/joshsukhdeo/gh-pt/cmd"
 	"github.com/joshsukhdeo/gh-pt/config"
 	"github.com/joshsukhdeo/gh-pt/params"
+	"github.com/posener/complete"
+	"github.com/willabides/kongplete"
 )
 
 func main() {
@@ -59,7 +59,12 @@ func main() {
 		kong.DefaultEnvars(cmd.GetEnvPrefix()),
 		vars)
 
-	kongplete.Complete(parser, kongplete.WithPredictor("file", complete.PredictFiles("*")))
+	kongplete.Complete(parser,
+		kongplete.WithPredictor("file", complete.PredictFiles("*")),
+		kongplete.WithPredictor("installed_apps", cmd.PredictInstalledApps),
+		kongplete.WithPredictor("github_repos", cmd.PredictGithubRepos),
+		kongplete.WithPredictor("config_keys", cmd.PredictConfigKeys),
+	)
 	ctx, err := parser.Parse(os.Args[1:])
 	parser.FatalIfErrorf(err)
 

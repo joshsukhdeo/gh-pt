@@ -34,6 +34,8 @@ func RunCommand(cmdStr string, cli *params.CLI) error {
 			r.Global = cli.Upgrade.Global
 		}
 		return r.RunInstall()
+	case "search", "search <query>":
+		return cli.Search.Run(&r.ExecContext)
 	case "state edit":
 		return EditState()
 	case "show":

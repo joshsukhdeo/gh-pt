@@ -1,22 +1,28 @@
 package params
 
-import "github.com/alecthomas/kong"
+import (
+	"os"
+	"os/exec"
+
+	"github.com/alecthomas/kong"
+)
 
 type CLI struct {
 	// Subcommands
-	Install InstallCmd `cmd:"" default:"withargs" help:"Install a GitHub release or clone a repository (default)."`
-	Ls      StateLsCmd `cmd:"" help:"List saved state (short format)."`
-	Ll      StateLlCmd `cmd:"" help:"List saved state (long format)."`
-	Rm      StateRmCmd `cmd:"" help:"Uninstall an application and remove it from state."`
-	Upgrade UpgradeCmd `cmd:"" help:"Update installations."`
-	State   StateCmd   `cmd:"" help:"Manage saved state and installations."`
-	Config  ConfigCmd  `cmd:"" help:"Manage configuration."`
-	Repo    RepoCmd    `cmd:"" help:"Manage source repositories."`
-	Scan    ScanCmd    `cmd:"" help:"Security and AI scanning."`
-	Vt      VtCmd      `cmd:"" help:"VirusTotal integration."`
-	Show    ShowCmd    `cmd:"" help:"Show release information."`
-	Source  SourceCmd  `cmd:"" help:"Compile repository from source."`
+	Install     InstallCmd     `cmd:"" default:"withargs" help:"Install a GitHub release or clone a repository (default)."`
+	Ls          StateLsCmd     `cmd:"" help:"List saved state (short format)."`
+	Ll          StateLlCmd     `cmd:"" help:"List saved state (long format)."`
+	Rm          StateRmCmd     `cmd:"" help:"Uninstall an application and remove it from state."`
+	Upgrade     UpgradeCmd     `cmd:"" help:"Update installations."`
+	State       StateCmd       `cmd:"" help:"Manage saved state and installations."`
+	Config      ConfigCmd      `cmd:"" help:"Manage configuration."`
+	Repo        RepoCmd        `cmd:"" help:"Manage source repositories."`
+	Scan        ScanCmd        `cmd:"" help:"Security and AI scanning."`
+	Vt          VtCmd          `cmd:"" help:"VirusTotal integration."`
+	Show        ShowCmd        `cmd:"" help:"Show release information."`
+	Source      SourceCmd      `cmd:"" help:"Compile repository from source."`
 	Completions CompletionsCmd `cmd:"" help:"Generate shell completions."`
+	Search      SearchCmd      `cmd:"" help:"Search for repositories on GitHub."`
 
 	// Global flags
 	LogLevel            string           `default:"info" enum:"error,warn,info,debug" short:"l" help:"Log level."`
@@ -61,7 +67,7 @@ type CommonInstallFlags struct {
 }
 
 type InstallCmd struct {
-	Repository string `arg:"" env:"GH_PT_REPOSITORY" optional:"" help:"Github repository in OWNER/REPOSITORY_NAME format."`
+	Repository string `arg:"" env:"GH_PT_REPOSITORY" optional:"" predictor:"github_repos" predict:"github_repos" help:"Github repository in OWNER/REPOSITORY_NAME format."`
 	CommonInstallFlags
 }
 
@@ -70,9 +76,9 @@ type StateCmd struct {
 }
 
 type UpgradeCmd struct {
-	Repository string `arg:"" optional:"" help:"Optional repository to update."`
-	User   bool `short:"u" name:"user" help:"Update only user installations."`
-	Global bool `short:"g" name:"global" help:"Update only global installations."`
+	Repository string `arg:"" optional:"" predictor:"installed_apps" predict:"installed_apps" help:"Optional repository to update."`
+	User       bool   `short:"u" name:"user" help:"Update only user installations."`
+	Global     bool   `short:"g" name:"global" help:"Update only global installations."`
 }
 
 type StateLsCmd struct {
@@ -86,9 +92,11 @@ type StateLlCmd struct {
 }
 
 type StateRmCmd struct {
-	Target string `arg:"" help:"Application to remove."`
+	Target string `arg:"" predictor:"installed_apps" predict:"installed_apps" help:"Application to remove."`
 	Purge  bool   `help:"Completely uninstall and purge."`
 }
+
+type RmCmd = StateRmCmd
 
 type StateEditCmd struct{}
 
@@ -101,14 +109,14 @@ type ConfigCmd struct {
 }
 type ConfigLsCmd struct{}
 type ConfigGetCmd struct {
-	Key string `arg:""`
+	Key string `arg:"" predictor:"config_keys" predict:"config_keys"`
 }
 type ConfigSetCmd struct {
-	Key   string `arg:""`
+	Key   string `arg:"" predictor:"config_keys" predict:"config_keys"`
 	Value string `arg:""`
 }
 type ConfigRmCmd struct {
-	Key string `arg:""`
+	Key string `arg:"" predictor:"config_keys" predict:"config_keys"`
 }
 type ConfigMenuCmd struct{}
 
@@ -118,13 +126,13 @@ type RepoCmd struct {
 }
 
 type RepoCloneCmd struct {
-	Repository string `arg:"" env:"GH_PT_REPOSITORY" help:"Github repository."`
+	Repository string `arg:"" env:"GH_PT_REPOSITORY" predictor:"github_repos" predict:"github_repos" help:"Github repository."`
 	Force      bool   `short:"f" help:"Overwrite existing."`
 	MaxDepth   int    `help:"Max clone depth."`
 }
 
 type RepoForkCmd struct {
-	Repository string `arg:"" env:"GH_PT_REPOSITORY" help:"Github repository."`
+	Repository string `arg:"" env:"GH_PT_REPOSITORY" predictor:"github_repos" predict:"github_repos" help:"Github repository."`
 	Force      bool   `short:"f" help:"Overwrite existing."`
 	MaxDepth   int    `help:"Max clone depth."`
 }
@@ -135,13 +143,13 @@ type ScanCmd struct {
 }
 
 type ScanAiCmd struct {
-	Target      string `arg:"" optional:"" help:"Target to scan."`
+	Target      string `arg:"" optional:"" predictor:"github_repos" predict:"github_repos" help:"Target to scan."`
 	Interactive bool   `short:"i" help:"Use interactive AI command from config."`
 	AICmd       string `name:"ai-cmd" help:"Command template for AI execution."`
 }
 
 type ScanVtCmd struct {
-	Target string `arg:"" optional:"" help:"Target to scan."`
+	Target string `arg:"" optional:"" predictor:"github_repos" predict:"github_repos" help:"Target to scan."`
 }
 
 type VtCmd struct {
@@ -152,7 +160,7 @@ type VtSetKeyCmd struct {
 }
 
 type ShowCmd struct {
-	Repository string `arg:"" env:"GH_PT_REPOSITORY" help:"Github repository."`
+	Repository string `arg:"" env:"GH_PT_REPOSITORY" predictor:"github_repos" predict:"github_repos" help:"Github repository."`
 	Assets     bool   `help:"Show all available assets."`
 	Versions   bool   `help:"Show all release versions."`
 	Prerelease bool   `help:"Include prereleases."`
@@ -161,7 +169,7 @@ type ShowCmd struct {
 }
 
 type SourceCmd struct {
-	Repository string `arg:"" env:"GH_PT_REPOSITORY" help:"Github repository."`
+	Repository string `arg:"" env:"GH_PT_REPOSITORY" predictor:"github_repos" predict:"github_repos" help:"Github repository."`
 	AICmd      string `help:"Command template for AI execution."`
 	CommonInstallFlags
 }
@@ -176,11 +184,34 @@ type CompletionsBashCmd struct{}
 type CompletionsZshCmd struct{}
 type CompletionsPowershellCmd struct{}
 
+type SearchCmd struct {
+	Query       string `arg:""`
+	Description bool   `short:"d"`
+}
+
+var SearchRunner func(c *SearchCmd, ctx *ExecContext) error
+
+func (c *SearchCmd) Run(ctx *ExecContext) error {
+	if SearchRunner != nil {
+		return SearchRunner(c, ctx)
+	}
+	args := []string{"search", "repos", c.Query}
+	if c.Description {
+		args = append(args, "--match", "name,description")
+	} else {
+		args = append(args, "--match", "name")
+	}
+	cmd := exec.Command("gh", args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	return cmd.Run()
+}
 
 // ExecContext holds the flattened execution parameters
 type ExecContext struct {
-	UpdateAll           bool
-	Update              bool
+	UpdateAll bool
+	Update    bool
 	CommonInstallFlags
 	Repository          string
 	Clone               bool

@@ -762,11 +762,11 @@ func (r *GithubRelease) Install() error {
 		}
 
 		binarySelector, execErr := selector.BinarySelector(selector.BinaryMatchCriteria{
-			DownloadPath:  filepath.Join(downloadDir, asset.Name),
-			Names:         r.CliParams.AssetBinaries,
-			Matcher:       r.CliParams.AssetBinariesRegexp,
-			Interactive:   r.CliParams.Interactive,
-			Extractor: r.CliParams.Extractor,
+			DownloadPath: filepath.Join(downloadDir, asset.Name),
+			Names:        r.CliParams.AssetBinaries,
+			Matcher:      r.CliParams.AssetBinariesRegexp,
+			Interactive:  r.CliParams.Interactive,
+			Extractor:    r.CliParams.Extractor,
 		})
 		if execErr != nil {
 			log.Error().

@@ -15,7 +15,7 @@ func TestCLIFlags_CloneAndFork(t *testing.T) {
 		"install_path":  "/test/path",
 		"clone_path":    "~/src",
 		"fork_path":     "~/projects",
-		"extractor": "default",
+		"extractor":     "default",
 	})
 	require.NoError(t, err)
 
@@ -29,7 +29,7 @@ func TestCLIFlags_CloneAndFork(t *testing.T) {
 		"install_path":  "/test/path",
 		"clone_path":    "~/src",
 		"fork_path":     "~/projects",
-		"extractor": "default",
+		"extractor":     "default",
 	})
 	require.NoError(t, err)
 
@@ -43,7 +43,7 @@ func TestCLIFlags_CloneAndFork(t *testing.T) {
 		"install_path":  "/test/path",
 		"clone_path":    "~/src",
 		"fork_path":     "~/projects",
-		"extractor": "default",
+		"extractor":     "default",
 	})
 	require.NoError(t, err)
 
@@ -61,7 +61,7 @@ func TestCLIDefaults(t *testing.T) {
 		"install_path":  "/test/path",
 		"clone_path":    "~/src",
 		"fork_path":     "~/projects",
-		"extractor": "default",
+		"extractor":     "default",
 	})
 	require.NoError(t, err)
 
@@ -69,7 +69,6 @@ func TestCLIDefaults(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.False(t, cli.Install.Interactive)
-
 
 	assert.Equal(t, "latest", cli.Install.ReleaseVersion)
 	assert.False(t, cli.Install.All)
@@ -87,7 +86,7 @@ func TestCLIParse(t *testing.T) {
 		"install_path":  "/test/path",
 		"clone_path":    "~/src",
 		"fork_path":     "~/projects",
-		"extractor": "default",
+		"extractor":     "default",
 	})
 	require.NoError(t, err)
 
