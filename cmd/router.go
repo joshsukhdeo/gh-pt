@@ -85,6 +85,12 @@ func RunCommand(cmdStr string, cli *params.CLI) error {
 		return ConfigRm(cli.Config.Rm.Key)
 	case "config menu":
 		return ConfigMenu()
+	case "completions bash":
+		return GenerateCompletions("bash")
+	case "completions zsh":
+		return GenerateCompletions("zsh")
+	case "completions powershell":
+		return GenerateCompletions("powershell")
 	default:
 		return fmt.Errorf("unknown command: %s", cmdStr)
 	}

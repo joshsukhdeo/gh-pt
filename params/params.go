@@ -16,6 +16,7 @@ type CLI struct {
 	Vt      VtCmd      `cmd:"" help:"VirusTotal integration."`
 	Show    ShowCmd    `cmd:"" help:"Show release information."`
 	Source  SourceCmd  `cmd:"" help:"Compile repository from source."`
+	Completions CompletionsCmd `cmd:"" help:"Generate shell completions."`
 
 	// Global flags
 	LogLevel            string           `default:"info" enum:"error,warn,info,debug" short:"l" help:"Log level."`
@@ -28,8 +29,6 @@ type CLI struct {
 // Shared flags across commands
 type CommonInstallFlags struct {
 	Interactive          bool              `default:"false" short:"i" help:"Use interactive installation."`
-	UpdateAll            bool              `short:"U" help:"Update all installed applications (user and global)."`
-	Update               bool              `short:"u" help:"Update user installations (add -g for global only)."`
 	ReleaseVersion       string            `default:"latest" short:"v" help:"Repository release tag (version) to install."`
 	ReleaseAsset         string            `optional:"" short:"a" help:"Name of repository release asset to download."`
 	ReleaseAssetRegexp   string            `optional:"" short:"A" help:"Regular expression matching release asset to download."`
@@ -166,8 +165,21 @@ type SourceCmd struct {
 	CommonInstallFlags
 }
 
+type CompletionsCmd struct {
+	Bash       CompletionsBashCmd       `cmd:"" help:"Generate Bash completions."`
+	Zsh        CompletionsZshCmd        `cmd:"" help:"Generate Zsh completions."`
+	Powershell CompletionsPowershellCmd `cmd:"" help:"Generate PowerShell completions."`
+}
+
+type CompletionsBashCmd struct{}
+type CompletionsZshCmd struct{}
+type CompletionsPowershellCmd struct{}
+
+
 // ExecContext holds the flattened execution parameters
 type ExecContext struct {
+	UpdateAll           bool
+	Update              bool
 	CommonInstallFlags
 	Repository          string
 	Clone               bool

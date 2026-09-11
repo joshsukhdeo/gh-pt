@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 
 	"github.com/alecthomas/kong"
+	"github.com/posener/complete"
+	"github.com/willabides/kongplete"
 	"github.com/joshsukhdeo/gh-pt/cmd"
 	"github.com/joshsukhdeo/gh-pt/config"
 	"github.com/joshsukhdeo/gh-pt/params"
@@ -47,14 +49,17 @@ func main() {
 		}
 	}
 
-	ctx := kong.Parse(&cli,
+	parser := kong.Must(&cli,
 		kong.Name(filepath.Base(os.Args[0])),
 		kong.Description(`Install binaries for a Github repository release interactively or non-interactively.`),
 		kong.DefaultEnvars(cmd.GetEnvPrefix()),
-		
 		vars)
 
-	err := cmd.RunCommand(ctx.Command(), &cli)
+	kongplete.Complete(parser, kongplete.WithPredictor("file", complete.PredictFiles("*")))
+	ctx, err := parser.Parse(os.Args[1:])
+	parser.FatalIfErrorf(err)
+
+	err = cmd.RunCommand(ctx.Command(), &cli)
 	if err != nil {
 		os.Exit(1)
 	}

@@ -8,7 +8,9 @@ require (
 	github.com/cli/go-gh/v2 v2.11.0
 	github.com/gofrs/flock v0.13.1
 	github.com/mholt/archiver/v4 v4.0.0-alpha.8
+	github.com/posener/complete v1.2.3
 	github.com/stretchr/testify v1.12.1
+	github.com/willabides/kongplete v0.4.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
 
@@ -22,6 +24,7 @@ require (
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/lithammer/fuzzysearch v1.1.8 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
+	github.com/riywo/loginshell v0.0.0-20200815045211-7d26008be1ab // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/term v0.40.0 // indirect
