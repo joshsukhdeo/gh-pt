@@ -344,7 +344,7 @@ func RemoveApp(target string, purge bool) error {
 					}
 				}
 			}
-		} else if app.TargetPath != "" {
+		} else if app.TargetPath != "" && !app.Clone && !app.Fork {
 			parts := strings.Split(r, "/")
 			repoName := parts[len(parts)-1]
 
@@ -385,6 +385,18 @@ func RemoveApp(target string, purge bool) error {
 				} else if err == nil {
 					log.Info().Msgf("Deleted %s", binPath)
 				}
+			}
+		}
+
+		if app.Clone || app.Fork {
+			if purge && app.TargetPath != "" {
+				if err := os.RemoveAll(app.TargetPath); err != nil {
+					log.Warn().Err(err).Msgf("Failed to purge repository directory %s", app.TargetPath)
+				} else {
+					log.Info().Msgf("Purged cloned/forked repository at %s", app.TargetPath)
+				}
+			} else {
+				log.Info().Msgf("Kept repository directory at %s (use --purge to delete)", app.TargetPath)
 			}
 		}
 

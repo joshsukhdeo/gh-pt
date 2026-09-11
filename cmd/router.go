@@ -19,11 +19,11 @@ func RunCommand(cmdStr string, cli *params.CLI) error {
 		r.CommonInstallFlags = cli.Install.CommonInstallFlags
 		r.Repository = cli.Install.Repository
 		return r.RunInstall()
-	case "ls":
+	case "ls", "ls <filter>":
 		return ListState(&RootCLI{ExecContext: params.ExecContext{Ls: cli.Ls.Filter, CommonInstallFlags: params.CommonInstallFlags{Global: cli.Ls.Global}}})
-	case "ll":
+	case "ll", "ll <filter>":
 		return ListState(&RootCLI{ExecContext: params.ExecContext{Ll: cli.Ll.Filter, Full: true, CommonInstallFlags: params.CommonInstallFlags{Global: cli.Ll.Global}}})
-	case "rm":
+	case "rm", "rm <target>":
 		return RemoveApp(cli.Rm.Target, cli.Rm.Purge)
 	case "upgrade", "upgrade <repository>":
 		r.Repository = cli.Upgrade.Repository
