@@ -90,7 +90,7 @@ func handleCategoryMenu(cfg *config.Config, category string) {
 				fmt.Sprintf("DisablePrompts: %t", cfg.Core.DisablePrompts),
 				fmt.Sprintf("NoSaveState: %t", cfg.Core.NoSaveState),
 				fmt.Sprintf("Wine: %s", cfg.Core.Wine),
-				fmt.Sprintf("Extractor: %t", cfg.Core.Extractor),
+				fmt.Sprintf("Extractor: %s", cfg.Core.Extractor),
 				fmt.Sprintf("KeepSuffixes: %t", cfg.Core.KeepSuffixes),
 				fmt.Sprintf("VTApiKey: %s", cfg.Core.VTApiKey),
 				fmt.Sprintf("AllowPrerelease: %t", cfg.Core.AllowPrerelease),
