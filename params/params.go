@@ -70,6 +70,7 @@ type StateCmd struct {
 }
 
 type UpgradeCmd struct {
+	Repository string `arg:"" optional:"" help:"Optional repository to update."`
 	User   bool `short:"u" name:"user" help:"Update only user installations."`
 	Global bool `short:"g" name:"global" help:"Update only global installations."`
 }

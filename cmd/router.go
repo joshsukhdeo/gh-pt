@@ -25,7 +25,8 @@ func RunCommand(cmdStr string, cli *params.CLI) error {
 		return ListState(&RootCLI{ExecContext: params.ExecContext{Ll: cli.Ll.Filter, Full: true, CommonInstallFlags: params.CommonInstallFlags{Global: cli.Ll.Global}}})
 	case "rm":
 		return RemoveApp(cli.Rm.Target, cli.Rm.Purge)
-	case "upgrade":
+	case "upgrade", "upgrade <repository>":
+		r.Repository = cli.Upgrade.Repository
 		if !cli.Upgrade.User && !cli.Upgrade.Global {
 			r.UpdateAll = true
 		} else {

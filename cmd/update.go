@@ -46,6 +46,23 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 		log.Info().Msgf("Updating %s...", app.Repository)
 
 		if app.CompileScript != "" {
+			// Check remote commit to see if we need an update
+			checkCmd := exec.Command("gh", "api", "repos/"+app.Repository+"/commits/HEAD", "--jq", ".sha")
+			if out, err := checkCmd.Output(); err == nil {
+				remoteCommit := strings.TrimSpace(string(out))
+				if remoteCommit != "" && remoteCommit == app.Version {
+					log.Info().Msgf("Skipping %s (already at latest commit %s)", app.Repository, app.Version)
+					continue
+				}
+				if remoteCommit != "" {
+					log.Info().Msgf("Updating %s from %s to %s", app.Repository, app.Version, remoteCommit)
+					// We will update app.Version after successful compile
+					app.Version = remoteCommit
+				}
+			} else {
+				log.Warn().Msgf("Could not check remote commit for %s, proceeding with update", app.Repository)
+			}
+
 			if r.ExecContext.DryRun {
 				log.Info().Msgf("[dry-run] Would execute compile script %s for %s", app.CompileScript, app.Repository)
 				continue
@@ -66,6 +83,8 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 			} else {
 				log.Info().Msgf("Successfully updated %s via compile script", app.Repository)
 				state.LogHistory("update", app.Repository, app.Version)
+				// Save the updated version to state
+				st.AddApp(app)
 			}
 			continue
 		}

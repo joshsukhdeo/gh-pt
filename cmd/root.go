@@ -15,6 +15,7 @@ import (
 	"github.com/alecthomas/kong"
 	"github.com/cli/go-gh/v2"
 	"github.com/cli/go-gh/v2/pkg/api"
+	"github.com/joshsukhdeo/gh-pt/params"
 	"github.com/joshsukhdeo/gh-pt/config"
 	"github.com/joshsukhdeo/gh-pt/release"
 	"github.com/joshsukhdeo/gh-pt/state"
@@ -23,6 +24,10 @@ import (
 	"github.com/rs/zerolog/log"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
+
+type RootCLI struct {
+	params.ExecContext
+}
 
 const (
 	GH_INSTALL_PREFIX_ENV           = "GH_INSTALL_ENV_PREFIX"
@@ -648,6 +653,15 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 		log.Warn().Err(runErr).Msg("existing compile script failed, will regenerate with AI")
 	}
 
+	// Get the commit hash we cloned
+	commitHash := "unknown"
+	revParseCmd := exec.Command("git", "rev-parse", "HEAD")
+	revParseCmd.Dir = repoDir
+	if out, err := revParseCmd.Output(); err == nil {
+		commitHash = strings.TrimSpace(string(out))
+	}
+	log.Info().Str("commit", commitHash).Msg("compile-from-source using commit")
+
 	// 2. Ensure scripts directory exists
 	if err := os.MkdirAll(filepath.Dir(scriptPath), 0755); err != nil {
 		return fmt.Errorf("failed to create scripts directory: %w", err)
@@ -726,6 +740,7 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 				Repository:    r.Repository,
 				TargetPath:    targetPath,
 				Global:        r.Global,
+				Version:       commitHash,
 				CompileScript: scriptPath,
 				Pinned:        r.PinInstall,
 				MaxDepth:      r.MaxDepth,
