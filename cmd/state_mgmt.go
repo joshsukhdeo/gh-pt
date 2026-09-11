@@ -588,7 +588,7 @@ func editStateAppFields(st *state.State) {
 			fmt.Sprintf("ReleaseAsset: %s", app.ReleaseAsset),
 			fmt.Sprintf("Version: %s", app.Version),
 			fmt.Sprintf("Disabled: %t", app.Disabled),
-			fmt.Sprintf("Extractor: %t", app.Extractor),
+			fmt.Sprintf("Extractor: %s", app.Extractor),
 			fmt.Sprintf("IsPrerelease: %t", app.IsPrerelease),
 			"Back",
 		}

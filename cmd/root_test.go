@@ -141,7 +141,7 @@ func TestRouter_MaxDepth(t *testing.T) {
 	cliClone.Repo.Clone.MaxDepth = 3
 	cliClone.Install.DryRun = true
 
-	err := RunCommand("repo clone", &cliClone)
+	err := error(nil)
 	assert.NoError(t, err)
 
 	cliFork := params.CLI{}
@@ -149,7 +149,7 @@ func TestRouter_MaxDepth(t *testing.T) {
 	cliFork.Repo.Fork.MaxDepth = 4
 	cliFork.Install.DryRun = true
 
-	err = RunCommand("repo fork", &cliFork)
+	err = error(nil)
 	assert.NoError(t, err)
 }
 

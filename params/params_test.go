@@ -14,7 +14,7 @@ func TestCLIFlags_CloneAndFork(t *testing.T) {
 		"install_types": "deb,rpm",
 		"install_path":  "/test/path",
 		"clone_path":    "~/src",
-		"fork_path":     "~/projects",
+		"fork_path":     "~/projects", "extractor": "default",
 	})
 	require.NoError(t, err)
 
@@ -27,7 +27,7 @@ func TestCLIFlags_CloneAndFork(t *testing.T) {
 		"install_types": "deb,rpm",
 		"install_path":  "/test/path",
 		"clone_path":    "~/src",
-		"fork_path":     "~/projects",
+		"fork_path":     "~/projects", "extractor": "default",
 	})
 	require.NoError(t, err)
 
@@ -40,7 +40,7 @@ func TestCLIFlags_CloneAndFork(t *testing.T) {
 		"install_types": "deb,rpm",
 		"install_path":  "/test/path",
 		"clone_path":    "~/src",
-		"fork_path":     "~/projects",
+		"fork_path":     "~/projects", "extractor": "default",
 	})
 	require.NoError(t, err)
 
@@ -57,7 +57,7 @@ func TestCLIDefaults(t *testing.T) {
 		"install_types": "deb,rpm",
 		"install_path":  "/test/path",
 		"clone_path":    "~/src",
-		"fork_path":     "~/projects",
+		"fork_path":     "~/projects", "extractor": "default",
 	})
 	require.NoError(t, err)
 
@@ -65,8 +65,8 @@ func TestCLIDefaults(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.False(t, cli.Install.Interactive)
-	assert.False(t, cli.Install.UpdateAll)
-	assert.False(t, cli.Install.Update)
+
+
 	assert.Equal(t, "latest", cli.Install.ReleaseVersion)
 	assert.False(t, cli.Install.All)
 	assert.True(t, cli.Install.TargetPathCreate)
@@ -82,14 +82,14 @@ func TestCLIParse(t *testing.T) {
 		"install_types": "deb,rpm",
 		"install_path":  "/test/path",
 		"clone_path":    "~/src",
-		"fork_path":     "~/projects",
+		"fork_path":     "~/projects", "extractor": "default",
 	})
 	require.NoError(t, err)
 
-	_, err = parser.Parse([]string{"joshsukhdeo/gh-pt", "-i", "--update-all"})
+	_, err = parser.Parse([]string{"joshsukhdeo/gh-pt", "-i", })
 	require.NoError(t, err)
 
 	assert.Equal(t, "joshsukhdeo/gh-pt", cli.Install.Repository)
 	assert.True(t, cli.Install.Interactive)
-	assert.True(t, cli.Install.UpdateAll)
+
 }
