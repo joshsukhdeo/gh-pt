@@ -964,7 +964,7 @@ func (r *GithubRelease) Install() error {
 		}
 	}
 
-	if !r.CliParams.NoSaveState {
+	if !r.CliParams.NoSaveState && !r.CliParams.DryRun {
 		st, err := state.LoadState()
 		if err == nil {
 			_ = st.AddApp(&state.InstalledApp{

@@ -47,17 +47,16 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 
 		if app.CompileScript != "" {
 			// Check remote commit to see if we need an update
+			remoteCommit := ""
 			checkCmd := exec.Command("gh", "api", "repos/"+app.Repository+"/commits/HEAD", "--jq", ".sha")
 			if out, err := checkCmd.Output(); err == nil {
-				remoteCommit := strings.TrimSpace(string(out))
+				remoteCommit = strings.TrimSpace(string(out))
 				if remoteCommit != "" && remoteCommit == app.Version {
 					log.Info().Msgf("Skipping %s (already at latest commit %s)", app.Repository, app.Version)
 					continue
 				}
 				if remoteCommit != "" {
 					log.Info().Msgf("Updating %s from %s to %s", app.Repository, app.Version, remoteCommit)
-					// We will update app.Version after successful compile
-					app.Version = remoteCommit
 				}
 			} else {
 				log.Warn().Msgf("Could not check remote commit for %s, proceeding with update", app.Repository)
@@ -82,6 +81,10 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 				log.Error().Err(err).Msgf("Failed to update %s via compile script", app.Repository)
 			} else {
 				log.Info().Msgf("Successfully updated %s via compile script", app.Repository)
+				if remoteCommit != "" {
+					app.Version = remoteCommit
+				}
+
 				state.LogHistory("update", app.Repository, app.Version)
 				// Save the updated version to state
 				st.AddApp(app)
@@ -134,7 +137,12 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 		appParams.Global = app.Global
 		appParams.ReleaseAsset = app.ReleaseAsset
 		appParams.ReleaseAssetRegexp = app.ReleaseRegexp
-		appParams.ReleaseAssetRegexps = []string{app.ReleaseRegexp}
+		if appParams.ReleaseAssetRegexp == "" {
+			appParams.ReleaseAssetRegexps = buildRegexFromTypes(appParams.Type, appParams.Wine)
+			appParams.ReleaseAssetRegexp = strings.Join(appParams.ReleaseAssetRegexps, " | ")
+		} else {
+			appParams.ReleaseAssetRegexps = strings.Split(app.ReleaseRegexp, " | ")
+		}
 		appParams.Rename = app.Rename
 		if len(app.Type) > 0 {
 			appParams.Type = app.Type
@@ -176,11 +184,8 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 		// Always overwrite during updates since we confirmed there's a new version
 		appParams.Overwrite = true
 
-		// Use the new release version as the asset regex matcher instead of
-		// the stored restrictive regex, so future assets are matched correctly.
-		// The stored regex was generated for the previous release and may not
-		// match assets from the new release.
-		appParams.ReleaseAssetRegexps = []string{latestRelease.Name}
+		// We trust the app.ReleaseRegexp stored in state.json because it was
+		// already stripped of version numbers and replaced with .*
 
 		installRelease = release.MakeGithubRelease(&appParams, ghClient)
 		err = installRelease.Install()
