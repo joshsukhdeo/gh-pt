@@ -18,6 +18,9 @@ func main() {
 		os.Exit(1)
 	}
 
+	if len(os.Args) == 1 {
+		os.Args = append(os.Args, "--help")
+	}
 	var cli params.CLI
 	cfg, _ := config.LoadConfig()
 
