@@ -297,25 +297,29 @@ func BinarySelector(criteria BinaryMatchCriteria) (ISelector, error) {
 
 		for _, method := range precedence {
 			if method == "ouch" {
-				if err := exec.Command("ouch", "d", criteria.DownloadPath, "-y", "-q", "--dir", extractDir).Run(); err == nil {
-					log.Info().Msg("delegated archive extraction to ouch")
-					extracted = true
+				if _, err := exec.LookPath("ouch"); err == nil {
+					if err := exec.Command("ouch", "d", criteria.DownloadPath, "-y", "-q", "--dir", extractDir).Run(); err == nil {
+						log.Info().Msg("delegated archive extraction to ouch")
+						extracted = true
+					}
 					break
 				}
 			} else if method == "native" {
 				if isZip {
-					if err := exec.Command("unzip", "-q", criteria.DownloadPath, "-d", extractDir).Run(); err == nil {
-						extracted = true
-					} else if err := exec.Command("7z", "x", criteria.DownloadPath, "-o"+extractDir, "-y").Run(); err == nil {
-						extracted = true
-					} else if err := exec.Command("tar", "-xf", criteria.DownloadPath, "-C", extractDir).Run(); err == nil {
-						extracted = true
+					if _, err := exec.LookPath("unzip"); err == nil {
+						if err := exec.Command("unzip", "-q", criteria.DownloadPath, "-d", extractDir).Run(); err == nil {
+							extracted = true
+						}
+					} else if _, err := exec.LookPath("7z"); err == nil {
+						if err := exec.Command("7z", "x", criteria.DownloadPath, "-o"+extractDir, "-y").Run(); err == nil {
+							extracted = true
+						}
 					}
 				} else {
-					if err := exec.Command("tar", "-xzf", criteria.DownloadPath, "-C", extractDir).Run(); err == nil {
-						extracted = true
-					} else if err := exec.Command("7z", "x", criteria.DownloadPath, "-o"+extractDir, "-y").Run(); err == nil {
-						extracted = true
+					if _, err := exec.LookPath("tar"); err == nil {
+						if err := exec.Command("tar", "-xzf", criteria.DownloadPath, "-C", extractDir).Run(); err == nil {
+							extracted = true
+						}
 					}
 				}
 				if extracted {
