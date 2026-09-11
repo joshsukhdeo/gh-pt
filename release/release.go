@@ -766,7 +766,7 @@ func (r *GithubRelease) Install() error {
 			Names:         r.CliParams.AssetBinaries,
 			Matcher:       r.CliParams.AssetBinariesRegexp,
 			Interactive:   r.CliParams.Interactive,
-			NativeExtract: r.CliParams.NativeExtract,
+			Extractor: r.CliParams.Extractor,
 		})
 		if execErr != nil {
 			log.Error().
@@ -981,7 +981,7 @@ func (r *GithubRelease) Install() error {
 				AssetBinariesRegexp: r.CliParams.AssetBinariesRegexp,
 				PackageNames:        r.InstalledPackageNames,
 				Pinned:              r.CliParams.PinInstall,
-				NativeExtract:       r.CliParams.NativeExtract,
+				Extractor:           r.CliParams.Extractor,
 				IsPrerelease:        releases[0].Prerelease,
 			})
 		} else {

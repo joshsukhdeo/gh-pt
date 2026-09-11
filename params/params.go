@@ -48,7 +48,7 @@ type CommonInstallFlags struct {
 	Wine                 string            `default:"off" enum:"force,priority,allow,off" env:"GH_PT_WINE" help:"Wine mode."`
 	AllowForeignArch     bool              `env:"GH_PT_ALLOW_FOREIGN_ARCH" help:"Allow installing assets with foreign architectures."`
 	AllowRootUserInstall bool              `help:"Allow installation to user-local paths when running as root."`
-	NativeExtract        bool              `env:"GH_PT_NATIVE_EXTRACT" help:"Use native OS utilities for archive extraction."`
+	Extractor            string            `env:"GH_PT_EXTRACTOR" help:"Archive extractor precedence (default, ouch, native, internal)." default:"${extractor}"`
 	TargetPathCreate     bool              `default:"true" negatable:"" help:"Create target installation directory if it does not exist."`
 	Overwrite            bool              `default:"false" short:"f" name:"force" aliases:"overwrite" help:"Overwrite target binaries."`
 	PinInstall           bool              `name:"pin-install" default:"false" help:"Pin this installation to the current version."`

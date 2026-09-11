@@ -90,7 +90,7 @@ func handleCategoryMenu(cfg *config.Config, category string) {
 				fmt.Sprintf("DisablePrompts: %t", cfg.Core.DisablePrompts),
 				fmt.Sprintf("NoSaveState: %t", cfg.Core.NoSaveState),
 				fmt.Sprintf("Wine: %s", cfg.Core.Wine),
-				fmt.Sprintf("NativeExtract: %t", cfg.Core.NativeExtract),
+				fmt.Sprintf("Extractor: %t", cfg.Core.Extractor),
 				fmt.Sprintf("KeepSuffixes: %t", cfg.Core.KeepSuffixes),
 				fmt.Sprintf("VTApiKey: %s", cfg.Core.VTApiKey),
 				fmt.Sprintf("AllowPrerelease: %t", cfg.Core.AllowPrerelease),
@@ -156,8 +156,8 @@ func editField(cfg *config.Config, category, selected string) {
 			cfg.Core.DisablePrompts, _ = pterm.DefaultInteractiveConfirm.WithDefaultText("DisablePrompts").WithDefaultValue(cfg.Core.DisablePrompts).Show()
 		case "NoSaveState":
 			cfg.Core.NoSaveState, _ = pterm.DefaultInteractiveConfirm.WithDefaultText("NoSaveState").WithDefaultValue(cfg.Core.NoSaveState).Show()
-		case "NativeExtract":
-			cfg.Core.NativeExtract, _ = pterm.DefaultInteractiveConfirm.WithDefaultText("NativeExtract").WithDefaultValue(cfg.Core.NativeExtract).Show()
+		case "Extractor":
+			cfg.Core.Extractor, _ = pterm.DefaultInteractiveTextInput.WithDefaultText("Extractor").WithDefaultValue(cfg.Core.Extractor).Show()
 		case "KeepSuffixes":
 			cfg.Core.KeepSuffixes, _ = pterm.DefaultInteractiveConfirm.WithDefaultText("KeepSuffixes").WithDefaultValue(cfg.Core.KeepSuffixes).Show()
 		case "AllowPrerelease":

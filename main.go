@@ -32,6 +32,7 @@ func main() {
 		"clone_path":    cmd.GetDefaultClonePath(),
 		"fork_path":     cmd.GetDefaultForkPath(),
 		"version":       "2.0.0",
+		"extractor":     "default",
 	}
 
 	if cfg != nil {
@@ -43,6 +44,9 @@ func main() {
 		}
 		if cfg.Paths.ClonePath != "" {
 			vars["clone_path"] = cfg.Paths.ClonePath
+		}
+		if cfg.Core.Extractor != "" {
+			vars["extractor"] = cfg.Core.Extractor
 		}
 		if cfg.Paths.ForkPath != "" {
 			vars["fork_path"] = cfg.Paths.ForkPath

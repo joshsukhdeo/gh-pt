@@ -167,7 +167,7 @@ type BinaryMatchCriteria struct {
 	Names         []string
 	Matcher       string
 	Interactive   bool
-	NativeExtract bool
+	Extractor string
 }
 
 func AssetSelector(ghClient GithubClient, repo string, criteria AssetMatchCriteria) (ISelector, error) {
@@ -280,23 +280,50 @@ func BinarySelector(criteria BinaryMatchCriteria) (ISelector, error) {
 
 	if isNativePkg {
 		err = archiver.ErrNoMatch
-	} else if criteria.NativeExtract && (isTarball || isZip) {
-		log.Info().Msg("delegating archive extraction to native OS utilities for maximum performance")
+	} else if isTarball || isZip {
+		precedence := []string{"ouch", "native", "internal"}
+		if criteria.Extractor != "" && criteria.Extractor != "default" {
+			if criteria.Extractor == "internal" {
+				precedence = []string{"internal"}
+			} else if criteria.Extractor == "native" {
+				precedence = []string{"native", "internal"}
+			} else if criteria.Extractor == "ouch" {
+				precedence = []string{"ouch", "native", "internal"}
+			}
+		}
+
 		extractDir, _ := os.MkdirTemp("", "gh-ext-")
 		extracted := false
-		if isZip {
-			if err := exec.Command("unzip", "-q", criteria.DownloadPath, "-d", extractDir).Run(); err == nil {
-				extracted = true
-			} else if err := exec.Command("7z", "x", criteria.DownloadPath, "-o"+extractDir, "-y").Run(); err == nil {
-				extracted = true
-			} else if err := exec.Command("tar", "-xf", criteria.DownloadPath, "-C", extractDir).Run(); err == nil {
-				extracted = true
-			}
-		} else {
-			if err := exec.Command("tar", "-xzf", criteria.DownloadPath, "-C", extractDir).Run(); err == nil {
-				extracted = true
-			} else if err := exec.Command("7z", "x", criteria.DownloadPath, "-o"+extractDir, "-y").Run(); err == nil {
-				extracted = true
+
+		for _, method := range precedence {
+			if method == "ouch" {
+				if err := exec.Command("ouch", "d", criteria.DownloadPath, "-y", "-q", "--dir", extractDir).Run(); err == nil {
+					log.Info().Msg("delegated archive extraction to ouch")
+					extracted = true
+					break
+				}
+			} else if method == "native" {
+				if isZip {
+					if err := exec.Command("unzip", "-q", criteria.DownloadPath, "-d", extractDir).Run(); err == nil {
+						extracted = true
+					} else if err := exec.Command("7z", "x", criteria.DownloadPath, "-o"+extractDir, "-y").Run(); err == nil {
+						extracted = true
+					} else if err := exec.Command("tar", "-xf", criteria.DownloadPath, "-C", extractDir).Run(); err == nil {
+						extracted = true
+					}
+				} else {
+					if err := exec.Command("tar", "-xzf", criteria.DownloadPath, "-C", extractDir).Run(); err == nil {
+						extracted = true
+					} else if err := exec.Command("7z", "x", criteria.DownloadPath, "-o"+extractDir, "-y").Run(); err == nil {
+						extracted = true
+					}
+				}
+				if extracted {
+					log.Info().Msg("delegated archive extraction to native OS utilities")
+					break
+				}
+			} else if method == "internal" {
+				break
 			}
 		}
 

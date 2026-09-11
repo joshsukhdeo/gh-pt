@@ -205,8 +205,8 @@ func (r *RootCLI) RunInstall() error {
 				}
 				if r.Wine == "off" && cfg.Core.Wine != "" && cfg.Core.Wine != "off" {
 				}
-				if !r.NativeExtract {
-					r.NativeExtract = cfg.Core.NativeExtract
+				if r.Extractor == "" || r.Extractor == "default" {
+					r.Extractor = cfg.Core.Extractor
 				}
 				if !r.KeepSuffixes {
 					r.KeepSuffixes = cfg.Core.KeepSuffixes

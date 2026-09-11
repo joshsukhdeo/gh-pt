@@ -24,7 +24,7 @@ type InstalledApp struct {
 	AssetBinariesRegexp string            `json:"asset_binaries_regexp"`
 	PackageNames        []string          `json:"package_names,omitempty"`
 	Pinned              bool              `json:"pinned,omitempty"`
-	NativeExtract       bool              `json:"native_extract"`
+	Extractor           string            `json:"extractor,omitempty"`
 	Clone               bool              `json:"clone,omitempty"`
 	Fork                bool              `json:"fork,omitempty"`
 	MaxDepth            int               `json:"max_depth,omitempty"`

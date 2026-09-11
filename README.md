@@ -27,7 +27,7 @@ gh extension install joshsukhdeo/gh-pt
 - **Wine Support:** Can pull and install Windows `.exe`/`.msi` binaries on Linux and FreeBSD with `--wine allow`, `--wine priority`, or `--wine force`.
 - **Architecture Safety:** Rejects release assets for foreign architectures by default; use `--allow-foreign-arch` when a cross-architecture asset is intentional.
 - **Checksum Verification:** Verifies downloaded assets against release checksum files when available.
-- **Safe Extraction and Removal:** Supports native `tar`/`7z` extraction with `--native-extract`, protects uninstall paths from traversal, and offers `--dry-run` for previewing an installation.
+- **Safe Extraction and Removal:** Supports customizable extraction precedence (ouch, native, internal) via `--extractor`, protects uninstall paths from traversal, and offers `--dry-run` for previewing an installation.
 - **AI-Assisted Installation:** `--ai` enables repository analysis, `scan --ai` checks source before installation, and `source` generates and runs a build script for repositories without usable release binaries.
 - **VirusTotal Checks:** Optional VirusTotal binary scanning with `--vt-api-key`; `--skip-vt-sandbox` bypasses sandbox uploads for unknown hashes.
 - **Clean Naming:** Automatically strips messy hardware/OS tags (like `-x86_64-linux`) and redundant version strings from the final installed binary name.
@@ -178,7 +178,7 @@ allow_wine: false
 prompt_rename: true
 wine: "off"
 verify_checksum: true
-native_extract: false
+extractor: "default"
 ```
 
 The configuration precedence is: `CLI Argument > Environment Variable > config.yml > Default`.

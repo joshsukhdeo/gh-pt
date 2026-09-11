@@ -150,7 +150,7 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 		appParams.All = app.All
 		appParams.AssetBinaries = app.AssetBinaries
 		appParams.AssetBinariesRegexp = app.AssetBinariesRegexp
-		appParams.NativeExtract = app.NativeExtract
+		appParams.Extractor = app.Extractor
 		// Reset version to latest to ensure we get the latest
 		appParams.ReleaseVersion = "latest"
 		if app.IsPrerelease {

@@ -588,7 +588,7 @@ func editStateAppFields(st *state.State) {
 			fmt.Sprintf("ReleaseAsset: %s", app.ReleaseAsset),
 			fmt.Sprintf("Version: %s", app.Version),
 			fmt.Sprintf("Disabled: %t", app.Disabled),
-			fmt.Sprintf("NativeExtract: %t", app.NativeExtract),
+			fmt.Sprintf("Extractor: %t", app.Extractor),
 			fmt.Sprintf("IsPrerelease: %t", app.IsPrerelease),
 			"Back",
 		}
@@ -619,8 +619,8 @@ func editStateAppFields(st *state.State) {
 			app.Global, _ = pterm.DefaultInteractiveConfirm.WithDefaultText("Global").WithDefaultValue(app.Global).Show()
 		case "Disabled":
 			app.Disabled, _ = pterm.DefaultInteractiveConfirm.WithDefaultText("Disabled").WithDefaultValue(app.Disabled).Show()
-		case "NativeExtract":
-			app.NativeExtract, _ = pterm.DefaultInteractiveConfirm.WithDefaultText("NativeExtract").WithDefaultValue(app.NativeExtract).Show()
+		case "Extractor":
+			app.Extractor, _ = pterm.DefaultInteractiveTextInput.WithDefaultText("Extractor").WithDefaultValue(app.Extractor).Show()
 		case "IsPrerelease":
 			app.IsPrerelease, _ = pterm.DefaultInteractiveConfirm.WithDefaultText("IsPrerelease").WithDefaultValue(app.IsPrerelease).Show()
 		}
