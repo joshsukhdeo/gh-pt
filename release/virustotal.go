@@ -20,6 +20,7 @@ import (
 
 var vtBaseURL = "https://www.virustotal.com/api/v3"
 var vtPollDelay = 15 * time.Second
+var vtSleep = time.Sleep
 
 func doVTRequestWithRetry(client *http.Client, req *http.Request) (*http.Response, error) {
 	for {

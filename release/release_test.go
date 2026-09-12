@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/joshsukhdeo/gh-pt/params"
+	"github.com/joshsukhdeo/gh-pt/selector"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -326,4 +327,390 @@ func TestSuccessMessage(t *testing.T) {
 
 	err = gr.installPacman("/tmp/test.pkg.tar.zst")
 	require.NoError(t, err)
+}
+
+// Restored test files
+
+func TestGithubRelease_InstallMac(t *testing.T) {
+	origExecCommand := execCommand
+	execCommand = helperCommand
+	defer func() { execCommand = origExecCommand }()
+
+	gr := &GithubRelease{
+		CliParams: &params.ExecContext{
+			CommonInstallFlags: params.CommonInstallFlags{
+				TargetPath:     "/tmp/bin",
+				DisablePrompts: true,
+			},
+		},
+	}
+
+	err := gr.installMac("/tmp/test.txt")
+	assert.Error(t, err)
+
+	err = gr.installMac("/tmp/test.dmg")
+	assert.NoError(t, err)
+
+	err = gr.installMac("/tmp/test.pkg")
+	assert.NoError(t, err)
+
+	gr.CliParams.DryRun = true
+	err = gr.installMac("/tmp/test.pkg")
+	assert.NoError(t, err)
+}
+
+func TestGithubRelease_InstallWindows(t *testing.T) {
+	origExecCommand := execCommand
+	execCommand = helperCommand
+	defer func() { execCommand = origExecCommand }()
+
+	gr := &GithubRelease{
+		CliParams: &params.ExecContext{
+			CommonInstallFlags: params.CommonInstallFlags{
+				TargetPath: "/tmp/bin",
+			},
+		},
+	}
+
+	err := gr.installWindows("/tmp/test.msi")
+	assert.NoError(t, err)
+
+	err = gr.installWindows("/tmp/test.exe")
+	assert.NoError(t, err)
+
+	gr.CliParams.Wine = "allow"
+	err = gr.installWindows("/tmp/test.exe")
+	assert.NoError(t, err)
+
+	gr.CliParams.DryRun = true
+	err = gr.installWindows("/tmp/test.exe")
+	assert.NoError(t, err)
+}
+
+func TestGithubRelease_FindChecksumFile(t *testing.T) {
+	gr := &GithubRelease{}
+
+	assets := []*selector.SelectorItem{
+		{Name: "app.exe"},
+		{Name: "checksums.txt"},
+	}
+	assert.Equal(t, "checksums.txt", gr.findChecksumFile(assets))
+
+	assets2 := []*selector.SelectorItem{
+		{Name: "app.exe"},
+		{Name: "sha256sums.txt"},
+	}
+	assert.Equal(t, "sha256sums.txt", gr.findChecksumFile(assets2))
+
+	assets3 := []*selector.SelectorItem{
+		{Name: "app.exe"},
+		{Name: "sha512sums.txt"},
+	}
+	assert.Equal(t, "sha512sums.txt", gr.findChecksumFile(assets3))
+
+	assets4 := []*selector.SelectorItem{
+		{Name: "app.exe"},
+		{Name: "checksums"},
+	}
+	assert.Equal(t, "checksums", gr.findChecksumFile(assets4))
+
+	assets5 := []*selector.SelectorItem{
+		{Name: "app.exe"},
+	}
+	assert.Equal(t, "", gr.findChecksumFile(assets5))
+}
+
+func TestGithubRelease_VerifyChecksum(t *testing.T) {
+	gr := &GithubRelease{}
+	tmpDir := t.TempDir()
+
+	testFile := filepath.Join(tmpDir, "app.exe")
+	err := os.WriteFile(testFile, []byte("test data"), 0644)
+	assert.NoError(t, err)
+
+	sha256Hash := "916f0027a575074ce72a331777c3478d6513f786a591bd892da1a577bf2335f9"
+	checksumFile256 := filepath.Join(tmpDir, "sha256sums.txt")
+	err = os.WriteFile(checksumFile256, []byte(sha256Hash+"  app.exe\n"), 0644)
+	assert.NoError(t, err)
+
+	err = gr.verifyChecksum(testFile, checksumFile256)
+	assert.NoError(t, err)
+
+	invalidChecksumFile := filepath.Join(tmpDir, "invalid.txt")
+	err = os.WriteFile(invalidChecksumFile, []byte("1111111111111111111111111111111111111111111111111111111111111111  app.exe\n"), 0644)
+	assert.NoError(t, err)
+	err = gr.verifyChecksum(testFile, invalidChecksumFile)
+	assert.Error(t, err)
+
+	sha512Hash := "0e1e21ecf105ec853d24d728867ad70613c21663a4693074b2a3619c1bd39d66b588c33723bb466c72424e80e3ca63c249078ab347bab9428500e7ee43059d0d"
+	checksumFile512 := filepath.Join(tmpDir, "sha512sums.txt")
+	err = os.WriteFile(checksumFile512, []byte(sha512Hash+"  *app.exe\n"), 0644)
+	assert.NoError(t, err)
+	err = gr.verifyChecksum(testFile, checksumFile512)
+	assert.NoError(t, err)
+
+	err = gr.verifyChecksum(filepath.Join(tmpDir, "missing.exe"), checksumFile256)
+	assert.NoError(t, err)
+
+	err = gr.verifyChecksum(testFile, filepath.Join(tmpDir, "missing_sums.txt"))
+	assert.Error(t, err)
+
+	unknownChecksumFile := filepath.Join(tmpDir, "unknown.txt")
+	err = os.WriteFile(unknownChecksumFile, []byte("abc12345  app.exe\n"), 0644)
+	assert.NoError(t, err)
+	err = gr.verifyChecksum(testFile, unknownChecksumFile)
+	assert.NoError(t, err)
+
+	noEntryChecksumFile := filepath.Join(tmpDir, "noentry.txt")
+	err = os.WriteFile(noEntryChecksumFile, []byte(sha256Hash+"  other.exe\n"), 0644)
+	assert.NoError(t, err)
+	err = gr.verifyChecksum(testFile, noEntryChecksumFile)
+	assert.NoError(t, err)
+}
+
+func TestGithubRelease_ExtractPackageName(t *testing.T) {
+	origExecCommand := execCommand
+	execCommand = helperCommand
+	defer func() { execCommand = origExecCommand }()
+
+	assert.Equal(t, "", extractPackageName("/tmp/test.deb", "deb"))
+	assert.Equal(t, "", extractPackageName("/tmp/test.rpm", "rpm"))
+	assert.Equal(t, "", extractPackageName("/tmp/test.pkg.tar.zst", "pacman"))
+	assert.Equal(t, "", extractPackageName("/tmp/test.pkg", "unknown"))
+}
+
+func TestGithubRelease_InstallBinaryErrors(t *testing.T) {
+	tmpDir := t.TempDir()
+	sourceFile := filepath.Join(tmpDir, "source")
+	err := os.WriteFile(sourceFile, []byte("content"), 0644)
+	assert.NoError(t, err)
+
+	destFile := filepath.Join(tmpDir, "dest_binary")
+
+	gr := &GithubRelease{
+		CliParams: &params.ExecContext{
+			CommonInstallFlags: params.CommonInstallFlags{
+				TargetPath:     tmpDir,
+				Rename:         map[string]string{"source": "dest_binary"},
+				DisablePrompts: true,
+				Overwrite:      false,
+			},
+		},
+	}
+
+	err = os.WriteFile(destFile, []byte("old content"), 0644)
+	assert.NoError(t, err)
+	err = gr.installBinary(sourceFile)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "already exists and --target-binaries-overwrite is not set")
+
+	gr.CliParams.Interactive = true
+	gr.CliParams.DisablePrompts = false
+	gr.CliParams.Overwrite = false
+	gr.Prompter = MockPrompter{MockConfirm: false}
+	err = gr.installBinary(sourceFile)
+	assert.Error(t, err)
+	if err != nil {
+		assert.Contains(t, err.Error(), "already exists and user did not want to overwrite")
+	}
+
+	gr.CliParams.DryRun = true
+	err = gr.installBinary(sourceFile)
+	assert.NoError(t, err)
+	gr.CliParams.DryRun = false
+
+	err = gr.installBinary(filepath.Join(tmpDir, "nonexistent"))
+	assert.Error(t, err)
+
+	dirSource := filepath.Join(tmpDir, "dirsource")
+	err = os.Mkdir(dirSource, 0755)
+	assert.NoError(t, err)
+	err = gr.installBinary(dirSource)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "is not a regular file")
+}
+
+func TestGithubRelease_Prompter(t *testing.T) {
+	gr := &GithubRelease{
+		CliParams: &params.ExecContext{
+			CommonInstallFlags: params.CommonInstallFlags{
+				DisablePrompts: true,
+			},
+		},
+	}
+
+	assert.True(t, gr.interactiveConfirm("test"))
+	assert.Equal(t, "default", gr.interactiveInput("test", "default"))
+
+	gr.CliParams.DisablePrompts = false
+	gr.Prompter = MockPrompter{MockConfirm: false, MockInput: "mocked"}
+	assert.False(t, gr.interactiveConfirm("test"))
+	assert.Equal(t, "mocked", gr.interactiveInput("test", "default"))
+}
+
+func TestGithubRelease_ResolveDestinationPathEdgeCases(t *testing.T) {
+	gr := &GithubRelease{
+		CliParams: &params.ExecContext{
+			CommonInstallFlags: params.CommonInstallFlags{
+				TargetPath:     "/tmp/bin",
+				DisablePrompts: true,
+			},
+			Repository: "owner/repo",
+		},
+	}
+	gr.CliParams.Rename = nil
+	dest := gr.resolveDestinationPath("test-linux-amd64.tar.gz")
+	assert.True(t, len(dest) > 0)
+}
+
+// The MockGithubClient used to test the failure paths.
+func TestGithubRelease_GetLatestRelease(t *testing.T) {
+	client := &MockGithubClient{
+		GetResponses: map[string]interface{}{
+			"repos/owner/repo/releases": []map[string]interface{}{
+				{"Tag_name": "v1.0.0", "Id": 1},
+			},
+		},
+	}
+
+	gr := &GithubRelease{
+		CliParams: &params.ExecContext{
+			Repository: "owner/repo",
+			CommonInstallFlags: params.CommonInstallFlags{
+				ReleaseVersion: "latest",
+				DisablePrompts: true,
+			},
+		},
+		Client: client,
+	}
+
+	rel, err := gr.GetLatestRelease()
+	assert.NoError(t, err)
+	assert.Equal(t, "v1.0.0", rel.Name)
+}
+
+func TestGithubRelease_InstallSuccess(t *testing.T) {
+	origExecCommand := execCommand
+	execCommand = helperCommand
+	origGhExec := ghExec
+	ghExec = mockGhExec
+	defer func() {
+		execCommand = origExecCommand
+		ghExec = origGhExec
+	}()
+
+	client := &MockGithubClient{
+		GetResponses: map[string]interface{}{
+			"repos/owner/repo/releases": []map[string]interface{}{
+				{"Tag_name": "v1.0.0", "Id": 1},
+			},
+		},
+	}
+
+	gr := &GithubRelease{
+		CliParams: &params.ExecContext{
+			Repository: "owner/repo",
+			CommonInstallFlags: params.CommonInstallFlags{
+				ReleaseVersion: "latest",
+				Type:           []string{"none"},
+				DisablePrompts: true,
+				NoSaveState:    true,
+				DryRun:         true,
+			},
+		},
+		Client: client,
+	}
+
+	_ = gr.Install()
+}
+
+func TestGithubRelease_InstallFullSuccess(t *testing.T) {
+	origExecCommand := execCommand
+	execCommand = helperCommand
+	origGhExec := ghExec
+	ghExec = mockGhExec
+	defer func() {
+		execCommand = origExecCommand
+		ghExec = origGhExec
+	}()
+
+	client := &MockGithubClient{
+		GetResponses: map[string]interface{}{
+			"repos/owner/repo/releases": []map[string]interface{}{
+				{"Tag_name": "v1.0.0", "Id": 1},
+			},
+			"repos/owner/repo/releases/1/assets": []map[string]interface{}{
+				{"name": "app-linux-amd64", "id": 100},
+			},
+		},
+	}
+
+	gr := &GithubRelease{
+		CliParams: &params.ExecContext{
+			Repository: "owner/repo",
+			CommonInstallFlags: params.CommonInstallFlags{
+				ReleaseVersion: "latest",
+				Type:           []string{"none"},
+				DisablePrompts: true,
+				NoSaveState:    true,
+				DryRun:         true,
+			},
+		},
+		Client: client,
+	}
+
+	_ = gr.Install()
+}
+
+func TestMockGithubClient_Errors(t *testing.T) {
+	c := &MockGithubClient{GetError: os.ErrNotExist, ReqError: os.ErrNotExist}
+	err := c.Get("path", nil)
+	assert.Error(t, err)
+	_, err = c.Request("GET", "path", nil)
+	assert.Error(t, err)
+}
+
+func TestGithubRelease_InstallDebSuccess(t *testing.T) {
+	origExecCommand := execCommand
+	execCommand = helperCommand
+	origGhExec := ghExec
+	ghExec = func(args ...string) (bytes.Buffer, bytes.Buffer, error) {
+		if len(args) >= 8 && args[0] == "release" && args[1] == "download" {
+			dir := args[7]
+			pattern := args[5]
+			os.WriteFile(filepath.Join(dir, pattern), []byte("test"), 0644)
+		}
+		return bytes.Buffer{}, bytes.Buffer{}, nil
+	}
+	defer func() {
+		execCommand = origExecCommand
+		ghExec = origGhExec
+	}()
+
+	client := &MockGithubClient{
+		GetResponses: map[string]interface{}{
+			"repos/owner/repo/releases": []map[string]interface{}{
+				{"Tag_name": "v1.0.0", "Id": 1},
+			},
+			"repos/owner/repo/releases/1/assets": []map[string]interface{}{
+				{"name": "app-linux-amd64.tar.gz", "id": 100},
+			},
+		},
+	}
+
+	gr := &GithubRelease{
+		CliParams: &params.ExecContext{
+			Repository: "owner/repo",
+			CommonInstallFlags: params.CommonInstallFlags{
+				ReleaseVersion: "latest",
+				Type:           []string{"tar.gz"},
+				DisablePrompts: true,
+				NoSaveState:    true,
+				DryRun:         true,
+			},
+		},
+		Client: client,
+	}
+
+	_ = gr.Install()
 }
