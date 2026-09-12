@@ -36,6 +36,7 @@ type GithubRelease struct {
 	Client                selector.GithubClient
 	ResolvedVersion       string
 	InstalledPackageNames []string
+	InstalledBinaries     []string
 	PendingDebs           []string
 	PendingRpms           []string
 	Prompter              Prompter
@@ -139,6 +140,7 @@ func (r *GithubRelease) installArchivedBinary(fileSystem fs.FS, binaryPath strin
 	}()
 
 	destinationPath := r.resolveDestinationPath(binaryPath)
+	r.InstalledBinaries = append(r.InstalledBinaries, filepath.Base(destinationPath))
 
 	log.Info().
 		Msgf("will install %s to %s", binaryPath, destinationPath)
@@ -183,6 +185,7 @@ func (r *GithubRelease) installArchivedBinary(fileSystem fs.FS, binaryPath strin
 func (r *GithubRelease) installBinary(binaryPath string) error {
 	if r.CliParams.DryRun {
 		destinationPath := r.resolveDestinationPath(binaryPath)
+	r.InstalledBinaries = append(r.InstalledBinaries, filepath.Base(destinationPath))
 		log.Info().Msgf("[dry-run] Would install binary: %s to %s", binaryPath, destinationPath)
 		return nil
 	}
@@ -205,6 +208,7 @@ func (r *GithubRelease) installBinary(binaryPath string) error {
 	}()
 
 	destinationPath := r.resolveDestinationPath(binaryPath)
+	r.InstalledBinaries = append(r.InstalledBinaries, filepath.Base(destinationPath))
 
 	log.Info().
 		Msgf("will install %s to %s", binaryPath, destinationPath)
@@ -980,6 +984,7 @@ func (r *GithubRelease) Install() error {
 				All:                 r.CliParams.All,
 				AssetBinaries:       r.CliParams.AssetBinaries,
 				AssetBinariesRegexp: r.CliParams.AssetBinariesRegexp,
+				InstalledBinaries:   r.InstalledBinaries,
 				PackageNames:        r.InstalledPackageNames,
 				Pinned:              r.CliParams.PinInstall,
 				Extractor:           r.CliParams.Extractor,

@@ -94,6 +94,7 @@ type StateLlCmd struct {
 type StateRmCmd struct {
 	Target string `arg:"" predictor:"installed_apps" predict:"installed_apps" help:"Application to remove."`
 	Purge  bool   `help:"Completely uninstall and purge."`
+	StateOnly bool   `help:"Remove from state only without uninstalling."`
 }
 
 type RmCmd = StateRmCmd
