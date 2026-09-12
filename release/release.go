@@ -767,6 +767,7 @@ func (r *GithubRelease) Install() error {
 			Matcher:      r.CliParams.AssetBinariesRegexp,
 			Interactive:  r.CliParams.Interactive,
 			Extractor:    r.CliParams.Extractor,
+			Repository:   r.CliParams.Repository,
 		})
 		if execErr != nil {
 			log.Error().

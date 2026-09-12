@@ -168,6 +168,7 @@ type BinaryMatchCriteria struct {
 	Matcher      string
 	Interactive  bool
 	Extractor    string
+	Repository   string
 }
 
 func AssetSelector(ghClient GithubClient, repo string, criteria AssetMatchCriteria) (ISelector, error) {
@@ -350,6 +351,7 @@ func BinarySelector(criteria BinaryMatchCriteria) (ISelector, error) {
 					Items:  items,
 					Prompt: "Select binaries to be installed",
 					Single: false,
+				Repository:       criteria.Repository,
 				}, nil
 			}
 			return &Selector{
@@ -358,6 +360,7 @@ func BinarySelector(criteria BinaryMatchCriteria) (ISelector, error) {
 				NamesMatcher:   criteria.Names,
 				RegexpMatchers: []string{criteria.Matcher},
 				Single:         false,
+				Repository:       criteria.Repository,
 			}, nil
 		}
 		log.Warn().Msg("native extraction failed, falling back to pure Go archiver")
@@ -381,6 +384,7 @@ func BinarySelector(criteria BinaryMatchCriteria) (ISelector, error) {
 					Items:  items,
 					Prompt: "Confirm release binary to be installed",
 					Single: true,
+				Repository:       criteria.Repository,
 				}, nil
 			}
 
@@ -390,6 +394,7 @@ func BinarySelector(criteria BinaryMatchCriteria) (ISelector, error) {
 				NamesMatcher:   criteria.Names,
 				RegexpMatchers: []string{regexp.QuoteMeta(filepath.Base(criteria.DownloadPath))},
 				Single:         true,
+				Repository:       criteria.Repository,
 			}, nil
 		}
 		return nil, err
@@ -425,6 +430,7 @@ func BinarySelector(criteria BinaryMatchCriteria) (ISelector, error) {
 			Items:  items,
 			Prompt: "Select binaries to be installed",
 			Single: false,
+				Repository:       criteria.Repository,
 		}, nil
 	}
 
@@ -434,5 +440,6 @@ func BinarySelector(criteria BinaryMatchCriteria) (ISelector, error) {
 		NamesMatcher:   criteria.Names,
 		RegexpMatchers: []string{criteria.Matcher},
 		Single:         false,
+				Repository:       criteria.Repository,
 	}, nil
 }

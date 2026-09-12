@@ -31,11 +31,12 @@ func (p PtermPrompter) MultiSelect(options []string, prompt string) ([]string, e
 }
 
 type InteractiveSelector struct {
-	Kind     SelectorKind
-	Items    []*SelectorItem
-	Prompt   string
-	Single   bool
-	Prompter Prompter
+	Kind       SelectorKind
+	Items      []*SelectorItem
+	Prompt     string
+	Repository string
+	Single     bool
+	Prompter   Prompter
 }
 
 func (s *InteractiveSelector) showPrompt() ([]string, error) {

@@ -320,7 +320,7 @@ func (r *RootCLI) RunInstall() error {
 	}
 
 	if r.AssetBinariesRegexp == "" {
-		r.AssetBinariesRegexp = fmt.Sprintf("^%s$", strings.Split(r.Repository, "/")[1])
+		r.AssetBinariesRegexp = "(?i).*"
 	}
 
 	if r.ReleaseAssetRegexp == "" {
