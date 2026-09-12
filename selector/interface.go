@@ -257,6 +257,7 @@ func AssetSelector(ghClient GithubClient, repo string, criteria AssetMatchCriter
 		RegexpMatchers:   criteria.Regexps,
 		Single:           true,
 		AllowForeignArch: criteria.AllowForeignArch,
+		Repository:       repo,
 	}, nil
 }
 

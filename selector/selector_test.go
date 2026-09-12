@@ -626,3 +626,34 @@ func TestReleaseSelectorPrereleaseLatest(t *testing.T) {
 		assert.Contains(t, s.RegexpMatchers, "v2.0.0-beta")
 	})
 }
+func TestSelectorFallbackChain(t *testing.T) {
+	items := []*SelectorItem{
+		{Name: "screego_1.12.5_linux_amd64.tar.gz"},
+		{Name: "screego_1.12.5_darwin_amd64.tar.gz"},
+		{Name: "screego_1.12.5_windows_amd64.zip"},
+		{Name: "checksums.txt"},
+		{Name: "screego-client_1.12.5_linux_amd64.tar.gz"},
+	}
+
+	s := &Selector{
+		Kind:             Asset,
+		Items:            items,
+		RegexpMatchers:   []string{`.*(?:amd64.+linux|linux.+amd64).*`},
+		Single:           true,
+		AllowForeignArch: false,
+		Repository:       "screego/server",
+	}
+
+	selected, err := s.Run()
+	if err != nil {
+		t.Fatalf("expected success, got error: %v", err)
+	}
+
+	if len(selected) != 1 {
+		t.Fatalf("expected 1 selected item, got %d. Items: %s, %s", len(selected), selected[0].Name, selected[1].Name)
+	}
+
+	if selected[0].Name != "screego_1.12.5_linux_amd64.tar.gz" {
+		t.Errorf("expected screego_1.12.5_linux_amd64.tar.gz, got %s", selected[0].Name)
+	}
+}
