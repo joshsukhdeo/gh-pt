@@ -20,15 +20,15 @@ else
     gh extension install .
 fi
 
-echo "[+] Managing global binary in /usr/local/bin/gh-pt..."
+echo "[+] Managing global binary in ${HOME}/.local/bin/gh-pt..."
 if [ "$NO_SYMLINK" -eq 1 ]; then
     echo "[*] --no-symlink specified. Hard copying binary..."
-    sudo rm -f /usr/local/bin/gh-pt
-    sudo cp "$(pwd)/gh-pt" /usr/local/bin/gh-pt
+    rm -f ${HOME}/.local/bin/gh-pt
+    cp "$(pwd)/gh-pt" ${HOME}/.local/bin/gh-pt
 else
     echo "[*] Symlinking binary..."
-    sudo rm -f /usr/local/bin/gh-pt
-    sudo ln -s "$(pwd)/gh-pt" /usr/local/bin/gh-pt
+    rm -f ${HOME}/.local/bin/gh-pt
+    ln -s "$(pwd)/gh-pt" ${HOME}/.local/bin/gh-pt
 fi
 
 echo "[+] Done. Test with: gh install --help or gh-pt --help"
