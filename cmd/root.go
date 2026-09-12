@@ -507,7 +507,7 @@ func buildCompilePrompt(repo, buildDir, scriptPath, targetPath string) string {
 		ext = ".ps1"
 	}
 
-	return fmt.Sprintf("Please inspect the repository '%s' (cloned at '%s') and generate an automated compilation/build script at '%s'. The script should follow all build instructions for '%s', compile the application/binaries, install or copy them to '%s', and purge any temporary build artifacts. Format the output as an executable %s script. Please test and then attempt to run the compile script and it is only done when script runs successfully.", repo, buildDir, scriptPath, repo, targetPath, ext)
+	return fmt.Sprintf("Please inspect the repository '%s' (cloned at '%s') and generate an automated compilation/build script at '%s'. The script should follow all build instructions for '%s', compile the application/binaries, create a symlink to the freshly compiled executable in '%s' (do not copy the binary over, symlink it to the build directory), and purge any temporary build artifacts. Format the output as an executable %s script. Please test and then attempt to run the compile script and it is only done when script runs successfully.", repo, buildDir, scriptPath, repo, targetPath, ext)
 }
 
 func buildCompileFixPrompt(repo, buildDir, scriptPath, targetPath, errorOutput string, attempt int) string {
@@ -516,7 +516,7 @@ func buildCompileFixPrompt(repo, buildDir, scriptPath, targetPath, errorOutput s
 		ext = ".ps1"
 	}
 
-	return fmt.Sprintf("The automated compilation script at '%s' for repository '%s' (cloned at '%s') failed to run with the following error output (attempt %d of 2):\n\n%s\n\nPlease fix the script at '%s' so that it successfully compiles and installs the binaries into '%s'. Format the output as an executable %s script. Please fix and then attempt to run the compile script and it is only done when script runs successfully.", scriptPath, repo, buildDir, attempt, errorOutput, scriptPath, targetPath, ext)
+	return fmt.Sprintf("The automated compilation script at '%s' for repository '%s' (cloned at '%s') failed to run with the following error output (attempt %d of 2):\n\n%s\n\nPlease fix the script at '%s' so that it successfully compiles and symlinks the freshly compiled executable into '%s' (do not copy, use a symlink). Format the output as an executable %s script. Please fix and then attempt to run the compile script and it is only done when script runs successfully.", scriptPath, repo, buildDir, attempt, errorOutput, scriptPath, targetPath, ext)
 }
 
 func runAIAgent(aiCmdTemplate, prompt, dir string) error {
