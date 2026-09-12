@@ -22,7 +22,7 @@ import (
 	"github.com/pterm/pterm"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"gopkg.in/natefinch/lumberjack.v2"
+	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 )
 
 type RootCLI struct {
@@ -928,6 +928,14 @@ func buildRegexFromTypes(types []string, wine string) []string {
 			fallbackRegex := fmt.Sprintf(`.*%s.*`, osRegex)
 			matchers = append(matchers, buildFinal(fallbackRegex, t))
 		}
+	}
+
+	for _, t := range types {
+		t = strings.TrimSpace(t)
+		if t == "" {
+			continue
+		}
+		matchers = append(matchers, buildFinal(`.*`, t))
 	}
 
 	var normalMatchers []string

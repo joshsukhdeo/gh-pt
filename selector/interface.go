@@ -97,13 +97,7 @@ func ReleaseSelector(ghClient GithubClient, repo string, version string, interac
 	versionMatcher := version
 	if versionMatcher == "latest" {
 		if prerelease {
-			for _, val := range response {
-				if val.Prerelease {
-					versionMatcher = val.Tag_name
-					break
-				}
-			}
-			if versionMatcher == "latest" && len(response) > 0 {
+			if len(response) > 0 {
 				versionMatcher = response[0].Tag_name
 			}
 		} else {
