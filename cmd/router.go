@@ -42,8 +42,8 @@ func RunCommand(cmdStr string, cli *params.CLI) error {
 		return cli.Search.Run(&r.ExecContext)
 	case "state edit":
 		return EditState()
-	case "show":
-		return ShowInfo(&RootCLI{ExecContext: params.ExecContext{Repository: cli.Show.Repository, ShowAssets: cli.Show.Assets, ShowVersions: cli.Show.Versions, CommonInstallFlags: params.CommonInstallFlags{ReleaseVersion: cli.Show.Version, Stable: cli.Show.Stable, Prerelease: cli.Show.Prerelease}}})
+	case "show", "show <repository>":
+		return ShowInfo(&RootCLI{ExecContext: params.ExecContext{Repository: cli.Show.Repository, Show: true, ShowAssets: cli.Show.Assets, ShowVersions: cli.Show.Versions, CommonInstallFlags: params.CommonInstallFlags{ReleaseVersion: cli.Show.Version, Stable: cli.Show.Stable, Prerelease: cli.Show.Prerelease}}})
 	case "repo clone":
 		r.CommonInstallFlags = cli.Install.CommonInstallFlags // fallback
 		r.Repository = cli.Repo.Clone.Repository

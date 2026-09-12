@@ -247,60 +247,6 @@ func RmStateOnly(target string) error {
 	}
 
 	for _, r := range toRemove {
-		app := st.Apps[r]
-
-		// Uninstall packages via package manager if they were installed
-		if len(app.PackageNames) > 0 {
-			for _, pkgName := range app.PackageNames {
-				log.Info().Msgf("Uninstalling package %s...", pkgName)
-				var cmd *exec.Cmd
-				// Detect which package manager to use
-				if _, err := exec.LookPath("dpkg"); err == nil {
-					cmd = execCommand("sudo", "dpkg", "-r", pkgName)
-				} else if _, err := exec.LookPath("rpm"); err == nil {
-					cmd = execCommand("sudo", "rpm", "-e", pkgName)
-				} else if _, err := exec.LookPath("pacman"); err == nil {
-					cmd = execCommand("sudo", "pacman", "-R", "--noconfirm", pkgName)
-				} else if _, err := exec.LookPath("pkg"); err == nil {
-					cmd = execCommand("sudo", "pkg", "delete", "-y", pkgName)
-				}
-
-				if cmd != nil {
-					if err := cmd.Run(); err != nil {
-						log.Warn().Err(err).Msgf("Failed to uninstall package %s", pkgName)
-					} else {
-						log.Info().Msgf("Successfully uninstalled %s", pkgName)
-					}
-				}
-			}
-		}
-
-		// Delete installed binaries from disk
-		if app.TargetPath != "" {
-			parts := strings.Split(r, "/")
-			repoName := parts[len(parts)-1]
-
-			// If renamed binaries exist, delete those specific files
-			if len(app.Rename) > 0 {
-				for _, renamed := range app.Rename {
-					binPath := filepath.Join(app.TargetPath, renamed)
-					if err := os.Remove(binPath); err != nil && !os.IsNotExist(err) {
-						log.Warn().Err(err).Msgf("Failed to remove binary %s", binPath)
-					} else if err == nil {
-						log.Info().Msgf("Deleted %s", binPath)
-					}
-				}
-			} else {
-				// Try the repo name as the binary name
-				binPath := filepath.Join(app.TargetPath, repoName)
-				if err := os.Remove(binPath); err != nil && !os.IsNotExist(err) {
-					log.Warn().Err(err).Msgf("Failed to remove binary %s", binPath)
-				} else if err == nil {
-					log.Info().Msgf("Deleted %s", binPath)
-				}
-			}
-		}
-
 		delete(st.Apps, r)
 		log.Info().Msgf("Removed %s from state tracking only.", r)
 		state.LogHistory("remove", r, "")
@@ -419,7 +365,7 @@ func RemoveApp(target string, purge bool) error {
 		}
 
 		delete(st.Apps, r)
-		log.Info().Msgf("Removed %s from state tracking only.", r)
+		log.Info().Msgf("Removed %s from state tracking.", r)
 		state.LogHistory("remove", r, "")
 	}
 	return st.Save()
