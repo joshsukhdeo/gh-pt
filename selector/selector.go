@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"path/filepath"
 )
 
 type Selector struct {
@@ -112,6 +113,19 @@ func (s *Selector) Run() ([]*SelectorItem, error) {
 					}
 				}
 				if len(currentMatches) > 0 {
+
+					if s.Kind == Binary {
+						var execMatches []*SelectorItem
+						for _, item := range currentMatches {
+							ext := strings.ToLower(filepath.Ext(item.Name))
+							if ext == "" || ext == ".exe" || ext == ".appimage" || ext == ".bin" || ext == ".deb" || ext == ".rpm" || ext == ".msi" || ext == ".dmg" || ext == ".pkg" {
+								execMatches = append(execMatches, item)
+							}
+						}
+						if len(execMatches) > 0 {
+							currentMatches = execMatches
+						}
+					}
 					// If multiple items match, prefer non-musl over musl on Linux/standard distros
 					var nonMusl []*SelectorItem
 					for _, item := range currentMatches {
