@@ -229,6 +229,9 @@ func (r *RootCLI) RunInstall() error {
 				if !r.KeepSuffixes {
 					r.KeepSuffixes = cfg.Core.KeepSuffixes
 				}
+				if !r.Symlink {
+					r.Symlink = cfg.Core.Symlink
+				}
 
 			}
 		}

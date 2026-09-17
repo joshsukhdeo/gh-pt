@@ -39,6 +39,7 @@ type CoreConfig struct {
 	AllowPrerelease bool   `yaml:"allow_prerelease"`
 	DisableIcons    bool   `yaml:"disable_icons"`
 	LogToFile       bool   `yaml:"log_to_file"`
+	Symlink         bool   `yaml:"symlink"`
 }
 
 func GetConfigPath() string {

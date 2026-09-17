@@ -96,6 +96,7 @@ func handleCategoryMenu(cfg *config.Config, category string) {
 				fmt.Sprintf("AllowPrerelease: %t", cfg.Core.AllowPrerelease),
 				fmt.Sprintf("DisableIcons: %t", cfg.Core.DisableIcons),
 				fmt.Sprintf("LogToFile: %t", cfg.Core.LogToFile),
+				fmt.Sprintf("Symlink: %t", cfg.Core.Symlink),
 				"Back",
 			}
 		}
@@ -166,6 +167,8 @@ func editField(cfg *config.Config, category, selected string) {
 			cfg.Core.DisableIcons, _ = pterm.DefaultInteractiveConfirm.WithDefaultText("DisableIcons").WithDefaultValue(cfg.Core.DisableIcons).Show()
 		case "LogToFile":
 			cfg.Core.LogToFile, _ = pterm.DefaultInteractiveConfirm.WithDefaultText("LogToFile").WithDefaultValue(cfg.Core.LogToFile).Show()
+		case "Symlink":
+			cfg.Core.Symlink, _ = pterm.DefaultInteractiveConfirm.WithDefaultText("Symlink").WithDefaultValue(cfg.Core.Symlink).Show()
 		}
 	}
 }

@@ -165,6 +165,7 @@ vt_api_key: ""
 allow_prerelease: false
 disable_icons: false
 log_to_file: false
+symlink: false
 ```
 
 Use the `config` commands to manage settings:
