@@ -27,7 +27,7 @@ fmt:
 
 lint:
 	@echo "Running linters"
-	golangci-lint run ./...
+	GOTOOLCHAIN=go1.27.1 golangci-lint run ./...
 
 tidy:
 	@echo "Tidying Go modules..."

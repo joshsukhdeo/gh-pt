@@ -62,7 +62,7 @@ func (m *MockGithubClient) Get(path string, response interface{}) error {
 	}
 	if val, ok := m.GetResponses[path]; ok {
 		b, _ := json.Marshal(val)
-		json.Unmarshal(b, response)
+		_ = json.Unmarshal(b, response)
 	}
 	return nil
 }
@@ -678,7 +678,7 @@ func TestGithubRelease_InstallDebSuccess(t *testing.T) {
 		if len(args) >= 8 && args[0] == "release" && args[1] == "download" {
 			dir := args[7]
 			pattern := args[5]
-			os.WriteFile(filepath.Join(dir, pattern), []byte("test"), 0644)
+			_ = os.WriteFile(filepath.Join(dir, pattern), []byte("test"), 0644)
 		}
 		return bytes.Buffer{}, bytes.Buffer{}, nil
 	}

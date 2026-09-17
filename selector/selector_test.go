@@ -28,7 +28,7 @@ func (m *MockGithubClient) Get(path string, response interface{}) error {
 	}
 	if val, ok := m.GetResponses[path]; ok {
 		b, _ := json.Marshal(val)
-		json.Unmarshal(b, response)
+		_ = json.Unmarshal(b, response)
 	}
 	return nil
 }
@@ -168,9 +168,10 @@ func TestSelector_ForeignArchitectureBlacklisting(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, selected, 1)
 
-	if runtime.GOARCH == "amd64" {
+	switch runtime.GOARCH {
+	case "amd64":
 		assert.Equal(t, "app_linux_amd64.tar.gz", selected[0].Name)
-	} else if runtime.GOARCH == "arm64" {
+	case "arm64":
 		assert.Equal(t, "app_linux_arm64.tar.gz", selected[0].Name)
 	}
 }
@@ -368,15 +369,15 @@ func TestBinarySelector(t *testing.T) {
 	// create a temp dummy file to use as download path
 	tmpFileDeb, err := os.CreateTemp("", "gh-pt-test-*.deb")
 	require.NoError(t, err)
-	defer os.Remove(tmpFileDeb.Name())
-	tmpFileDeb.Write([]byte("dummy content"))
-	tmpFileDeb.Close()
+	defer func() { _ = os.Remove(tmpFileDeb.Name()) }()
+	_, _ = tmpFileDeb.Write([]byte("dummy content"))
+	_ = tmpFileDeb.Close()
 
 	tmpFileRpm, err := os.CreateTemp("", "gh-pt-test-*.rpm")
 	require.NoError(t, err)
-	defer os.Remove(tmpFileRpm.Name())
-	tmpFileRpm.Write([]byte("dummy content"))
-	tmpFileRpm.Close()
+	defer func() { _ = os.Remove(tmpFileRpm.Name()) }()
+	_, _ = tmpFileRpm.Write([]byte("dummy content"))
+	_ = tmpFileRpm.Close()
 
 	t.Run("UnsupportedNativeArchiverType", func(t *testing.T) {
 		sel, err := BinarySelector(BinaryMatchCriteria{
@@ -447,9 +448,9 @@ func TestAssetSelectorInteractive(t *testing.T) {
 func TestBinarySelectorArchive(t *testing.T) {
 	tmpFileZip, err := os.CreateTemp("", "gh-pt-test-*.zip")
 	require.NoError(t, err)
-	defer os.Remove(tmpFileZip.Name())
-	tmpFileZip.Write([]byte("PK\x03\x04dummy content"))
-	tmpFileZip.Close()
+	defer func() { _ = os.Remove(tmpFileZip.Name()) }()
+	_, _ = tmpFileZip.Write([]byte("PK\x03\x04dummy content"))
+	_ = tmpFileZip.Close()
 
 	t.Run("InternalExtractor", func(t *testing.T) {
 		sel, err := BinarySelector(BinaryMatchCriteria{
@@ -529,9 +530,9 @@ func TestAssetSelectorErrors(t *testing.T) {
 func TestBinarySelectorArchiveNativeExtractor(t *testing.T) {
 	tmpFileZip, err := os.CreateTemp("", "gh-pt-test-*.zip")
 	require.NoError(t, err)
-	defer os.Remove(tmpFileZip.Name())
-	tmpFileZip.Write([]byte("PK\x03\x04dummy content"))
-	tmpFileZip.Close()
+	defer func() { _ = os.Remove(tmpFileZip.Name()) }()
+	_, _ = tmpFileZip.Write([]byte("PK\x03\x04dummy content"))
+	_ = tmpFileZip.Close()
 
 	t.Run("NativeExtractorZip", func(t *testing.T) {
 		sel, err := BinarySelector(BinaryMatchCriteria{
@@ -547,9 +548,9 @@ func TestBinarySelectorArchiveNativeExtractor(t *testing.T) {
 
 	tmpFileTar, err := os.CreateTemp("", "gh-pt-test-*.tar.gz")
 	require.NoError(t, err)
-	defer os.Remove(tmpFileTar.Name())
-	tmpFileTar.Write([]byte("dummy content"))
-	tmpFileTar.Close()
+	defer func() { _ = os.Remove(tmpFileTar.Name()) }()
+	_, _ = tmpFileTar.Write([]byte("dummy content"))
+	_ = tmpFileTar.Close()
 
 	t.Run("NativeExtractorTarball", func(t *testing.T) {
 		sel, err := BinarySelector(BinaryMatchCriteria{
@@ -567,9 +568,9 @@ func TestBinarySelectorArchiveNativeExtractor(t *testing.T) {
 func TestBinarySelectorOuchExtractor(t *testing.T) {
 	tmpFileZip, err := os.CreateTemp("", "gh-pt-test-*.zip")
 	require.NoError(t, err)
-	defer os.Remove(tmpFileZip.Name())
-	tmpFileZip.Write([]byte("PK\x03\x04dummy content"))
-	tmpFileZip.Close()
+	defer func() { _ = os.Remove(tmpFileZip.Name()) }()
+	_, _ = tmpFileZip.Write([]byte("PK\x03\x04dummy content"))
+	_ = tmpFileZip.Close()
 
 	t.Run("OuchExtractorZip", func(t *testing.T) {
 		sel, err := BinarySelector(BinaryMatchCriteria{

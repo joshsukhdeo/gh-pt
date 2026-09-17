@@ -36,7 +36,7 @@ func TestLogHistory(t *testing.T) {
 
 	file, err := os.Open(logFile)
 	require.NoError(t, err)
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	var entries []HistoryEntry

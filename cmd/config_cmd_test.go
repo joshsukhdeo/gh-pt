@@ -34,8 +34,8 @@ func TestRunAIScan(t *testing.T) {
 	// Since runAIAgent is executed directly via exec.Command, let's mock it using GO_WANT_HELPER_PROCESS
 	// We might need to override the AI cmd template directly to use the mock.
 	aiCmdTemplate := fmt.Sprintf("%s -test.run=TestHelperProcessConfigCmd -- %%s", os.Args[0])
-	os.Setenv("GO_WANT_HELPER_PROCESS_CONFIG_CMD", "1")
-	defer os.Unsetenv("GO_WANT_HELPER_PROCESS_CONFIG_CMD")
+	require.NoError(t, os.Setenv("GO_WANT_HELPER_PROCESS_CONFIG_CMD", "1"))
+	defer func() { _ = os.Unsetenv("GO_WANT_HELPER_PROCESS_CONFIG_CMD") }()
 
 	// Setup mock state with a dummy app
 	st := &state.State{
@@ -90,12 +90,12 @@ func TestRunVTScan(t *testing.T) {
 	}))
 	defer server.Close()
 
-	os.Setenv("VT_API_KEY", "test-api-key")
-	defer os.Unsetenv("VT_API_KEY")
+	require.NoError(t, os.Setenv("VT_API_KEY", "test-api-key"))
+	defer func() { _ = os.Unsetenv("VT_API_KEY") }()
 
 	// Since we can't mock vtBaseURL easily from here, let's just make sure it fails with expected output.
 	// We can test when an API key is missing.
-	os.Unsetenv("VT_API_KEY")
+	_ = os.Unsetenv("VT_API_KEY")
 	cfg.Core.VTApiKey = ""
 	require.NoError(t, config.SaveConfig(cfg))
 

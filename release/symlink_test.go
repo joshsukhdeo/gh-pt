@@ -3,11 +3,12 @@ package release
 import (
 	"os"
 	"path/filepath"
-	"github.com/joshsukhdeo/gh-pt/params"
-	"github.com/joshsukhdeo/gh-pt/selector"
 	"testing"
 
+	"github.com/joshsukhdeo/gh-pt/params"
+	"github.com/joshsukhdeo/gh-pt/selector"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestComputeSymlinkDirName(t *testing.T) {
@@ -45,13 +46,13 @@ func TestExecuteSymlinkInstall(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := filepath.Join(tmpDir, "home")
 	targetPath := filepath.Join(homeDir, ".local", "bin")
-	os.MkdirAll(targetPath, 0755)
+	require.NoError(t, os.MkdirAll(targetPath, 0755))
 
 	t.Setenv("HOME", homeDir)
 	t.Setenv("USERPROFILE", homeDir)
 
 	assetFile := filepath.Join(tmpDir, "jq-linux-amd64")
-	os.WriteFile(assetFile, []byte("dummy binary"), 0755)
+	require.NoError(t, os.WriteFile(assetFile, []byte("dummy binary"), 0755))
 
 	r := &GithubRelease{
 		CliParams: &params.ExecContext{

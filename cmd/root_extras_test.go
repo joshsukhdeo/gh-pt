@@ -13,5 +13,5 @@ func TestGetDefaultPaths(t *testing.T) {
 }
 
 func TestGetEnvPrefix(t *testing.T) {
-	assert.Equal(t, "GH_INSTALL", GetEnvPrefix())
+	assert.Equal(t, "GH_PT", GetEnvPrefix())
 }

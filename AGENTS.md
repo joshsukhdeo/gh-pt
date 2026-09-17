@@ -30,7 +30,7 @@ make tidy
   - `root.go`: Command routing (`RootCLI.Run()`), default install type heuristics, distro detection (`/etc/os-release`, `ID_LIKE`), and hardware acceleration detection (NPU `/sys/class/accel`, GPU `/dev/dri`).
   - `state_mgmt.go`: State inspection, removal (`--rm-saved-state`), uninstallation logic per package manager (`dpkg -r`, `rpm -e`, `pacman -R`, `pkg delete`, or `os.Remove`), and pin management (`--pin`).
   - `update.go`: Update runner (`-U`/`-u`), replaying installation params from state entries while preserving pin rules; delegates git repository syncing (`gh repo sync`) for cloned and forked apps.
-- `params/params.go`: Kong struct tag definitions for all CLI flags (including `--clone` and `--fork`), environment variable bindings (`GH_INSTALL_*`), and custom types.
+- `params/params.go`: Kong struct tag definitions for all CLI flags (including `--clone` and `--fork`), environment variable bindings (`GH_PT_*`), and custom types.
 - `release/`:
   - `release.go`: GitHub REST client (`cli/go-gh/v2`), asset matching, checksum discovery & verification (SHA-256 / SHA-512), extraction, and permission management.
   - `name_cleaner.go`: OS/architecture/version affix removal heuristics for normalized binary renaming (`GenerateCleanName`).

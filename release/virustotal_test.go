@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestVerifyHashWithVirusTotal_Unknown_SkipSandbox(t *testing.T) {
@@ -120,7 +121,7 @@ func TestCalculateSHA256(t *testing.T) {
 func TestVerifyHashWithVirusTotal_Malicious(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"data": map[string]interface{}{
 				"attributes": map[string]interface{}{
 					"last_analysis_stats": map[string]interface{}{
@@ -141,7 +142,7 @@ func TestVerifyHashWithVirusTotal_Malicious(t *testing.T) {
 func TestVerifyHashWithVirusTotal_Clean(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"data": map[string]interface{}{
 				"attributes": map[string]interface{}{
 					"last_analysis_stats": map[string]interface{}{
@@ -208,14 +209,14 @@ func TestDoVTRequestWithRetry_Retry(t *testing.T) {
 func TestVerifyHashWithVirusTotal_Errors(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]interface{}{})
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{})
 	}))
 	defer server.Close()
 	vtBaseURL = server.URL
 
 	tmpDir := t.TempDir()
 	file := filepath.Join(tmpDir, "file")
-	os.WriteFile(file, []byte("x"), 0644)
+	require.NoError(t, os.WriteFile(file, []byte("x"), 0644))
 
 	err := VerifyHashWithVirusTotal("hash", file, "key", false, false)
 	assert.Error(t, err)
@@ -233,7 +234,7 @@ func TestVerifyHashWithVirusTotal_Errors(t *testing.T) {
 
 	serverBadJSON := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("{bad json"))
+		_, _ = w.Write([]byte("{bad json"))
 	}))
 	defer serverBadJSON.Close()
 	vtBaseURL = serverBadJSON.URL
@@ -250,7 +251,7 @@ func TestPollVirusTotalAnalysis(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"data": map[string]interface{}{
 				"attributes": map[string]interface{}{
 					"status": "completed",
@@ -273,7 +274,7 @@ func TestPollVirusTotalAnalysis(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		if callCount == 0 {
 			callCount++
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"data": map[string]interface{}{
 					"attributes": map[string]interface{}{
 						"status": "queued",
@@ -282,7 +283,7 @@ func TestPollVirusTotalAnalysis(t *testing.T) {
 			})
 			return
 		}
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"data": map[string]interface{}{
 				"attributes": map[string]interface{}{
 					"status": "completed",
@@ -308,8 +309,8 @@ func TestVerifyHashWithVirusTotal_Interactive(t *testing.T) {
 	defer func() { os.Stdin = origStdin }()
 
 	go func() {
-		w.Write([]byte("N\ny\n"))
-		w.Close()
+		_, _ = w.Write([]byte("N\ny\n"))
+		_ = w.Close()
 	}()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

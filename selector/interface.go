@@ -279,11 +279,12 @@ func BinarySelector(criteria BinaryMatchCriteria) (ISelector, error) {
 	} else if isTarball || isZip {
 		precedence := []string{"ouch", "native", "internal"}
 		if criteria.Extractor != "" && criteria.Extractor != "default" {
-			if criteria.Extractor == "internal" {
+			switch criteria.Extractor {
+			case "internal":
 				precedence = []string{"internal"}
-			} else if criteria.Extractor == "native" {
+			case "native":
 				precedence = []string{"native", "internal"}
-			} else if criteria.Extractor == "ouch" {
+			case "ouch":
 				precedence = []string{"ouch", "native", "internal"}
 			}
 		}

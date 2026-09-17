@@ -3,10 +3,15 @@ package cmd
 import (
 	"encoding/base64"
 	"fmt"
+	"os"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cli/go-gh/v2/pkg/api"
 	"github.com/joshsukhdeo/gh-pt/state"
+	"github.com/mattn/go-runewidth"
+	"golang.org/x/term"
 )
 
 type ghRestClient interface {
@@ -41,7 +46,7 @@ func ShowInfo(r *RootCLI) error {
 }
 
 func showInfoWithClient(r *RootCLI, client ghRestClient) error {
-	repo := r.ExecContext.Repository
+	repo := r.Repository
 	if repo == "" {
 		return fmt.Errorf("repository must be provided")
 	}
@@ -67,8 +72,8 @@ func showInfoWithClient(r *RootCLI, client ghRestClient) error {
 	var disableIcons bool
 	if cfg != nil {
 		disableIcons = cfg.Core.DisableIcons
-		if cfg.Core.AllowPrerelease && !r.ExecContext.Stable {
-			r.ExecContext.Prerelease = true
+		if cfg.Core.AllowPrerelease && !r.Stable {
+			r.Prerelease = true
 		}
 	}
 
@@ -80,6 +85,11 @@ func showInfoWithClient(r *RootCLI, client ghRestClient) error {
 		fmt.Printf("No releases found for %s\n", repo)
 		return nil
 	}
+
+	// Sort releases by version in descending order
+	sort.Slice(releases, func(i, j int) bool {
+		return compareVersions(releases[i].TagName, releases[j].TagName) > 0
+	})
 
 	var latestStable *Release
 	var latestPrerelease *Release
@@ -95,34 +105,33 @@ func showInfoWithClient(r *RootCLI, client ghRestClient) error {
 		}
 	}
 
-	printRelease := func(rel *Release) {
-		isInstalled := installedVersion != "" && (rel.TagName == installedVersion || strings.TrimPrefix(rel.TagName, "v") == strings.TrimPrefix(installedVersion, "v"))
-		isPinned := isInstalled && appPinned
-		isLatestP := latestPrerelease != nil && (rel == latestPrerelease || (rel.ID != 0 && rel.ID == latestPrerelease.ID))
-		isLatestS := latestStable != nil && (rel == latestStable || (rel.ID != 0 && rel.ID == latestStable.ID))
-		indicator := GetStateIndicator(isInstalled, isPinned, rel.Prerelease, isLatestP, isLatestS, disableIcons)
+	formatRelease := func(rel *Release, installedVer string, pinned bool, latestStableRel *Release, latestPrereleaseRel *Release, noIcons bool) string {
+		isInstalled := installedVer != "" && (rel.TagName == installedVer || strings.TrimPrefix(rel.TagName, "v") == strings.TrimPrefix(installedVer, "v"))
+		isPinned := isInstalled && pinned
+		isLatestP := latestPrereleaseRel != nil && (rel == latestPrereleaseRel || (rel.ID != 0 && rel.ID == latestPrereleaseRel.ID))
+		isLatestS := latestStableRel != nil && (rel == latestStableRel || (rel.ID != 0 && rel.ID == latestStableRel.ID))
+		indicator := GetStateIndicator(isInstalled, isPinned, rel.Prerelease, isLatestP, isLatestS, noIcons)
 		if indicator != "" {
-			fmt.Printf("%s %s\n", indicator, rel.TagName)
-		} else {
-			fmt.Println(rel.TagName)
+			return indicator + " " + rel.TagName
 		}
+		return rel.TagName
 	}
 
 	pickTargetRelease := func() *Release {
-		if r.ExecContext.ReleaseVersion != "" && r.ExecContext.ReleaseVersion != "latest" {
+		if r.ReleaseVersion != "" && r.ReleaseVersion != "latest" {
 			for i := range releases {
-				if releases[i].TagName == r.ExecContext.ReleaseVersion ||
-					strings.TrimPrefix(releases[i].TagName, "v") == strings.TrimPrefix(r.ExecContext.ReleaseVersion, "v") {
+				if releases[i].TagName == r.ReleaseVersion ||
+					strings.TrimPrefix(releases[i].TagName, "v") == strings.TrimPrefix(r.ReleaseVersion, "v") {
 					return &releases[i]
 				}
 			}
 			var single Release
-			if err := client.Get(fmt.Sprintf("repos/%s/releases/tags/%s", repo, r.ExecContext.ReleaseVersion), &single); err == nil && single.TagName != "" {
+			if err := client.Get(fmt.Sprintf("repos/%s/releases/tags/%s", repo, r.ReleaseVersion), &single); err == nil && single.TagName != "" {
 				return &single
 			}
 			return nil
 		}
-		if r.ExecContext.Prerelease {
+		if r.Prerelease {
 			if latestPrerelease != nil {
 				return latestPrerelease
 			}
@@ -158,10 +167,10 @@ func showInfoWithClient(r *RootCLI, client ghRestClient) error {
 		return assets, nil
 	}
 
-	showVersionsLimit := r.ExecContext.ShowVersions
-	showAssetsLimit := r.ExecContext.ShowAssets
-	showDescLimit := r.ExecContext.ShowDescription
-	showReadmeLimit := r.ExecContext.ShowReadme
+	showVersionsLimit := r.ShowVersions
+	showAssetsLimit := r.ShowAssets
+	showDescLimit := r.ShowDescription
+	showReadmeLimit := r.ShowReadme
 
 	if showVersionsLimit <= -1 && showAssetsLimit <= -1 && showDescLimit <= -1 && showReadmeLimit <= -1 {
 		showVersionsLimit = 10
@@ -209,9 +218,11 @@ func showInfoWithClient(r *RootCLI, client ghRestClient) error {
 			if showVersionsLimit > -1 && limit > showVersionsLimit {
 				limit = showVersionsLimit
 			}
+			var versionItems []string
 			for j := 0; j < limit; j++ {
-				printRelease(&releases[j])
+				versionItems = append(versionItems, formatRelease(&releases[j], installedVersion, appPinned, latestStable, latestPrerelease, disableIcons))
 			}
+			printColumns(versionItems, 4)
 			if len(releases) > limit {
 				fmt.Println("...")
 			}
@@ -226,9 +237,11 @@ func showInfoWithClient(r *RootCLI, client ghRestClient) error {
 			if showAssetsLimit > -1 && limit > showAssetsLimit {
 				limit = showAssetsLimit
 			}
+			var assetItems []string
 			for j := 0; j < limit; j++ {
-				fmt.Println(assets[j].Name)
+				assetItems = append(assetItems, assets[j].Name)
 			}
+			printColumns(assetItems, 4)
 			if len(assets) > limit {
 				fmt.Println("...")
 			}
@@ -290,4 +303,125 @@ func showInfoWithClient(r *RootCLI, client ghRestClient) error {
 		}
 	}
 	return nil
+}
+
+func printColumns(items []string, maxCols int) {
+	if len(items) == 0 {
+		return
+	}
+	termWidth := 80
+	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 {
+		termWidth = w
+	}
+
+	cols := maxCols
+	if cols < 1 {
+		cols = 1
+	}
+	for cols > 1 {
+		wrapped := 0
+		colWidth := (termWidth - (cols-1)*2) / cols
+		if colWidth < 1 {
+			cols--
+			continue
+		}
+		for _, item := range items {
+			if runewidth.StringWidth(item) > colWidth {
+				wrapped++
+			}
+		}
+		if wrapped*2 <= len(items) {
+			break
+		}
+		cols--
+	}
+
+	colWidth := (termWidth - (cols-1)*2) / cols
+	if colWidth < 1 {
+		colWidth = 1
+	}
+
+	for i, item := range items {
+		w := runewidth.StringWidth(item)
+		padding := colWidth - w
+		if padding < 0 {
+			padding = 0
+		}
+		if (i+1)%cols == 0 || i == len(items)-1 {
+			fmt.Println(item)
+		} else {
+			fmt.Printf("%s%s  ", item, strings.Repeat(" ", padding))
+		}
+	}
+}
+
+// compareVersions compares two version strings and returns:
+// -1 if a < b, 0 if a == b, 1 if a > b
+// Handles versions like "v1.2.3", "1.2.3", "v1.2.3-preview.4"
+func compareVersions(a, b string) int {
+	// Remove 'v' prefix if present
+	a = strings.TrimPrefix(a, "v")
+	b = strings.TrimPrefix(b, "v")
+
+	// Split into main version and prerelease
+	aParts := strings.SplitN(a, "-", 2)
+	bParts := strings.SplitN(b, "-", 2)
+
+	aMain := aParts[0]
+	bMain := bParts[0]
+	aPre := ""
+	bPre := ""
+	if len(aParts) > 1 {
+		aPre = aParts[1]
+	}
+	if len(bParts) > 1 {
+		bPre = bParts[1]
+	}
+
+	// Compare main version numbers
+	aNums := strings.Split(aMain, ".")
+	bNums := strings.Split(bMain, ".")
+
+	maxLen := len(aNums)
+	if len(bNums) > maxLen {
+		maxLen = len(bNums)
+	}
+
+	for i := 0; i < maxLen; i++ {
+		var aVal, bVal int
+		if i < len(aNums) {
+			aVal, _ = strconv.Atoi(aNums[i])
+		}
+		if i < len(bNums) {
+			bVal, _ = strconv.Atoi(bNums[i])
+		}
+
+		if aVal < bVal {
+			return -1
+		}
+		if aVal > bVal {
+			return 1
+		}
+	}
+
+	// Main versions are equal, compare prerelease
+	// No prerelease > prerelease (1.0.0 > 1.0.0-preview)
+	if aPre == "" && bPre != "" {
+		return 1
+	}
+	if aPre != "" && bPre == "" {
+		return -1
+	}
+	if aPre == "" && bPre == "" {
+		return 0
+	}
+
+	// Both have prerelease, compare them lexicographically
+	if aPre < bPre {
+		return -1
+	}
+	if aPre > bPre {
+		return 1
+	}
+	return 0
 }

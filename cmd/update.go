@@ -13,18 +13,18 @@ import (
 )
 
 func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
-	if r.ExecContext.CommonInstallFlags.Barbarous {
-		r.ExecContext.CommonInstallFlags.VerifyChecksum = false
-		r.ExecContext.CommonInstallFlags.SkipVtSandbox = true
-		r.ExecContext.CommonInstallFlags.AllowForeignArch = true
-		r.ExecContext.CommonInstallFlags.AllowDowngrade = true
+	if r.Barbarous {
+		r.VerifyChecksum = false
+		r.SkipVtSandbox = true
+		r.AllowForeignArch = true
+		r.AllowDowngrade = true
 	}
-	if r.ExecContext.CommonInstallFlags.LeRetrogrouch {
-		r.ExecContext.CommonInstallFlags.SkipVtSandbox = true
-		r.ExecContext.CommonInstallFlags.AllowDowngrade = true
+	if r.LeRetrogrouch {
+		r.SkipVtSandbox = true
+		r.AllowDowngrade = true
 	}
-	if r.ExecContext.CommonInstallFlags.RetrogradeStopgap || r.ExecContext.CommonInstallFlags.SelfInflictedDebt {
-		r.ExecContext.CommonInstallFlags.AllowDowngrade = true
+	if r.RetrogradeStopgap || r.SelfInflictedDebt {
+		r.AllowDowngrade = true
 	}
 
 	st, err := state.LoadState()
@@ -33,9 +33,9 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 	}
 
 	for _, app := range st.Apps {
-		specificallyTargeted := (r.ExecContext.Repository != "" && strings.EqualFold(r.ExecContext.Repository, app.Repository))
+		specificallyTargeted := (r.Repository != "" && strings.EqualFold(r.Repository, app.Repository))
 
-		if r.ExecContext.Repository != "" && !specificallyTargeted {
+		if r.Repository != "" && !specificallyTargeted {
 			continue // specifically targeted another app
 		}
 
@@ -48,11 +48,11 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 			continue
 		}
 
-		if r.ExecContext.Update && !r.ExecContext.UpdateAll {
-			if r.ExecContext.Global && !app.Global {
+		if r.Update && !r.UpdateAll {
+			if r.Global && !app.Global {
 				continue // wants global only, this is user
 			}
-			if !r.ExecContext.Global && app.Global {
+			if !r.Global && app.Global {
 				continue // wants user only, this is global
 			}
 		}
@@ -76,7 +76,7 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 				log.Warn().Msgf("Could not check remote commit for %s, proceeding with update", app.Repository)
 			}
 
-			if r.ExecContext.DryRun {
+			if r.DryRun {
 				log.Info().Msgf("[dry-run] Would execute compile script %s for %s", app.CompileScript, app.Repository)
 				continue
 			}
@@ -99,15 +99,17 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 					app.Version = remoteCommit
 				}
 
-				state.LogHistory("update", app.Repository, app.Version)
-				// Save the updated version to state
-				st.AddApp(app)
+			state.LogHistory("update", app.Repository, app.Version)
+			// Save the updated version to state
+			if err := st.AddApp(app); err != nil {
+				log.Warn().Err(err).Msgf("could not update state for %s", app.Repository)
+			}
 			}
 			continue
 		}
 
 		if app.Clone || app.Fork {
-			if r.ExecContext.DryRun {
+			if r.DryRun {
 				log.Info().Msgf("[dry-run] Would sync repo %s at %s", app.Repository, app.TargetPath)
 				continue
 			}
@@ -128,7 +130,7 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 			} else {
 				log.Info().Msgf("Successfully synced %s", app.Repository)
 
-				if app.Fork && r.ExecContext.Overwrite {
+				if app.Fork && r.Overwrite {
 					pullCmd := exec.Command("git", "pull", "origin", "--force")
 					pullCmd.Dir = app.TargetPath
 					pullOutput, pullErr := pullCmd.CombinedOutput()
@@ -170,7 +172,7 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 		if app.IsPrerelease {
 			appParams.Prerelease = true
 		}
-		if r.ExecContext.Stable {
+		if r.Stable {
 			appParams.Prerelease = false
 			appParams.Stable = true
 		}

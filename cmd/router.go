@@ -2,22 +2,25 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/joshsukhdeo/gh-pt/config"
 	"github.com/joshsukhdeo/gh-pt/params"
+	"github.com/joshsukhdeo/gh-pt/state"
 )
 
 func RunCommand(cmdStr string, cli *params.CLI) error {
 	r := &RootCLI{}
 
-	r.ExecContext.LogLevel = cli.LogLevel
-	r.ExecContext.LogFormat = cli.LogFormat
-	r.ExecContext.LogQuietInteractive = cli.LogQuietInteractive
-	r.ExecContext.Verbose = cli.Verbose
+	r.LogLevel = cli.LogLevel
+	r.LogFormat = cli.LogFormat
+	r.LogQuietInteractive = cli.LogQuietInteractive
+	r.Verbose = cli.Verbose
 
 	switch cmdStr {
 	case "install", "install <repository>":
-		r.ExecContext.CommonInstallFlags = cli.Install.CommonInstallFlags
-		r.ExecContext.Repository = cli.Install.Repository
+		r.CommonInstallFlags = cli.Install.CommonInstallFlags
+		r.Repository = cli.Install.Repository
 		return r.RunInstall()
 	case "ls", "ls <filter>":
 		return ListState(&RootCLI{ExecContext: params.ExecContext{Ls: cli.Ls.Filter, CommonInstallFlags: params.CommonInstallFlags{Global: cli.Ls.Global}}})
@@ -30,39 +33,64 @@ func RunCommand(cmdStr string, cli *params.CLI) error {
 			}
 		return RemoveApp(cli.Rm.Target, cli.Rm.Purge)
 	case "upgrade", "upgrade <repository>":
-		r.ExecContext.Repository = cli.Upgrade.Repository
+		r.Repository = cli.Upgrade.Repository
 		if !cli.Upgrade.User && !cli.Upgrade.Global {
-			r.ExecContext.UpdateAll = true
+			r.UpdateAll = true
 		} else {
-			r.ExecContext.Update = true
-			r.ExecContext.CommonInstallFlags.Global = cli.Upgrade.Global
+			r.Update = true
+			r.Global = cli.Upgrade.Global
 		}
 		return r.RunInstall()
 	case "search", "search <query>":
 		return cli.Search.Run(&r.ExecContext)
+	case "state cat":
+		return StateCat()
+	case "state view":
+		return StateView()
+	case "state add", "state add <repository>":
+		app := &state.InstalledApp{
+			Version:      cli.State.Add.ReleaseVersion,
+			TargetPath:   cli.State.Add.TargetPath,
+			Global:       cli.State.Add.Global,
+			Pinned:       cli.State.Add.Pinned,
+			Extractor:    cli.State.Add.Extractor,
+			ReleaseAsset: cli.State.Add.ReleaseAsset,
+		}
+		if cli.State.Add.Type != "" {
+			app.Type = strings.Split(cli.State.Add.Type, ",")
+		}
+		return StateAdd(cli.State.Add.Repository, app, cli.State.Add.Force)
+	case "state rm", "state rm <target>":
+		return StateRm(cli.State.Rm.Target, cli.State.Rm.Force)
+	case "state update", "state update <target>", "state update <target> <fields>":
+		updates, err := ParseStateUpdate(cli.State.Update.Fields)
+		if err != nil {
+			return err
+		}
+		return StateUpdate(cli.State.Update.Target, updates)
 	case "state edit":
-		return EditState()
+		return StateEdit()
 	case "show", "show <repository>":
 		return ShowInfo(&RootCLI{ExecContext: params.ExecContext{Repository: cli.Show.Repository, Show: true, ShowAssets: cli.Show.Assets, ShowVersions: cli.Show.Versions, ShowDescription: cli.Show.Description, ShowReadme: cli.Show.Readme, CommonInstallFlags: params.CommonInstallFlags{ReleaseVersion: cli.Show.Version, Stable: cli.Show.Stable, Prerelease: cli.Show.Prerelease}}})
 	case "repo clone":
-		r.ExecContext.CommonInstallFlags = cli.Install.CommonInstallFlags // fallback
-		r.ExecContext.Repository = cli.Repo.Clone.Repository
-		r.ExecContext.Clone = true
-		r.ExecContext.CommonInstallFlags.Overwrite = cli.Repo.Clone.Force
-		r.ExecContext.MaxDepth = cli.Repo.Clone.MaxDepth
+		r.CommonInstallFlags = cli.Install.CommonInstallFlags // fallback
+		r.Repository = cli.Repo.Clone.Repository
+		r.Clone = true
+		r.Overwrite = cli.Repo.Clone.Force
+		r.MaxDepth = cli.Repo.Clone.MaxDepth
 		return r.RunInstall()
 	case "repo fork":
-		r.ExecContext.CommonInstallFlags = cli.Install.CommonInstallFlags
-		r.ExecContext.Repository = cli.Repo.Fork.Repository
-		r.ExecContext.Fork = true
-		r.ExecContext.CommonInstallFlags.Overwrite = cli.Repo.Fork.Force
-		r.ExecContext.MaxDepth = cli.Repo.Fork.MaxDepth
+		r.CommonInstallFlags = cli.Install.CommonInstallFlags
+		r.Repository = cli.Repo.Fork.Repository
+		r.Fork = true
+		r.Overwrite = cli.Repo.Fork.Force
+		r.MaxDepth = cli.Repo.Fork.MaxDepth
 		return r.RunInstall()
 	case "source", "source <repository>":
-		r.ExecContext.CommonInstallFlags = cli.Source.CommonInstallFlags
-		r.ExecContext.Repository = cli.Source.Repository
-		r.ExecContext.CompileFromSource = true
-		r.ExecContext.AI = true
+		r.CommonInstallFlags = cli.Source.CommonInstallFlags
+		r.Repository = cli.Source.Repository
+		r.CompileFromSource = true
+		r.AI = true
 		aiCmd := cli.Source.AICmd
 		if aiCmd == "" {
 			cfg, _ := config.LoadConfig()
@@ -74,7 +102,7 @@ func RunCommand(cmdStr string, cli *params.CLI) error {
 				}
 			}
 		}
-		r.ExecContext.AICmd = aiCmd
+		r.AICmd = aiCmd
 		return r.RunInstall()
 	case "scan ai":
 		aiCmd := cli.Scan.Ai.AICmd

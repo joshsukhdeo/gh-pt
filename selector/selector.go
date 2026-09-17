@@ -123,9 +123,10 @@ func (s *Selector) Run() ([]*SelectorItem, error) {
 						var execMatches []*SelectorItem
 						for _, item := range currentMatches {
 							ext := strings.ToLower(filepath.Ext(item.Name))
-							if ext == ".exe" || ext == ".appimage" || ext == ".bin" || ext == ".deb" || ext == ".rpm" || ext == ".msi" || ext == ".dmg" || ext == ".pkg" {
+							switch ext {
+							case ".exe", ".appimage", ".bin", ".deb", ".rpm", ".msi", ".dmg", ".pkg":
 								execMatches = append(execMatches, item)
-							} else if ext == "" {
+							case "":
 								// Strictly filter extensionless files using magic bytes
 								if IsActuallyExecutable(item) {
 									execMatches = append(execMatches, item)

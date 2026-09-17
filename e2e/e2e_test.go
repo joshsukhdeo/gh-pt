@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 var cliBinPath string
@@ -27,14 +29,14 @@ func TestMain(m *testing.M) {
 	cmd := exec.Command("go", "build", "-o", cliBinPath, "../main.go")
 	cmd.Dir = cwd
 	if err := cmd.Run(); err != nil {
-		os.RemoveAll(tempDir)
+		_ = os.RemoveAll(tempDir)
 		os.Exit(1)
 	}
 
 	code := m.Run()
 
 	// Clean up after run since os.Exit ignores defers
-	os.RemoveAll(tempDir)
+	_ = os.RemoveAll(tempDir)
 	os.Exit(code)
 }
 
@@ -42,10 +44,10 @@ func runCLIWithMockGH(t *testing.T, mockScript string, args ...string) (string, 
 	tempDir := t.TempDir()
 
 	fakeBinDir := filepath.Join(tempDir, "fakebin")
-	os.MkdirAll(fakeBinDir, 0755)
+	require.NoError(t, os.MkdirAll(fakeBinDir, 0755))
 	fakeGh := filepath.Join(fakeBinDir, "gh")
 
-	os.WriteFile(fakeGh, []byte(mockScript), 0755)
+	require.NoError(t, os.WriteFile(fakeGh, []byte(mockScript), 0755))
 
 	cmd := exec.Command(cliBinPath, args...)
 
@@ -128,7 +130,7 @@ func TestE2E_Install_ExitCode(t *testing.T) {
 	tempDir := t.TempDir()
 
 	targetPath := filepath.Join(tempDir, "bin")
-	os.MkdirAll(targetPath, 0755)
+	require.NoError(t, os.MkdirAll(targetPath, 0755))
 
 	mockScript := "#!/usr/bin/env bash\necho \"HTTP 401: Bad credentials\"\nexit 1\n"
 

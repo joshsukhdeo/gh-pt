@@ -80,8 +80,46 @@ type InstallCmd struct {
 }
 
 type StateCmd struct {
-	Edit StateEditCmd `cmd:"" help:"Edit saved state interactively."`
+	Cat    StateCatCmd    `cmd:"" help:"Dump raw state file to stdout."`
+	View   StateViewCmd   `cmd:"" help:"Show state file path."`
+	Add    StateAddCmd    `cmd:"" help:"Add state entry for a repository."`
+	Rm     StateRmCmd     `cmd:"" help:"Remove state entry."`
+	Update StateUpdateCmd `cmd:"" help:"Update state entry fields."`
+	Edit   StateEditCmd   `cmd:"" help:"Edit saved state interactively."`
 }
+
+type StateCatCmd struct{}
+
+type StateViewCmd struct{}
+
+type StateAddCmd struct {
+	Repository string `arg:"" predictor:"github_repos" predict:"github_repos" help:"Repository in owner/repo format."`
+	Force      bool   `short:"f" help:"Overwrite existing state entry."`
+	// Install params
+	ReleaseVersion string `short:"v" name:"release-version" optional:"" help:"Version tag."`
+	TargetPath     string `short:"p" optional:"" type:"path" help:"Target installation directory."`
+	Global         bool   `short:"g" help:"Install globally."`
+	Pinned         bool   `help:"Pin this version."`
+	Extractor      string `optional:"" help:"Extractor precedence."`
+	Type           string `short:"T" optional:"" help:"Comma-separated list of types."`
+	ReleaseAsset   string `short:"a" optional:"" help:"Release asset name."`
+}
+
+type StateRmCmd struct {
+	Target string `arg:"" predictor:"installed_apps" predict:"installed_apps" help:"Application or repository to remove."`
+	Force  bool   `short:"f" help:"Skip confirmation prompt."`
+	Purge  bool   `help:"Completely uninstall and purge."`
+	StateOnly bool `help:"Remove from state only without uninstalling."`
+}
+
+type StateUpdateCmd struct {
+	Target string   `arg:"" predictor:"installed_apps" predict:"installed_apps" help:"Application or repository to update."`
+	Fields []string `arg:"" optional:"" help:"Field=value pairs to update (e.g., version=1.0.0 pinned=true)."`
+}
+
+type RmCmd = StateRmCmd
+
+type StateEditCmd struct{}
 
 type UpgradeCmd struct {
 	Repository string `arg:"" optional:"" predictor:"installed_apps" predict:"installed_apps" help:"Optional repository to update."`
@@ -98,16 +136,6 @@ type StateLlCmd struct {
 	Filter string `arg:"" optional:"" help:"Optional filter."`
 	Global bool   `short:"g" help:"Show global installs only."`
 }
-
-type StateRmCmd struct {
-	Target string `arg:"" predictor:"installed_apps" predict:"installed_apps" help:"Application to remove."`
-	Purge  bool   `help:"Completely uninstall and purge."`
-	StateOnly bool   `help:"Remove from state only without uninstalling."`
-}
-
-type RmCmd = StateRmCmd
-
-type StateEditCmd struct{}
 
 type ConfigCmd struct {
 	Ls   ConfigLsCmd   `cmd:"" help:"List config settings."`
@@ -170,10 +198,10 @@ type VtSetKeyCmd struct {
 
 type ShowCmd struct {
 	Repository string `arg:"" env:"GH_PT_REPOSITORY" predictor:"github_repos" predict:"github_repos" help:"Github repository."`
-	Assets      int    `default:"-1" help:"Show available assets (max number)."`
-	Versions    int    `default:"-1" help:"Show release versions (max number)."`
-	Description int    `default:"-1" help:"Show repository description (max lines)."`
-	Readme      int    `default:"-1" help:"Show repository readme (max lines)."`
+	Assets      int    `default:"-1" optional:"" help:"Show available assets (max number)."`
+	Versions    int    `default:"-1" optional:"" help:"Show release versions (max number)."`
+	Description int    `default:"-1" optional:"" help:"Show repository description (max lines)."`
+	Readme      int    `default:"-1" optional:"" help:"Show repository readme (max lines)."`
 	Prerelease bool   `help:"Include prereleases."`
 	Stable     bool   `help:"Include only stable releases."`
 	Version    string `short:"v" default:"latest" help:"Version to show."`

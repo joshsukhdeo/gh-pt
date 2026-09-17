@@ -7,13 +7,38 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/joshsukhdeo/gh-pt/state"
+	"github.com/mattn/go-runewidth"
 	"github.com/pterm/pterm"
 	"github.com/rs/zerolog/log"
 )
 
 var execCommand = exec.Command
+
+func fixEmojiPadding(data pterm.TableData) pterm.TableData {
+	for i, row := range data {
+		for j, cell := range row {
+			displayW := runewidth.StringWidth(cell)
+			runeCount := utf8.RuneCountInString(cell)
+			if extra := displayW - runeCount; extra > 0 {
+				data[i][j] = cell + strings.Repeat(" ", extra)
+			}
+		}
+	}
+	return data
+}
+
+func truncatePath(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	if maxLen <= 3 {
+		return s[:maxLen]
+	}
+	return "..."+s[len(s)-maxLen+3:]
+}
 
 func ListState(rList ...*RootCLI) error {
 	var r *RootCLI
@@ -33,11 +58,11 @@ func ListState(rList ...*RootCLI) error {
 		return nil
 	}
 
-	filterVal := r.ExecContext.Ls
+	filterVal := r.Ls
 	isLongFormat := false
-	if r.ExecContext.Ll != "" && r.ExecContext.Ll != "false" {
+	if r.Ll != "" && r.Ll != "false" {
 		isLongFormat = true
-		filterVal = r.ExecContext.Ll
+		filterVal = r.Ll
 	}
 
 	var headers []string
@@ -47,7 +72,7 @@ func ListState(rList ...*RootCLI) error {
 		headers = []string{"Repository", "Type", "Version", "InstallAssetNames", "Location", "Pinned", "Checksums", "VirusTotal", "CompressedExtractionTarget", "KeepSuffixes", "Wine", "AllowForeignArch", "ExtractorPrecedence", "RenameBinaryTo", "CompileScriptLocation", "InstallDate", "LastUpdated", "LastChecked"}
 	}
 
-	if !r.ExecContext.Full {
+	if !r.Full {
 		headers = []string{"Repository", "Version", "Type", "Scope", "Auto-Update", "Target Path", "Helper Script"}
 	}
 
@@ -70,27 +95,21 @@ func ListState(rList ...*RootCLI) error {
 			}
 		}
 
-		if r.ExecContext.CommonInstallFlags.Global && !app.Global {
+		if r.Global && !app.Global {
 			continue
 		}
-		if r.ExecContext.CommonInstallFlags.Wine != "" && r.ExecContext.CommonInstallFlags.Wine != "off" {
-			// Very naive wine check. Our state doesn't track per-app wine, but we do have app.Type maybe?
-			// If not tracked properly in state, we filter by r.ExecContext.CommonInstallFlags.Wine.
-			// Actually, we'd need to check if the app used Wine.
-			// The prompt says "--wine list entries with the specified {wine} settings"
-			// Right now, InstalledApp doesn't track Wine settings. Let's add that to State later, but for now
-			// we will mock it or add it if it's not present. We'll skip filtering if it's missing.
-		}
+		// TODO: Implement proper wine filtering when state tracks per-app wine settings
+		// Currently InstalledApp doesn't track Wine settings, so we skip filtering.
 		// if r.AllowForeignArch { ... } // Stub for future allow-foreign-arch filter
 
-		if r.ExecContext.Pin != "" && !app.Pinned {
+		if r.Pin != "" && !app.Pinned {
 			continue
 		}
 
-		if r.ExecContext.Prerelease && !app.IsPrerelease {
+		if r.Prerelease && !app.IsPrerelease {
 			continue
 		}
-		if r.ExecContext.Stable && app.IsPrerelease {
+		if r.Stable && app.IsPrerelease {
 			continue
 		}
 
@@ -128,6 +147,7 @@ func ListState(rList ...*RootCLI) error {
 		if helperScript == "" {
 			helperScript = "N/A"
 		}
+		helperScript = truncatePath(helperScript, 50)
 		
 		isInstalled := false
 		if app.TargetPath != "" {
@@ -141,7 +161,7 @@ func ListState(rList ...*RootCLI) error {
 			displayRepo = indicator + " " + repo
 		}
 
-		if !r.ExecContext.Full {
+		if !r.Full {
 			tableData = append(tableData, []string{
 				displayRepo,
 				versionDisplay,
@@ -189,7 +209,11 @@ func ListState(rList ...*RootCLI) error {
 		}
 	}
 
-	pterm.DefaultTable.WithHasHeader().WithBoxed().WithData(tableData).Render()
+	tableData = fixEmojiPadding(tableData)
+
+	if err := pterm.DefaultTable.WithHasHeader().WithBoxed().WithData(tableData).Render(); err != nil {
+		log.Warn().Err(err).Msg("failed to render table")
+	}
 	return nil
 }
 

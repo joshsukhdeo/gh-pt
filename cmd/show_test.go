@@ -18,12 +18,10 @@ import (
 )
 
 type mockGhClient struct {
-	releases    []Release
-	assets      map[int64][]ReleaseAsset
-	tags        map[string]Release
-	readme      string // base64-encoded readme content
-	description string
-	err         error
+	releases []Release
+	assets   map[int64][]ReleaseAsset
+	tags     map[string]Release
+	err      error
 }
 
 func (m *mockGhClient) Get(path string, response interface{}) error {
@@ -300,7 +298,7 @@ func TestShowInfo_Errors(t *testing.T) {
 
 	// Releases fetch failure
 	mockErr := &mockGhClient{err: fmt.Errorf("api network error")}
-	r.ExecContext.Repository = "test/repo"
+	r.Repository = "test/repo"
 	err = showInfoWithClient(r, mockErr)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to fetch releases")
@@ -311,7 +309,7 @@ func TestShowInfo_Errors(t *testing.T) {
 			{ID: 1, TagName: "v1.0.0"},
 		},
 	}
-	r.ExecContext.ReleaseVersion = "v9.9.9"
+	r.ReleaseVersion = "v9.9.9"
 	err = showInfoWithClient(r, mock)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "no release found")
@@ -382,8 +380,8 @@ func TestShowInfo_HeadersWithIcons(t *testing.T) {
 	xdg.ConfigHome = tmpDir
 		defer func() { xdg.ConfigHome = "" }()
 	cfgPath := filepath.Join(tmpDir, "gh-pt", "config.yml")
-	os.MkdirAll(filepath.Dir(cfgPath), 0755)
-	os.WriteFile(cfgPath, []byte("disable_icons: true\n"), 0644)
+	require.NoError(t, os.MkdirAll(filepath.Dir(cfgPath), 0755))
+	require.NoError(t, os.WriteFile(cfgPath, []byte("disable_icons: true\n"), 0644))
 
 	outDisabled := captureOutput(func() {
 		err := showInfoWithClient(r, mock)

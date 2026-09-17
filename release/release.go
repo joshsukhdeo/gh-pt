@@ -35,16 +35,19 @@ var (
 )
 
 type GithubRelease struct {
-	CliParams             *params.ExecContext
-	Client                selector.GithubClient
-	ResolvedVersion       string
-	InstalledPackageNames []string
-	InstalledBinaries     []string
-	PendingDebs           []string
-	PendingRpms           []string
-	Prompter              Prompter
-	StatusMessage         string
-	UI                    *ui.PacmanUI
+	CliParams               *params.ExecContext
+	Client                  selector.GithubClient
+	ResolvedVersion         string
+	InstalledPackageNames   []string
+	InstalledBinaries       []string
+	InstalledAssetFullNames []string
+	InstalledAssetCleanNames []string
+	ContainingArchive       string
+	PendingDebs             []string
+	PendingRpms             []string
+	Prompter                Prompter
+	StatusMessage           string
+	UI                      *ui.PacmanUI
 }
 
 type Prompter interface {
@@ -1012,6 +1015,14 @@ func (r *GithubRelease) Install() error {
 					Msg("could not install release asset binary")
 				return execErr
 			}
+
+			// Track asset information for state
+			r.InstalledAssetFullNames = append(r.InstalledAssetFullNames, asset.Name)
+			cleanName := GenerateCleanName(binary.Name, r.CliParams.Repository, releases[0].Name)
+			r.InstalledAssetCleanNames = append(r.InstalledAssetCleanNames, cleanName)
+			if binary.Compressed {
+				r.ContainingArchive = asset.Name
+			}
 		}
 
 		if !r.CliParams.All {
@@ -1106,22 +1117,25 @@ func (r *GithubRelease) Install() error {
 		st, err := state.LoadState()
 		if err == nil {
 			_ = st.AddApp(&state.InstalledApp{
-				Repository:          r.CliParams.Repository,
-				TargetPath:          r.CliParams.TargetPath,
-				Global:              r.CliParams.Global,
-				ReleaseAsset:        r.CliParams.ReleaseAsset,
-				ReleaseRegexp:       r.CliParams.ReleaseAssetRegexp,
-				Version:             releases[0].Name,
-				Rename:              r.CliParams.Rename,
-				Type:                r.CliParams.Type,
-				All:                 r.CliParams.All,
-				AssetBinaries:       r.CliParams.AssetBinaries,
-				AssetBinariesRegexp: r.CliParams.AssetBinariesRegexp,
-				InstalledBinaries:   r.InstalledBinaries,
-				PackageNames:        r.InstalledPackageNames,
-				Pinned:              r.CliParams.PinInstall,
-				Extractor:           r.CliParams.Extractor,
-				IsPrerelease:        releases[0].Prerelease,
+				Repository:               r.CliParams.Repository,
+				TargetPath:               r.CliParams.TargetPath,
+				Global:                   r.CliParams.Global,
+				ReleaseAsset:             r.CliParams.ReleaseAsset,
+				ReleaseRegexp:            r.CliParams.ReleaseAssetRegexp,
+				Version:                  releases[0].Name,
+				Rename:                   r.CliParams.Rename,
+				Type:                     r.CliParams.Type,
+				All:                      r.CliParams.All,
+				AssetBinaries:            r.CliParams.AssetBinaries,
+				AssetBinariesRegexp:      r.CliParams.AssetBinariesRegexp,
+				InstalledBinaries:        r.InstalledBinaries,
+				InstalledAssetNames:      r.InstalledAssetCleanNames,
+				InstalledAssetsFullNames: r.InstalledAssetFullNames,
+				ContainingArchive:        r.ContainingArchive,
+				PackageNames:             r.InstalledPackageNames,
+				Pinned:                   r.CliParams.PinInstall,
+				Extractor:                r.CliParams.Extractor,
+				IsPrerelease:             releases[0].Prerelease,
 			})
 		} else {
 			log.Warn().Err(err).Msg("could not save installed app state")

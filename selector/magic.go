@@ -3,6 +3,8 @@ package selector
 import (
 	"io"
 	"os"
+
+	"github.com/rs/zerolog/log"
 )
 
 func IsActuallyExecutable(item *SelectorItem) bool {
@@ -18,7 +20,11 @@ func IsActuallyExecutable(item *SelectorItem) bool {
 	if err != nil || f == nil {
 		return false // Assume not an executable if we can't read it
 	}
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			log.Warn().Err(err).Str("path", item.DownloadPath).Msg("failed to close file")
+		}
+	}()
 
 	buf := make([]byte, 4)
 	n, _ := f.Read(buf)

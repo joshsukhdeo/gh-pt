@@ -10,29 +10,32 @@ import (
 )
 
 type InstalledApp struct {
-	Repository          string            `json:"repository"`
-	TargetPath          string            `json:"target_path"`
-	Global              bool              `json:"global"`
-	ReleaseAsset        string            `json:"release_asset"`
-	ReleaseRegexp       string            `json:"release_regexp"`
-	Version             string            `json:"version"`
-	Rename              map[string]string `json:"target_binaries"`
-	Disabled            bool              `json:"disabled"`
-	Type                []string          `json:"type"`
-	All                 bool              `json:"all"`
-	AssetBinaries       []string          `json:"asset_binaries"`
-	AssetBinariesRegexp string            `json:"asset_binaries_regexp"`
-	InstalledBinaries   []string          `json:"installed_binaries,omitempty"`
-	PackageNames        []string          `json:"package_names,omitempty"`
-	Pinned              bool              `json:"pinned,omitempty"`
-	Extractor           string            `json:"extractor,omitempty"`
-	Clone               bool              `json:"clone,omitempty"`
-	Fork                bool              `json:"fork,omitempty"`
-	MaxDepth            int               `json:"max_depth,omitempty"`
-	CompileScript       string            `json:"compile_script,omitempty"`
-	IsPrerelease        bool              `json:"is_prerelease,omitempty"`
-	LastVTScan          string            `json:"last_vt_scan,omitempty"`
-	LastAIScan          string            `json:"last_ai_scan,omitempty"`
+	Repository             string            `json:"repository"`
+	TargetPath             string            `json:"target_path"`
+	Global                 bool              `json:"global"`
+	ReleaseAsset           string            `json:"release_asset"`
+	ReleaseRegexp          string            `json:"release_regexp"`
+	Version                string            `json:"version"`
+	Rename                 map[string]string `json:"target_binaries"`
+	Disabled               bool              `json:"disabled"`
+	Type                   []string          `json:"type"`
+	All                    bool              `json:"all"`
+	AssetBinaries          []string          `json:"asset_binaries"`
+	AssetBinariesRegexp    string            `json:"asset_binaries_regexp"`
+	InstalledBinaries      []string          `json:"installed_binaries,omitempty"`
+	InstalledAssetNames    []string          `json:"installed_asset_names,omitempty"`
+	InstalledAssetsFullNames []string        `json:"installed_assets_full_names,omitempty"`
+	ContainingArchive      string            `json:"containing_archive,omitempty"`
+	PackageNames           []string          `json:"package_names,omitempty"`
+	Pinned                 bool              `json:"pinned,omitempty"`
+	Extractor              string            `json:"extractor,omitempty"`
+	Clone                  bool              `json:"clone,omitempty"`
+	Fork                   bool              `json:"fork,omitempty"`
+	MaxDepth               int               `json:"max_depth,omitempty"`
+	CompileScript          string            `json:"compile_script,omitempty"`
+	IsPrerelease           bool              `json:"is_prerelease,omitempty"`
+	LastVTScan             string            `json:"last_vt_scan,omitempty"`
+	LastAIScan             string            `json:"last_ai_scan,omitempty"`
 }
 
 type StateManager interface {

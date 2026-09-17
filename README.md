@@ -136,7 +136,7 @@ This file tracks:
 Use `gh pt state edit` for an interactive UI to manage pins and tracked apps.
 
 ### Configuration (`config.yml`)
-Configuration is stored in `~/.config/gh-pt/config.yml`. It defines defaults that can be overridden by CLI flags or `GH_INSTALL_` prefixed environment variables.
+Configuration is stored in `~/.config/gh-pt/config.yml`. It defines defaults that can be overridden by CLI flags or `GH_PT_` prefixed environment variables.
 
 **Configuration Precedence:** CLI Flag > Environment Variable > `config.yml` > Hardcoded Default.
 

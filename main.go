@@ -17,6 +17,9 @@ import (
 )
 
 func main() {
+	// Preprocess args to add defaults for show flags without values
+	preprocessShowArgs()
+
 	if _, err := exec.LookPath("gh"); err != nil {
 		fmt.Fprintln(os.Stderr, "Error: GitHub CLI ('gh') is not installed or not in PATH. It is required for gh-pt. Please install it from https://cli.github.com/")
 		os.Exit(1)
@@ -85,4 +88,36 @@ func main() {
 		}
 		os.Exit(1)
 	}
+}
+
+// preprocessShowArgs adds default values to show flags when used without values.
+// --versions → --versions 24
+// --assets → --assets 50
+// --description → --description 10
+// --readme → --readme 50
+func preprocessShowArgs() {
+	defaults := map[string]string{
+		"--versions":    "24",
+		"--assets":      "50",
+		"--description": "10",
+		"--readme":      "50",
+	}
+
+	var result []string
+	for i := 0; i < len(os.Args); i++ {
+		arg := os.Args[i]
+
+		// Check if this is one of our show flags
+		if def, ok := defaults[arg]; ok {
+			result = append(result, arg)
+			// Check if next arg exists and is not a flag
+			if i+1 >= len(os.Args) || strings.HasPrefix(os.Args[i+1], "-") {
+				// No value provided, add default
+				result = append(result, def)
+			}
+		} else {
+			result = append(result, arg)
+		}
+	}
+	os.Args = result
 }

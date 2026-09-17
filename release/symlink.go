@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/joshsukhdeo/gh-pt/selector"
+	"github.com/rs/zerolog/log"
 )
 
 func computeSymlinkDirName(repository string, installedBinaryName string) string {
@@ -74,12 +75,20 @@ func copyFile(src, dst string, mode os.FileMode) error {
 	if err != nil {
 		return err
 	}
-	defer in.Close()
+	defer func() {
+		if err := in.Close(); err != nil {
+			log.Warn().Err(err).Str("file", src).Msg("failed to close source file")
+		}
+	}()
 	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() {
+		if err := out.Close(); err != nil {
+			log.Warn().Err(err).Str("file", dst).Msg("failed to close destination file")
+		}
+	}()
 	_, err = io.Copy(out, in)
 	return err
 }
@@ -101,12 +110,20 @@ func copyFS(fileSystem fs.FS, dst string) error {
 		if err != nil {
 			return err
 		}
-		defer in.Close()
+		defer func() {
+			if err := in.Close(); err != nil {
+				log.Warn().Err(err).Str("file", path).Msg("failed to close source file")
+			}
+		}()
 		out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode())
 		if err != nil {
 			return err
 		}
-		defer out.Close()
+		defer func() {
+			if err := out.Close(); err != nil {
+				log.Warn().Err(err).Str("file", target).Msg("failed to close destination file")
+			}
+		}()
 		_, err = io.Copy(out, in)
 		return err
 	})
@@ -166,7 +183,9 @@ func (r *GithubRelease) executeSymlinkInstall(binaries []*selector.SelectorItem,
 
 		if _, err := os.Stat(destPath); err == nil {
 			if r.CliParams.Overwrite {
-				os.Remove(destPath)
+				if err := os.Remove(destPath); err != nil {
+					log.Warn().Err(err).Str("path", destPath).Msg("failed to remove existing file before overwrite")
+				}
 			} else {
 				return "", fmt.Errorf("%s already exists; use force to overwrite", destPath)
 			}

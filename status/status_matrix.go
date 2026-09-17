@@ -82,9 +82,9 @@ func GenerateStatusMessage(s InstallState) (string, error) {
 			}
 		} else {
 			if s.InState {
-				return "⚠️ABORTION ~ ZEROGRADE REINSTALL subverted⚠️ => To avoid these abortions going forward, pass the -f or --force param to allow over-writing", fmt.Errorf("Warning: Zerograde reinstall subverted")
+				return "⚠️ABORTION ~ ZEROGRADE REINSTALL subverted⚠️ => To avoid these abortions going forward, pass the -f or --force param to allow over-writing", fmt.Errorf("warning: Zerograde reinstall subverted")
 			} else {
-				return "⚠️ABORTION ~ ADOPT + ZEROGRADE REINSTALL subverted⚠️ => To avoid these abortions going forward, pass the -f or --force param to allow over-writing", fmt.Errorf("Warning: Adopt + Zerograde reinstall subverted")
+				return "⚠️ABORTION ~ ADOPT + ZEROGRADE REINSTALL subverted⚠️ => To avoid these abortions going forward, pass the -f or --force param to allow over-writing", fmt.Errorf("warning: Adopt + Zerograde reinstall subverted")
 			}
 		}
 	} else if comp > 0 { // UPGRADE
@@ -97,14 +97,14 @@ func GenerateStatusMessage(s InstallState) (string, error) {
 	} else { // DOWNGRADE
 		if !s.Force {
 			if s.InState {
-				return "⚠️ABORTION ~ DOWNGRADE subverted⚠️ => To avoid these abortions going forward, the following largely undesirable options have been provided by the creator's magnanimity:\n➵use -f or --force to allow overwrites/re-installs\n➵use ---self-inflicted-technical-debt to allow downgrades\n➵use ---LE-RETROGROUCH to exclusively downgrades and save the item's entry with unpinned and with a flag exclusively (In the resulting saved state, the item is unpined with a 'Le_RetroGrouch' flag) [note that if the item is pinned, --unpin is required]\n➵use ---retograde-stopgap to unpin, exclusively downgrades and pin the resultant version.\n➵use ---BARBAROUS to bypass virustotal security scanning, bypass certifying hashes, allow wine, allow foreign architecture, and allow downgrades", fmt.Errorf("Error: Downgrade subverted")
+				return "⚠️ABORTION ~ DOWNGRADE subverted⚠️ => To avoid these abortions going forward, the following largely undesirable options have been provided by the creator's magnanimity:\n➵use -f or --force to allow overwrites/re-installs\n➵use ---self-inflicted-technical-debt to allow downgrades\n➵use ---LE-RETROGROUCH to exclusively downgrades and save the item's entry with unpinned and with a flag exclusively (In the resulting saved state, the item is unpined with a 'Le_RetroGrouch' flag) [note that if the item is pinned, --unpin is required]\n➵use ---retograde-stopgap to unpin, exclusively downgrades and pin the resultant version.\n➵use ---BARBAROUS to bypass virustotal security scanning, bypass certifying hashes, allow wine, allow foreign architecture, and allow downgrades", fmt.Errorf("error: Downgrade subverted")
 			} else {
 				return "⚠️ABORTION ~ ADOPT + DOWNGRADE subverted⚠️ => To avoid these abortions going forward, the following largely undesirable options have been provided by the creator's magnanimity:\n➵use -f or --force to allow overwrites/re-installs\n➵use ---self-inflicted-technical-debt to allow downgrades\n➵use ---LE-RETROGROUCH to exclusively downgrades and save the item's entry with unpinned and with a flag exclusively (In the resulting saved state, the item is unpined with a 'Le_RetroGrouch' flag)\n➵use ---retograde-stopgap to unpin, exclusively downgrades and pin the resultant version.\n➵use ---BARBAROUS to bypass virustotal security scanning, bypass certifying hashes, allow wine and allow foreign architecture  ---BARBAROUS", fmt.Errorf("adopt downgrade subverted")
 			}
 		} else {
 			if !anyDowngradeFlag {
 				if s.InState {
-					return "⚠️ABORTION ~ DOWNGRADE subverted⚠️ => To avoid these abortions going forward, the following largely undesirable options have been provided by the creator's magnanimity:\n➵use -f or --force to allow overwrites/re-installs\n➵use ---self-inflicted-technical-debt to allow downgrades\n➵use ---LE-RETROGROUCH to exclusively downgrades and save the item's entry with unpinned and with a flag exclusively (In the resulting saved state, the item is unpined with a 'Le_RetroGrouch' flag) [note that if the item is pinned, --unpin is required]\n➵use ---retograde-stopgap to unpin, exclusively downgrades and pin the resultant version.\n➵use ---BARBAROUS to bypass virustotal security scanning, bypass certifying hashes, allow wine, allow foreign architecture, and allow downgrades", fmt.Errorf("Error: Downgrade subverted")
+					return "⚠️ABORTION ~ DOWNGRADE subverted⚠️ => To avoid these abortions going forward, the following largely undesirable options have been provided by the creator's magnanimity:\n➵use -f or --force to allow overwrites/re-installs\n➵use ---self-inflicted-technical-debt to allow downgrades\n➵use ---LE-RETROGROUCH to exclusively downgrades and save the item's entry with unpinned and with a flag exclusively (In the resulting saved state, the item is unpined with a 'Le_RetroGrouch' flag) [note that if the item is pinned, --unpin is required]\n➵use ---retograde-stopgap to unpin, exclusively downgrades and pin the resultant version.\n➵use ---BARBAROUS to bypass virustotal security scanning, bypass certifying hashes, allow wine, allow foreign architecture, and allow downgrades", fmt.Errorf("error: Downgrade subverted")
 				} else {
 					return "DOWNGRADE SKIPPED", fmt.Errorf("downgrade skipped")
 				}

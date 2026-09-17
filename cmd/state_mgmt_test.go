@@ -36,17 +36,17 @@ func setupState(t *testing.T) string {
 	st, err := state.LoadState()
 	require.NoError(t, err)
 
-	st.AddApp(&state.InstalledApp{
+	require.NoError(t, st.AddApp(&state.InstalledApp{
 		Repository: "test/repo1",
 		TargetPath: tmpDir,
 		Rename:     map[string]string{"binary1": "bin1"},
 		Pinned:     false,
-	})
-	st.AddApp(&state.InstalledApp{
+	}))
+	require.NoError(t, st.AddApp(&state.InstalledApp{
 		Repository:    "test/repo2",
 		TargetPath:    tmpDir,
 		CompileScript: filepath.Join(tmpDir, "script.sh"),
-	})
+	}))
 
 	return tmpDir
 }
@@ -65,7 +65,7 @@ func TestRemoveApp(t *testing.T) {
 	tmpDir := setupState(t)
 
 	binPath := filepath.Join(tmpDir, "bin1")
-	os.WriteFile(binPath, []byte("data"), 0755)
+	require.NoError(t, os.WriteFile(binPath, []byte("data"), 0755))
 
 	origExecCommand := execCommand
 	execCommand = helperCommand
@@ -84,7 +84,7 @@ func TestPurgeApp(t *testing.T) {
 	tmpDir := setupState(t)
 
 	scriptPath := filepath.Join(tmpDir, "script.sh")
-	os.WriteFile(scriptPath, []byte("data"), 0755)
+	require.NoError(t, os.WriteFile(scriptPath, []byte("data"), 0755))
 
 	err := RemoveApp("repo2", true)
 	require.NoError(t, err)
