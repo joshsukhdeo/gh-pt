@@ -502,7 +502,7 @@ func TestGithubRelease_InstallBinaryErrors(t *testing.T) {
 	assert.NoError(t, err)
 	err = gr.installBinary(sourceFile)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "already exists and --target-binaries-overwrite is not set")
+	assert.Contains(t, err.Error(), "already exists and -f/--force is not set")
 
 	gr.CliParams.Interactive = true
 	gr.CliParams.DisablePrompts = false

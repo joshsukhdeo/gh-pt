@@ -165,8 +165,8 @@ func (r *GithubRelease) installArchivedBinary(fileSystem fs.FS, binaryPath strin
 				return fmt.Errorf("%s already exists and user did not want to overwrite", destinationPath)
 			}
 		} else {
-			if !r.CliParams.Overwrite {
-				return fmt.Errorf("%s already exists and --target-binaries-overwrite is not set", destinationPath)
+			if !r.CliParams.Overwrite && !r.CliParams.IsUpgradeCmd {
+				return fmt.Errorf("%s already exists and -f/--force is not set", destinationPath)
 			}
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
@@ -233,8 +233,8 @@ func (r *GithubRelease) installBinary(binaryPath string) error {
 				return fmt.Errorf("%s already exists and user did not want to overwrite", destinationPath)
 			}
 		} else {
-			if !r.CliParams.Overwrite {
-				return fmt.Errorf("%s already exists and --target-binaries-overwrite is not set", destinationPath)
+			if !r.CliParams.Overwrite && !r.CliParams.IsUpgradeCmd {
+				return fmt.Errorf("%s already exists and -f/--force is not set", destinationPath)
 			}
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
@@ -694,6 +694,12 @@ func (r *GithubRelease) Install() error {
 		return abortErr
 	}
 	r.StatusMessage = statusMsg // We need to add StatusMessage to GithubRelease struct
+
+	// Automatically allow overwriting for an upgrade
+	if installState.InState && status.CompareVersions(installState.PrevVersion, installState.NewVersion) > 0 {
+		r.CliParams.Overwrite = true
+	}
+
 	
 	if pUI != nil {
 		ghostType := "🍒"
