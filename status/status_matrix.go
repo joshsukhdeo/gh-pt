@@ -88,20 +88,12 @@ func GenerateStatusMessage(s InstallState) (string, error) {
 			}
 		}
 	} else if comp > 0 { // UPGRADE
-		if s.Force || s.IsUpgradeCmd {
-			// If it's an upgrade command, we allow it without force.
-			if s.InState {
-				return fmt.Sprintf("REINSTALLED ~~> ✨UPGRADED✨ (%s )", baseStr), nil
-			} else {
-				return fmt.Sprintf("ADOPTED + REINSTALLED ~~> ✨UPGRADED✨ (%s )", baseStr), nil
-			}
+		if s.InState {
+			return fmt.Sprintf("REINSTALLED ~~> ✨UPGRADED✨ (%s )", baseStr), nil
 		} else {
-			if s.InState {
-				return "⚠️ABORTION ~ UPGRADE subverted⚠️ => To avoid these abortions going forward, pass the -f or --force param to allow over-writing", fmt.Errorf("upgrade subverted")
-			} else {
-				return "⚠️ABORTION ~ ADOPT + UPGRADE subverted⚠️ => To avoid these abortions going forward, pass the -f or --force param to allow over-writing", fmt.Errorf("adopt upgrade subverted")
-			}
+			return fmt.Sprintf("ADOPTED + REINSTALLED ~~> ✨UPGRADED✨ (%s )", baseStr), nil
 		}
+
 	} else { // DOWNGRADE
 		if !s.Force {
 			if s.InState {
