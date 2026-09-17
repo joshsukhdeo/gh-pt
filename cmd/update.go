@@ -196,9 +196,6 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 
 		log.Info().Msgf("Updating %s from %s to %s", app.Repository, app.Version, latestRelease.Name)
 
-		// Always overwrite during updates since we confirmed there's a new version
-		appParams.Overwrite = true
-
 		// We trust the app.ReleaseRegexp stored in state.json because it was
 		// already stripped of version numbers and replaced with .*
 
