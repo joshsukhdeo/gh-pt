@@ -33,11 +33,11 @@ func ListState(rList ...*RootCLI) error {
 		return nil
 	}
 
-	filterVal := r.Ls
+	filterVal := r.ExecContext.Ls
 	isLongFormat := false
-	if r.Ll != "" && r.Ll != "false" {
+	if r.ExecContext.Ll != "" && r.ExecContext.Ll != "false" {
 		isLongFormat = true
-		filterVal = r.Ll
+		filterVal = r.ExecContext.Ll
 	}
 
 	var headers []string
@@ -47,7 +47,7 @@ func ListState(rList ...*RootCLI) error {
 		headers = []string{"Repository", "Type", "Version", "InstallAssetNames", "Location", "Pinned", "Checksums", "VirusTotal", "CompressedExtractionTarget", "KeepSuffixes", "Wine", "AllowForeignArch", "ExtractorPrecedence", "RenameBinaryTo", "CompileScriptLocation", "InstallDate", "LastUpdated", "LastChecked"}
 	}
 
-	if !r.Full {
+	if !r.ExecContext.Full {
 		headers = []string{"Repository", "Version", "Type", "Scope", "Auto-Update", "Target Path", "Helper Script"}
 	}
 
@@ -70,12 +70,12 @@ func ListState(rList ...*RootCLI) error {
 			}
 		}
 
-		if r.Global && !app.Global {
+		if r.ExecContext.CommonInstallFlags.Global && !app.Global {
 			continue
 		}
-		if r.Wine != "" && r.Wine != "off" {
+		if r.ExecContext.CommonInstallFlags.Wine != "" && r.ExecContext.CommonInstallFlags.Wine != "off" {
 			// Very naive wine check. Our state doesn't track per-app wine, but we do have app.Type maybe?
-			// If not tracked properly in state, we filter by r.Wine.
+			// If not tracked properly in state, we filter by r.ExecContext.CommonInstallFlags.Wine.
 			// Actually, we'd need to check if the app used Wine.
 			// The prompt says "--wine list entries with the specified {wine} settings"
 			// Right now, InstalledApp doesn't track Wine settings. Let's add that to State later, but for now
@@ -83,7 +83,7 @@ func ListState(rList ...*RootCLI) error {
 		}
 		// if r.AllowForeignArch { ... } // Stub for future allow-foreign-arch filter
 
-		if r.Pin != "" && !app.Pinned {
+		if r.ExecContext.Pin != "" && !app.Pinned {
 			continue
 		}
 
@@ -141,7 +141,7 @@ func ListState(rList ...*RootCLI) error {
 			displayRepo = indicator + " " + repo
 		}
 
-		if !r.Full {
+		if !r.ExecContext.Full {
 			tableData = append(tableData, []string{
 				displayRepo,
 				versionDisplay,

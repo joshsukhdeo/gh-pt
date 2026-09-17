@@ -13,18 +13,18 @@ import (
 )
 
 func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
-	if r.Barbarous {
-		r.VerifyChecksum = false
-		r.SkipVtSandbox = true
-		r.AllowForeignArch = true
-		r.AllowDowngrade = true
+	if r.ExecContext.CommonInstallFlags.Barbarous {
+		r.ExecContext.CommonInstallFlags.VerifyChecksum = false
+		r.ExecContext.CommonInstallFlags.SkipVtSandbox = true
+		r.ExecContext.CommonInstallFlags.AllowForeignArch = true
+		r.ExecContext.CommonInstallFlags.AllowDowngrade = true
 	}
-	if r.LeRetrogrouch {
-		r.SkipVtSandbox = true
-		r.AllowDowngrade = true
+	if r.ExecContext.CommonInstallFlags.LeRetrogrouch {
+		r.ExecContext.CommonInstallFlags.SkipVtSandbox = true
+		r.ExecContext.CommonInstallFlags.AllowDowngrade = true
 	}
-	if r.RetrogradeStopgap || r.SelfInflictedDebt {
-		r.AllowDowngrade = true
+	if r.ExecContext.CommonInstallFlags.RetrogradeStopgap || r.ExecContext.CommonInstallFlags.SelfInflictedDebt {
+		r.ExecContext.CommonInstallFlags.AllowDowngrade = true
 	}
 
 	st, err := state.LoadState()

@@ -18,10 +18,12 @@ import (
 )
 
 type mockGhClient struct {
-	releases []Release
-	assets   map[int64][]ReleaseAsset
-	tags     map[string]Release
-	err      error
+	releases    []Release
+	assets      map[int64][]ReleaseAsset
+	tags        map[string]Release
+	readme      string // base64-encoded readme content
+	description string
+	err         error
 }
 
 func (m *mockGhClient) Get(path string, response interface{}) error {

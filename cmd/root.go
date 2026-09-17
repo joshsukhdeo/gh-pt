@@ -36,34 +36,34 @@ const (
 )
 
 func (r *RootCLI) Validate() error {
-	if runtime.GOOS == "windows" && r.Wine != "off" && r.Wine != "" {
+	if runtime.GOOS == "windows" && r.ExecContext.CommonInstallFlags.Wine != "off" && r.ExecContext.CommonInstallFlags.Wine != "" {
 		pterm.Warning.Println("Wine is not supported on Windows. Continuing with wine disabled.")
-		r.Wine = "off"
+		r.ExecContext.CommonInstallFlags.Wine = "off"
 	}
 
-	if !r.Update && !r.UpdateAll && r.Ls == "" && r.Ll == "" && !r.EditSavedState && r.RmSavedState == "" && r.Rm == "" && r.Purge == "" && r.Pin == "" {
-		match, _ := regexp.MatchString(`.+/.+`, r.Repository)
+	if !r.ExecContext.Update && !r.ExecContext.UpdateAll && r.ExecContext.Ls == "" && r.ExecContext.Ll == "" && !r.ExecContext.EditSavedState && r.ExecContext.RmSavedState == "" && r.ExecContext.Rm == "" && r.ExecContext.Purge == "" && r.ExecContext.Pin == "" {
+		match, _ := regexp.MatchString(`.+/.+`, r.ExecContext.Repository)
 		if !match {
-			return fmt.Errorf("repository must be in 'user/repository' format (provided: '%s')", r.Repository)
+			return fmt.Errorf("repository must be in 'user/repository' format (provided: '%s')", r.ExecContext.Repository)
 		}
 	}
 
-	if r.CompileFromSource && !r.AI {
+	if r.ExecContext.CompileFromSource && !r.ExecContext.AI {
 		return fmt.Errorf("--compile-from-source can only be used with --ai")
 	}
 
-	if r.Clone || r.Fork || r.CompileFromSource || r.Show || r.ShowAssets > -1 || r.ShowVersions > -1 || r.ShowDescription > -1 || r.ShowReadme > -1 {
+	if r.ExecContext.Clone || r.ExecContext.Fork || r.ExecContext.CompileFromSource || r.ExecContext.Show || r.ExecContext.ShowAssets > -1 || r.ExecContext.ShowVersions > -1 || r.ExecContext.ShowDescription > -1 || r.ExecContext.ShowReadme > -1 {
 		return nil
 	}
 
 	// Detect root user and handle global install path
 	if os.Getuid() == 0 {
-		if r.Global {
+		if r.ExecContext.CommonInstallFlags.Global {
 			// Root + global: ensure we're using /usr/local/bin
-			if r.TargetPath == GetDefaultTargetPath() {
-				r.TargetPath = "/usr/local/bin"
+			if r.ExecContext.CommonInstallFlags.TargetPath == GetDefaultTargetPath() {
+				r.ExecContext.CommonInstallFlags.TargetPath = "/usr/local/bin"
 			}
-		} else if !r.AllowRootUserInstall {
+		} else if !r.ExecContext.CommonInstallFlags.AllowRootUserInstall {
 			// Root without global flag and without explicit permission
 			err := fmt.Errorf("running as root without --global flag. Use --global for system-wide install or --allow-root-user-install to install to user-local paths")
 			log.Error().
@@ -73,7 +73,7 @@ func (r *RootCLI) Validate() error {
 		}
 	}
 
-	if r.TargetPath == "" {
+	if r.ExecContext.CommonInstallFlags.TargetPath == "" {
 		err := fmt.Errorf("could not determine default install path, use '--install-path' flag")
 		log.Error().
 			Err(err).
@@ -81,36 +81,36 @@ func (r *RootCLI) Validate() error {
 		return err
 	}
 
-	targetPathInfo, err := os.Stat(r.TargetPath)
+	targetPathInfo, err := os.Stat(r.ExecContext.CommonInstallFlags.TargetPath)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			createPath := r.TargetPathCreate
-			if r.Interactive {
+			createPath := r.ExecContext.CommonInstallFlags.TargetPathCreate
+			if r.ExecContext.CommonInstallFlags.Interactive {
 				createPath, _ = pterm.DefaultInteractiveConfirm.
 					WithDefaultValue(true).
-					Show(fmt.Sprintf("'%s' does not exist. Create?", r.TargetPath))
+					Show(fmt.Sprintf("'%s' does not exist. Create?", r.ExecContext.CommonInstallFlags.TargetPath))
 			}
 
 			if createPath {
-				err := os.MkdirAll(r.TargetPath, os.ModePerm)
+				err := os.MkdirAll(r.ExecContext.CommonInstallFlags.TargetPath, os.ModePerm)
 				if err != nil {
 					log.Error().
 						Err(err).
-						Msgf("target installation path '%s' error", r.TargetPath)
+						Msgf("target installation path '%s' error", r.ExecContext.CommonInstallFlags.TargetPath)
 					return err
 				}
 				return nil
 			} else {
 				log.Error().
 					Err(err).
-					Msgf("target installation path '%s' error", r.TargetPath)
+					Msgf("target installation path '%s' error", r.ExecContext.CommonInstallFlags.TargetPath)
 				return err
 			}
 
 		}
 		log.Error().
 			Err(err).
-			Msgf("target installation path '%s' error", r.TargetPath)
+			Msgf("target installation path '%s' error", r.ExecContext.CommonInstallFlags.TargetPath)
 		return err
 	}
 
@@ -118,7 +118,7 @@ func (r *RootCLI) Validate() error {
 		err = errors.New("not a directory")
 		log.Error().
 			Err(err).
-			Msgf("target installation path '%s' error", r.TargetPath)
+			Msgf("target installation path '%s' error", r.ExecContext.CommonInstallFlags.TargetPath)
 	}
 
 	return nil
@@ -130,26 +130,26 @@ func PostBuild(k *kong.Kong) error {
 }
 
 func (r *RootCLI) RunInstall() error {
-	if r.Barbarous {
-		r.VerifyChecksum = false
-		r.SkipVtSandbox = true
-		r.AllowForeignArch = true
-		r.AllowDowngrade = true
+	if r.ExecContext.CommonInstallFlags.Barbarous {
+		r.ExecContext.CommonInstallFlags.VerifyChecksum = false
+		r.ExecContext.CommonInstallFlags.SkipVtSandbox = true
+		r.ExecContext.CommonInstallFlags.AllowForeignArch = true
+		r.ExecContext.CommonInstallFlags.AllowDowngrade = true
 	}
-	if r.LeRetrogrouch {
-		r.SkipVtSandbox = true
-		r.AllowDowngrade = true
+	if r.ExecContext.CommonInstallFlags.LeRetrogrouch {
+		r.ExecContext.CommonInstallFlags.SkipVtSandbox = true
+		r.ExecContext.CommonInstallFlags.AllowDowngrade = true
 	}
-	if r.RetrogradeStopgap || r.SelfInflictedDebt {
-		r.AllowDowngrade = true
+	if r.ExecContext.CommonInstallFlags.RetrogradeStopgap || r.ExecContext.CommonInstallFlags.SelfInflictedDebt {
+		r.ExecContext.CommonInstallFlags.AllowDowngrade = true
 	}
 
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-	logLevel, _ := zerolog.ParseLevel(r.LogLevel)
-	if r.Verbose {
+	logLevel, _ := zerolog.ParseLevel(r.ExecContext.LogLevel)
+	if r.ExecContext.Verbose {
 		logLevel = zerolog.DebugLevel
 	}
-	if r.LogQuietInteractive && r.Interactive {
+	if r.ExecContext.LogQuietInteractive && r.ExecContext.CommonInstallFlags.Interactive {
 		logLevel = zerolog.Disabled
 	}
 	zerolog.SetGlobalLevel(logLevel)
@@ -163,28 +163,28 @@ func (r *RootCLI) RunInstall() error {
 			MaxAge:     30, // days
 			Compress:   true,
 		}
-		if r.LogFormat == "console" {
+		if r.ExecContext.LogFormat == "console" {
 			log.Logger = log.Output(zerolog.ConsoleWriter{Out: io.MultiWriter(os.Stdout, fileLogger)})
 		} else {
 			log.Logger = log.Output(io.MultiWriter(os.Stdout, fileLogger))
 		}
-	} else if r.LogFormat == "console" {
+	} else if r.ExecContext.LogFormat == "console" {
 		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout})
 	}
 
 	if cfg != nil {
-		if r.VTApiKey == "" {
-			r.VTApiKey = cfg.Core.VTApiKey
+		if r.ExecContext.VTApiKey == "" {
+			r.ExecContext.VTApiKey = cfg.Core.VTApiKey
 		}
 		if cfg.Core.AllowPrerelease {
-			r.Prerelease = true
+			r.ExecContext.CommonInstallFlags.Prerelease = true
 		}
 	}
-	if r.Stable {
-		r.Prerelease = false
+	if r.ExecContext.CommonInstallFlags.Stable {
+		r.ExecContext.CommonInstallFlags.Prerelease = false
 	}
 
-	if r.Global || r.UpdateAll || (r.Update && r.Global) {
+	if r.ExecContext.CommonInstallFlags.Global || r.ExecContext.UpdateAll || (r.ExecContext.Update && r.ExecContext.CommonInstallFlags.Global) {
 		// Always run sudo -v to refresh/establish the credential cache.
 		// sudo -n true only checks without extending the timestamp, which can
 		// expire mid-download before installBinary needs it.
@@ -197,48 +197,48 @@ func (r *RootCLI) RunInstall() error {
 		}
 	}
 
-	if r.AddDeps && r.NoDeps {
-		r.AddDeps = false
-		r.NoDeps = false
-	} else if !r.AddDeps && !r.NoDeps {
+	if r.ExecContext.CommonInstallFlags.AddDeps && r.ExecContext.CommonInstallFlags.NoDeps {
+		r.ExecContext.CommonInstallFlags.AddDeps = false
+		r.ExecContext.CommonInstallFlags.NoDeps = false
+	} else if !r.ExecContext.CommonInstallFlags.AddDeps && !r.ExecContext.CommonInstallFlags.NoDeps {
 		envDeps := strings.ToUpper(os.Getenv("GH_INSTALL_ADD_DEPS"))
 		switch envDeps {
 		case "TRUE":
-			r.AddDeps = true
+			r.ExecContext.CommonInstallFlags.AddDeps = true
 		case "FALSE":
-			r.NoDeps = true
+			r.ExecContext.CommonInstallFlags.NoDeps = true
 		default:
 			if cfg != nil {
-				r.AddDeps = cfg.Core.AddDeps
-				r.NoDeps = cfg.Core.NoDeps
-				if !r.DisablePrompts {
-					r.DisablePrompts = cfg.Core.DisablePrompts
+				r.ExecContext.CommonInstallFlags.AddDeps = cfg.Core.AddDeps
+				r.ExecContext.CommonInstallFlags.NoDeps = cfg.Core.NoDeps
+				if !r.ExecContext.CommonInstallFlags.DisablePrompts {
+					r.ExecContext.CommonInstallFlags.DisablePrompts = cfg.Core.DisablePrompts
 				}
-				if !r.NoSaveState {
-					r.NoSaveState = cfg.Core.NoSaveState
+				if !r.ExecContext.CommonInstallFlags.NoSaveState {
+					r.ExecContext.CommonInstallFlags.NoSaveState = cfg.Core.NoSaveState
 				}
-				if r.Wine == "off" && cfg.Core.Wine != "" && cfg.Core.Wine != "off" {
+				if r.ExecContext.CommonInstallFlags.Wine == "off" && cfg.Core.Wine != "" && cfg.Core.Wine != "off" {
 				}
-				if r.Extractor == "" || r.Extractor == "default" {
-					r.Extractor = cfg.Core.Extractor
+				if r.ExecContext.CommonInstallFlags.Extractor == "" || r.ExecContext.CommonInstallFlags.Extractor == "default" {
+					r.ExecContext.CommonInstallFlags.Extractor = cfg.Core.Extractor
 				}
-				if !r.KeepSuffixes {
-					r.KeepSuffixes = cfg.Core.KeepSuffixes
+				if !r.ExecContext.CommonInstallFlags.KeepSuffixes {
+					r.ExecContext.CommonInstallFlags.KeepSuffixes = cfg.Core.KeepSuffixes
 				}
 
 			}
 		}
 	}
 
-	if r.Global && r.TargetPath == GetDefaultTargetPath() {
+	if r.ExecContext.CommonInstallFlags.Global && r.ExecContext.CommonInstallFlags.TargetPath == GetDefaultTargetPath() {
 		switch runtime.GOOS {
 		case "windows":
-			r.TargetPath = os.Getenv("ProgramFiles")
-			if r.TargetPath == "" {
-				r.TargetPath = "C:\\Program Files"
+			r.ExecContext.CommonInstallFlags.TargetPath = os.Getenv("ProgramFiles")
+			if r.ExecContext.CommonInstallFlags.TargetPath == "" {
+				r.ExecContext.CommonInstallFlags.TargetPath = "C:\\Program Files"
 			}
 		default:
-			r.TargetPath = "/usr/local/bin"
+			r.ExecContext.CommonInstallFlags.TargetPath = "/usr/local/bin"
 		}
 	}
 
@@ -250,15 +250,15 @@ func (r *RootCLI) RunInstall() error {
 		return err
 	}
 
-	if r.Ls != "" || r.Ll != "" {
+	if r.ExecContext.Ls != "" || r.ExecContext.Ll != "" {
 		return ListState(r)
 	}
-	if r.EditSavedState {
+	if r.ExecContext.EditSavedState {
 		return EditState()
 	}
-	if r.RmSavedState != "" {
-		if !r.DisablePrompts && !r.Overwrite {
-			confirmed, err := pterm.DefaultInteractiveConfirm.WithDefaultValue(false).Show(fmt.Sprintf("Remove %q from saved state only? This does not uninstall the app.", r.RmSavedState))
+	if r.ExecContext.RmSavedState != "" {
+		if !r.ExecContext.CommonInstallFlags.DisablePrompts && !r.ExecContext.CommonInstallFlags.Overwrite {
+			confirmed, err := pterm.DefaultInteractiveConfirm.WithDefaultValue(false).Show(fmt.Sprintf("Remove %q from saved state only? This does not uninstall the app.", r.ExecContext.RmSavedState))
 			if err != nil {
 				return err
 			}
@@ -266,11 +266,11 @@ func (r *RootCLI) RunInstall() error {
 				return nil
 			}
 		}
-		return RmStateOnly(r.RmSavedState)
+		return RmStateOnly(r.ExecContext.RmSavedState)
 	}
-	if r.Rm != "" {
-		if !r.DisablePrompts && !r.Overwrite {
-			confirmed, err := pterm.DefaultInteractiveConfirm.WithDefaultValue(false).Show(fmt.Sprintf("Uninstall %q and remove it from saved state? This removes the tracked binary(s) and any package managed by the OS package manager.", r.Rm))
+	if r.ExecContext.Rm != "" {
+		if !r.ExecContext.CommonInstallFlags.DisablePrompts && !r.ExecContext.CommonInstallFlags.Overwrite {
+			confirmed, err := pterm.DefaultInteractiveConfirm.WithDefaultValue(false).Show(fmt.Sprintf("Uninstall %q and remove it from saved state? This removes the tracked binary(s) and any package managed by the OS package manager.", r.ExecContext.Rm))
 			if err != nil {
 				return err
 			}
@@ -278,11 +278,11 @@ func (r *RootCLI) RunInstall() error {
 				return nil
 			}
 		}
-		return RemoveApp(r.Rm, false)
+		return RemoveApp(r.ExecContext.Rm, false)
 	}
-	if r.Purge != "" {
-		if !r.DisablePrompts && !r.Overwrite {
-			confirmed, err := pterm.DefaultInteractiveConfirm.WithDefaultValue(false).Show(fmt.Sprintf("Purge %q and remove it from saved state? This removes the tracked binary(s) and purges the package if applicable.", r.Purge))
+	if r.ExecContext.Purge != "" {
+		if !r.ExecContext.CommonInstallFlags.DisablePrompts && !r.ExecContext.CommonInstallFlags.Overwrite {
+			confirmed, err := pterm.DefaultInteractiveConfirm.WithDefaultValue(false).Show(fmt.Sprintf("Purge %q and remove it from saved state? This removes the tracked binary(s) and purges the package if applicable.", r.ExecContext.Purge))
 			if err != nil {
 				return err
 			}
@@ -290,67 +290,67 @@ func (r *RootCLI) RunInstall() error {
 				return nil
 			}
 		}
-		return RemoveApp(r.Purge, true)
+		return RemoveApp(r.ExecContext.Purge, true)
 	}
-	if r.Pin != "" {
-		return PinAppState(r.Pin)
+	if r.ExecContext.Pin != "" {
+		return PinAppState(r.ExecContext.Pin)
 	}
 
 
-	if r.Update || r.UpdateAll {
+	if r.ExecContext.Update || r.ExecContext.UpdateAll {
 		return DoUpdate(r, ghClient)
 	}
 
-	if r.Overwrite {
+	if r.ExecContext.CommonInstallFlags.Overwrite {
 		// If overwrite/force is used, attempt to purge any existing installation first
-		_ = RemoveApp(r.Repository, true)
+		_ = RemoveApp(r.ExecContext.Repository, true)
 	}
 
-	if r.Repository == "" {
+	if r.ExecContext.Repository == "" {
 		return fmt.Errorf("repository argument is required for installation")
 	}
 
-	if r.AI && r.AISafetyScan {
+	if r.ExecContext.AI && r.ExecContext.AISafetyScan {
 		if err := r.handleAISafetyScan(cfg); err != nil {
 			return err
 		}
 	}
 
-	if r.Clone || r.Fork {
+	if r.ExecContext.Clone || r.ExecContext.Fork {
 		if cfg == nil {
 			cfg, _ = config.LoadConfig()
 		}
 		return r.handleRepoCloneOrFork(cfg)
 	}
 
-	if r.CompileFromSource {
+	if r.ExecContext.CompileFromSource {
 		if cfg == nil {
 			cfg, _ = config.LoadConfig()
 		}
 		return r.handleCompileFromSource(cfg)
 	}
 
-	if r.AssetBinariesRegexp == "" {
-		r.AssetBinariesRegexp = "(?i).*"
+	if r.ExecContext.CommonInstallFlags.AssetBinariesRegexp == "" {
+		r.ExecContext.CommonInstallFlags.AssetBinariesRegexp = "(?i).*"
 	}
 
-	if r.ReleaseAssetRegexp == "" {
-		r.ReleaseAssetRegexps = buildRegexFromTypes(r.Type, r.Wine)
-		r.ReleaseAssetRegexp = strings.Join(r.ReleaseAssetRegexps, " | ")
+	if r.ExecContext.CommonInstallFlags.ReleaseAssetRegexp == "" {
+		r.ExecContext.CommonInstallFlags.ReleaseAssetRegexps = buildRegexFromTypes(r.ExecContext.CommonInstallFlags.Type, r.ExecContext.CommonInstallFlags.Wine)
+		r.ExecContext.CommonInstallFlags.ReleaseAssetRegexp = strings.Join(r.ExecContext.CommonInstallFlags.ReleaseAssetRegexps, " | ")
 	} else {
-		r.ReleaseAssetRegexps = []string{r.ReleaseAssetRegexp}
+		r.ExecContext.CommonInstallFlags.ReleaseAssetRegexps = []string{r.ExecContext.CommonInstallFlags.ReleaseAssetRegexp}
 	}
 
 	log.Debug().
-		Str("repository", r.Repository).
-		Str("release version", r.ReleaseVersion).
-		Str("release asset name", r.ReleaseAsset).
-		Strs("release asset binary names", r.AssetBinaries).
-		Str("release asset binary name regexp", r.AssetBinariesRegexp).
-		Str("target path", r.TargetPath).
+		Str("repository", r.ExecContext.Repository).
+		Str("release version", r.ExecContext.CommonInstallFlags.ReleaseVersion).
+		Str("release asset name", r.ExecContext.CommonInstallFlags.ReleaseAsset).
+		Strs("release asset binary names", r.ExecContext.CommonInstallFlags.AssetBinaries).
+		Str("release asset binary name regexp", r.ExecContext.CommonInstallFlags.AssetBinariesRegexp).
+		Str("target path", r.ExecContext.CommonInstallFlags.TargetPath).
 		Dict("renaming binaries", func() *zerolog.Event {
 			d := zerolog.Dict()
-			for k, v := range r.Rename {
+			for k, v := range r.ExecContext.CommonInstallFlags.Rename {
 				d = d.Str(k, v)
 			}
 			return d
@@ -358,11 +358,11 @@ func (r *RootCLI) RunInstall() error {
 		Msg("installing with values")
 
 	response := struct{ Name string }{}
-	err = ghClient.Get(fmt.Sprintf("repos/%s", r.Repository), &response)
+	err = ghClient.Get(fmt.Sprintf("repos/%s", r.ExecContext.Repository), &response)
 	if err != nil {
 		log.Error().
 			Err(err).
-			Msgf("repository %s doesn't exist", r.Repository)
+			Msgf("repository %s doesn't exist", r.ExecContext.Repository)
 	}
 
 	installRelease := release.MakeGithubRelease(
@@ -436,29 +436,29 @@ func (r *RootCLI) handleRepoCloneOrFork(cfg *config.Config) error {
 		forkBase = cfg.Paths.ForkPath
 	}
 
-	targetDir := resolveRepoPath(r.Repository, r.Clone, r.Fork, cloneBase, forkBase)
-	if r.TargetPath != "" && r.TargetPath != GetDefaultTargetPath() {
-		targetDir = r.TargetPath
+	targetDir := resolveRepoPath(r.ExecContext.Repository, r.ExecContext.Clone, r.ExecContext.Fork, cloneBase, forkBase)
+	if r.ExecContext.CommonInstallFlags.TargetPath != "" && r.ExecContext.CommonInstallFlags.TargetPath != GetDefaultTargetPath() {
+		targetDir = r.ExecContext.CommonInstallFlags.TargetPath
 	}
 
 	log.Info().
-		Str("repository", r.Repository).
+		Str("repository", r.ExecContext.Repository).
 		Str("target_directory", targetDir).
-		Bool("clone", r.Clone).
-		Bool("fork", r.Fork).
+		Bool("clone", r.ExecContext.Clone).
+		Bool("fork", r.ExecContext.Fork).
 		Msg("handling repository clone/fork")
 
-	if r.DryRun {
-		if r.Fork {
-			log.Info().Msgf("[dry-run] Would fork and clone %s to %s", r.Repository, targetDir)
+	if r.ExecContext.CommonInstallFlags.DryRun {
+		if r.ExecContext.Fork {
+			log.Info().Msgf("[dry-run] Would fork and clone %s to %s", r.ExecContext.Repository, targetDir)
 		} else {
-			log.Info().Msgf("[dry-run] Would clone %s to %s", r.Repository, targetDir)
+			log.Info().Msgf("[dry-run] Would clone %s to %s", r.ExecContext.Repository, targetDir)
 		}
 		return nil
 	}
 
 	if _, err := os.Stat(targetDir); err == nil {
-		if !r.Overwrite {
+		if !r.ExecContext.CommonInstallFlags.Overwrite {
 			return fmt.Errorf("target path %s already exists; use force to overwrite", targetDir)
 		}
 		_ = os.RemoveAll(targetDir)
@@ -468,7 +468,7 @@ func (r *RootCLI) handleRepoCloneOrFork(cfg *config.Config) error {
 		return fmt.Errorf("failed to create parent directory: %w", err)
 	}
 
-	args := buildCloneOrForkArgs(r.Repository, r.Fork, targetDir, r.MaxDepth)
+	args := buildCloneOrForkArgs(r.ExecContext.Repository, r.ExecContext.Fork, targetDir, r.ExecContext.MaxDepth)
 
 	stdOut, stdErr, err := gh.Exec(args...)
 	if err != nil {
@@ -476,22 +476,22 @@ func (r *RootCLI) handleRepoCloneOrFork(cfg *config.Config) error {
 	}
 	log.Info().Str("output", stdOut.String()).Msg("repository cloned successfully")
 
-	if !r.NoSaveState {
+	if !r.ExecContext.CommonInstallFlags.NoSaveState {
 		st, err := state.LoadState()
 		if err == nil {
 			err = st.AddApp(&state.InstalledApp{
-				Repository: r.Repository,
+				Repository: r.ExecContext.Repository,
 				TargetPath: targetDir,
-				Global:     r.Global,
-				Clone:      r.Clone,
-				Fork:       r.Fork,
-				Pinned:     r.PinInstall,
-				MaxDepth:   r.MaxDepth,
+				Global:     r.ExecContext.CommonInstallFlags.Global,
+				Clone:      r.ExecContext.Clone,
+				Fork:       r.ExecContext.Fork,
+				Pinned:     r.ExecContext.CommonInstallFlags.PinInstall,
+				MaxDepth:   r.ExecContext.MaxDepth,
 			})
 			if err != nil {
 				log.Warn().Err(err).Msg("could not save repository state")
 			} else {
-				log.Info().Msgf("Saved %s to state tracking.", r.Repository)
+				log.Info().Msgf("Saved %s to state tracking.", r.ExecContext.Repository)
 			}
 		}
 	}
@@ -550,24 +550,24 @@ func runAIAgent(aiCmdTemplate, prompt, dir string) error {
 }
 
 func (r *RootCLI) handleAISafetyScan(cfg *config.Config) error {
-	aiCmdTemplate := r.AICmd
-	if cfg != nil && cfg.AI.AICmd != "" && (r.AICmd == "" || r.AICmd == "agy -p \"%s\"") {
+	aiCmdTemplate := r.ExecContext.AICmd
+	if cfg != nil && cfg.AI.AICmd != "" && (r.ExecContext.AICmd == "" || r.ExecContext.AICmd == "agy -p \"%s\"") {
 		aiCmdTemplate = cfg.AI.AICmd
 	}
 	if aiCmdTemplate == "" {
 		aiCmdTemplate = "agy -p \"%s\""
 	}
 
-	prompt := fmt.Sprintf("Analyze the GitHub repository %s for safety concerns, malicious code, suspicious recent commits, or backdoors. Report your findings concisely and explicitly state if it appears safe or compromised.", r.Repository)
+	prompt := fmt.Sprintf("Analyze the GitHub repository %s for safety concerns, malicious code, suspicious recent commits, or backdoors. Report your findings concisely and explicitly state if it appears safe or compromised.", r.ExecContext.Repository)
 
-	log.Info().Msgf("Initiating AI safety scan for %s...", r.Repository)
+	log.Info().Msgf("Initiating AI safety scan for %s...", r.ExecContext.Repository)
 	if err := runAIAgent(aiCmdTemplate, prompt, ""); err != nil {
 		return fmt.Errorf("AI safety scan failed to execute: %w", err)
 	}
 
-	if !r.DisablePrompts {
+	if !r.ExecContext.CommonInstallFlags.DisablePrompts {
 		var confirm string
-		fmt.Printf("\nSafety scan complete. Do you want to proceed with the installation of %s? [y/N]: ", r.Repository)
+		fmt.Printf("\nSafety scan complete. Do you want to proceed with the installation of %s? [y/N]: ", r.ExecContext.Repository)
 		_, _ = fmt.Scanln(&confirm)
 		if strings.ToLower(strings.TrimSpace(confirm)) != "y" {
 			return fmt.Errorf("installation aborted by user after AI safety scan")
@@ -578,8 +578,8 @@ func (r *RootCLI) handleAISafetyScan(cfg *config.Config) error {
 }
 
 func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
-	scriptPath := getCompileScriptPath(r.Repository)
-	targetPath := r.TargetPath
+	scriptPath := getCompileScriptPath(r.ExecContext.Repository)
+	targetPath := r.ExecContext.CommonInstallFlags.TargetPath
 	if targetPath == "" {
 		targetPath = GetDefaultTargetPath()
 	}
@@ -588,7 +588,7 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 	if err != nil {
 		return fmt.Errorf("could not determine home directory: %w", err)
 	}
-	parts := strings.Split(r.Repository, "/")
+	parts := strings.Split(r.ExecContext.Repository, "/")
 	repoName := parts[len(parts)-1]
 	repoDir := filepath.Join(homeDir, "builds", repoName)
 
@@ -600,21 +600,21 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 	_ = os.RemoveAll(repoDir)
 
 	log.Info().
-		Str("repository", r.Repository).
+		Str("repository", r.ExecContext.Repository).
 		Str("build_dir", repoDir).
 		Str("script_path", scriptPath).
 		Str("target_path", targetPath).
 		Msg("handling compile-from-source with AI")
 
-	if r.DryRun {
-		log.Info().Msgf("[dry-run] Would clone %s to %s, generate build script at %s, and execute compilation", r.Repository, repoDir, scriptPath)
+	if r.ExecContext.CommonInstallFlags.DryRun {
+		log.Info().Msgf("[dry-run] Would clone %s to %s, generate build script at %s, and execute compilation", r.ExecContext.Repository, repoDir, scriptPath)
 		return nil
 	}
 
 	// 1. Clone repo into builds directory
-	cloneArgs := []string{"repo", "clone", r.Repository, repoDir}
-	if r.MaxDepth > 0 {
-		cloneArgs = append(cloneArgs, "--", "--depth", fmt.Sprintf("%d", r.MaxDepth))
+	cloneArgs := []string{"repo", "clone", r.ExecContext.Repository, repoDir}
+	if r.ExecContext.MaxDepth > 0 {
+		cloneArgs = append(cloneArgs, "--", "--depth", fmt.Sprintf("%d", r.ExecContext.MaxDepth))
 	}
 	stdOut, stdErr, err := gh.Exec(cloneArgs...)
 	if err != nil {
@@ -640,22 +640,22 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 		}
 
 		if runErr == nil {
-			log.Info().Msgf("Existing compile script succeeded for %s", r.Repository)
-			if !r.NoSaveState {
+			log.Info().Msgf("Existing compile script succeeded for %s", r.ExecContext.Repository)
+			if !r.ExecContext.CommonInstallFlags.NoSaveState {
 				st, err := state.LoadState()
 				if err == nil {
 					err = st.AddApp(&state.InstalledApp{
-						Repository:    r.Repository,
+						Repository:    r.ExecContext.Repository,
 						TargetPath:    targetPath,
-						Global:        r.Global,
+						Global:        r.ExecContext.CommonInstallFlags.Global,
 						CompileScript: scriptPath,
-						Pinned:        r.PinInstall,
-						MaxDepth:      r.MaxDepth,
+						Pinned:        r.ExecContext.CommonInstallFlags.PinInstall,
+						MaxDepth:      r.ExecContext.MaxDepth,
 					})
 					if err != nil {
 						log.Warn().Err(err).Msg("could not save repository state")
 					} else {
-						log.Info().Msgf("Saved %s with compileScript to state tracking.", r.Repository)
+						log.Info().Msgf("Saved %s with compileScript to state tracking.", r.ExecContext.Repository)
 					}
 				}
 			}
@@ -679,15 +679,15 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 	}
 
 	// 3. Resolve AI command template
-	aiCmdTemplate := r.AICmd
-	if cfg != nil && cfg.AI.AICmd != "" && (r.AICmd == "" || r.AICmd == `agy -p "%s"`) {
+	aiCmdTemplate := r.ExecContext.AICmd
+	if cfg != nil && cfg.AI.AICmd != "" && (r.ExecContext.AICmd == "" || r.ExecContext.AICmd == `agy -p "%s"`) {
 		aiCmdTemplate = cfg.AI.AICmd
 	}
 	if aiCmdTemplate == "" {
 		aiCmdTemplate = `agy -p "%s"`
 	}
 
-	prompt := buildCompilePrompt(r.Repository, repoDir, scriptPath, targetPath)
+	prompt := buildCompilePrompt(r.ExecContext.Repository, repoDir, scriptPath, targetPath)
 	log.Info().Msgf("Generating AI compilation script using: %s", aiCmdTemplate)
 	if err := runAIAgent(aiCmdTemplate, prompt, repoDir); err != nil {
 		return fmt.Errorf("AI agent failed to generate/test compilation script: %w", err)
@@ -729,7 +729,7 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 
 		if attempt < maxRetries {
 			log.Info().Msgf("Prompting AI to fix compile script (retry %d of %d)...", attempt+1, maxRetries)
-			fixPrompt := buildCompileFixPrompt(r.Repository, repoDir, scriptPath, targetPath, lastOutput, attempt+1)
+			fixPrompt := buildCompileFixPrompt(r.ExecContext.Repository, repoDir, scriptPath, targetPath, lastOutput, attempt+1)
 			if fixErr := runAIAgent(aiCmdTemplate, fixPrompt, repoDir); fixErr != nil {
 				log.Warn().Err(fixErr).Msg("AI repair command execution failed")
 			}
@@ -741,25 +741,25 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 		return fmt.Errorf("compile script execution failed after %d retries: %w (output: %s)", maxRetries, lastErr, lastOutput)
 	}
 
-	log.Info().Msgf("Successfully compiled and installed %s from source!", r.Repository)
+	log.Info().Msgf("Successfully compiled and installed %s from source!", r.ExecContext.Repository)
 
 	// 5. Save compileScript to state
-	if !r.NoSaveState {
+	if !r.ExecContext.CommonInstallFlags.NoSaveState {
 		st, err := state.LoadState()
 		if err == nil {
 			err = st.AddApp(&state.InstalledApp{
-				Repository:    r.Repository,
+				Repository:    r.ExecContext.Repository,
 				TargetPath:    targetPath,
-				Global:        r.Global,
+				Global:        r.ExecContext.CommonInstallFlags.Global,
 				Version:       commitHash,
 				CompileScript: scriptPath,
-				Pinned:        r.PinInstall,
-				MaxDepth:      r.MaxDepth,
+				Pinned:        r.ExecContext.CommonInstallFlags.PinInstall,
+				MaxDepth:      r.ExecContext.MaxDepth,
 			})
 			if err != nil {
 				log.Warn().Err(err).Msg("could not save repository state")
 			} else {
-				log.Info().Msgf("Saved %s with compileScript to state tracking.", r.Repository)
+				log.Info().Msgf("Saved %s with compileScript to state tracking.", r.ExecContext.Repository)
 			}
 		}
 	}

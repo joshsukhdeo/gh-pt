@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/base64"
 	"fmt"
 	"strings"
 
@@ -269,7 +270,12 @@ func showInfoWithClient(r *RootCLI, client ghRestClient) error {
 			}
 			err := client.Get("repos/"+repo+"/readme", &readme)
 			if err == nil && readme.Content != "" {
-				lines := strings.Split(readme.Content, "\n")
+				decoded, decErr := base64.StdEncoding.DecodeString(strings.ReplaceAll(readme.Content, "\n", ""))
+				content := readme.Content
+				if decErr == nil {
+					content = string(decoded)
+				}
+				lines := strings.Split(content, "\n")
 				limit := len(lines)
 				if showReadmeLimit > -1 && limit > showReadmeLimit {
 					limit = showReadmeLimit
