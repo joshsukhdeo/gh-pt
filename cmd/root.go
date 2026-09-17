@@ -779,6 +779,15 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 
 	log.Info().Msgf("Successfully compiled and installed %s from source!", r.Repository)
 
+	// Create symlinks if symlinkDir is set
+	if symlinkDir != "" {
+		if err := createSymlinks(symlinkDir, r.TargetPath); err != nil {
+			return fmt.Errorf("failed to create symlinks: %w", err)
+		}
+	}
+
+	log.Info().Msgf("Successfully compiled and installed %s from source!", r.Repository)
+
 	// 5. Save compileScript to state
 	if !r.NoSaveState {
 		st, err := state.LoadState()
@@ -791,6 +800,7 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 				CompileScript: scriptPath,
 				Pinned:        r.PinInstall,
 				MaxDepth:      r.MaxDepth,
+				SymlinkDir:    symlinkDir,
 			})
 			if err != nil {
 				log.Warn().Err(err).Msg("could not save repository state")
@@ -1027,4 +1037,44 @@ func GetEnvPrefix() string {
 func loadConfig() *config.Config {
 	cfg, _ := config.LoadConfig()
 	return cfg
+}
+
+// createSymlinks creates symlinks from executables in symlinkDir to targetPath
+func createSymlinks(symlinkDir, targetPath string) error {
+	if err := os.MkdirAll(targetPath, 0755); err != nil {
+		return fmt.Errorf("failed to create target directory: %w", err)
+	}
+
+	// Find all executable files in symlinkDir
+	entries, err := os.ReadDir(symlinkDir)
+	if err != nil {
+		return fmt.Errorf("failed to read symlinkDir: %w", err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			// Check if file is executable
+			info, err := entry.Info()
+			if err != nil {
+				continue
+			}
+			if info.Mode()&0111 != 0 { // Check if executable
+				srcPath := filepath.Join(symlinkDir, entry.Name())
+				destPath := filepath.Join(targetPath, entry.Name())
+
+				// Remove existing symlink/file if exists
+				if err := os.Remove(destPath); err != nil && !os.IsNotExist(err) {
+					return fmt.Errorf("failed to remove existing file/symlink %s: %w", destPath, err)
+				}
+
+				if err := os.Symlink(srcPath, destPath); err != nil {
+					return fmt.Errorf("failed to create symlink %s -> %s: %w", destPath, srcPath, err)
+				}
+
+				log.Info().Str("source", srcPath).Str("dest", destPath).Msg("created symlink")
+			}
+		}
+	}
+
+	return nil
 }

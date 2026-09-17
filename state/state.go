@@ -36,6 +36,7 @@ type InstalledApp struct {
 	IsPrerelease           bool              `json:"is_prerelease,omitempty"`
 	LastVTScan             string            `json:"last_vt_scan,omitempty"`
 	LastAIScan             string            `json:"last_ai_scan,omitempty"`
+	SymlinkDir             string            `json:"symlink_dir,omitempty"`
 }
 
 type StateManager interface {
