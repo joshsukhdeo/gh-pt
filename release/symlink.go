@@ -172,6 +172,19 @@ func (r *GithubRelease) executeSymlinkInstall(binaries []*selector.SelectorItem,
 			return "", err
 		}
 
+		if r.UI != nil {
+			r.UI.Update(6, r.ResolvedVersion, filepath.Base(assetPath), binary.Name, destPath, "")
+		} else {
+			log.Info().
+				Str("repository", r.CliParams.Repository).
+				Str("release name", r.ResolvedVersion).
+				Str("release asset name", filepath.Base(assetPath)).
+				Str("release asset binary", binary.Name).
+				Msg("processing selected release asset binary for symlink")
+
+			log.Info().Msgf("will install symlink %s -> %s", destPath, srcPath)
+		}
+
 		r.InstalledBinaries = append(r.InstalledBinaries, filepath.Base(destPath))
 	}
 
