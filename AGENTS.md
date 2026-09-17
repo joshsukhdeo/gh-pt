@@ -61,3 +61,4 @@ These scenarios are essential for validating asset selection behavior:
 4. **Type Priority per Platform**: Ensure appropriate type priority and OS/arch priorities for the system gh-pt runs on. Linux systems prioritize deb/rpm/appimage, macOS prioritizes dmg/pkg, Windows prioritizes exe/msi. Each platform has its own arch preference order.
 
 5. **Success Message**: Ensure a green success message is printed on successful installation completion.
+7. **Explicit Success/Failure Feedback**: Every command must yield a clear success message upon completion, or a clear failure message including the reason for failure. Silently failing is forbidden, as clear output is necessary for users and integration testing.
