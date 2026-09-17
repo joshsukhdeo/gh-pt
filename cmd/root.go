@@ -519,19 +519,27 @@ func getCompileScriptPath(repo string) string {
 	return filepath.Join(configDir, "scripts", fmt.Sprintf("compile-%s%s", pkgName, ext))
 }
 
-func buildCompilePrompt(repo, buildDir, scriptPath, targetPath string) string {
+func buildCompilePrompt(repo, buildDir, scriptPath, targetPath, symlinkDir string) string {
 	ext := ".sh"
 	if runtime.GOOS == "windows" {
 		ext = ".ps1"
 	}
 
+	if symlinkDir != "" {
+		return fmt.Sprintf("Please inspect the repository '%s' (cloned at '%s') and generate an automated compilation/build script at '%s'. The script should follow all build instructions for '%s', compile and install the application/binaries into '%s', and then create symlink(s) in '%s' pointing to the executable(s) in '%s'. Purge any temporary build artifacts. Format the output as an executable %s script. Please test and then attempt to run the compile script and it is only done when script runs successfully.", repo, buildDir, scriptPath, repo, symlinkDir, targetPath, symlinkDir, ext)
+	}
+
 	return fmt.Sprintf("Please inspect the repository '%s' (cloned at '%s') and generate an automated compilation/build script at '%s'. The script should follow all build instructions for '%s', compile the application/binaries, install or copy them to '%s', and purge any temporary build artifacts. Format the output as an executable %s script. Please test and then attempt to run the compile script and it is only done when script runs successfully.", repo, buildDir, scriptPath, repo, targetPath, ext)
 }
 
-func buildCompileFixPrompt(repo, buildDir, scriptPath, targetPath, errorOutput string, attempt int) string {
+func buildCompileFixPrompt(repo, buildDir, scriptPath, targetPath, symlinkDir, errorOutput string, attempt int) string {
 	ext := ".sh"
 	if runtime.GOOS == "windows" {
 		ext = ".ps1"
+	}
+
+	if symlinkDir != "" {
+		return fmt.Sprintf("The automated compilation script at '%s' for repository '%s' (cloned at '%s') failed to run with the following error output (attempt %d of 2):\n\n%s\n\nPlease fix the script at '%s' so that it successfully compiles and installs the application into '%s', and creates symlink(s) in '%s' pointing to the executable(s) in '%s'. Format the output as an executable %s script. Please fix and then attempt to run the compile script and it is only done when script runs successfully.", scriptPath, repo, buildDir, attempt, errorOutput, scriptPath, symlinkDir, targetPath, symlinkDir, ext)
 	}
 
 	return fmt.Sprintf("The automated compilation script at '%s' for repository '%s' (cloned at '%s') failed to run with the following error output (attempt %d of 2):\n\n%s\n\nPlease fix the script at '%s' so that it successfully compiles and installs the binaries into '%s'. Format the output as an executable %s script. Please fix and then attempt to run the compile script and it is only done when script runs successfully.", scriptPath, repo, buildDir, attempt, errorOutput, scriptPath, targetPath, ext)
@@ -599,6 +607,22 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 	repoName := parts[len(parts)-1]
 	repoDir := filepath.Join(homeDir, "builds", repoName)
 
+	var symlinkDir string
+	if r.Symlink {
+		var ownerID, repoID string
+		if len(parts) >= 2 {
+			ownerID = parts[0]
+			repoID = parts[1]
+		} else if len(parts) == 1 {
+			ownerID = ""
+			repoID = parts[0]
+		}
+		symlinkDir = filepath.Join(homeDir, "src", "apps", ownerID, repoID)
+		if err := os.MkdirAll(symlinkDir, 0755); err != nil {
+			return fmt.Errorf("failed to create symlink apps directory: %w", err)
+		}
+	}
+
 	if err := os.MkdirAll(filepath.Dir(repoDir), 0755); err != nil {
 		return fmt.Errorf("failed to create builds directory: %w", err)
 	}
@@ -611,10 +635,15 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 		Str("build_dir", repoDir).
 		Str("script_path", scriptPath).
 		Str("target_path", targetPath).
+		Str("symlink_dir", symlinkDir).
 		Msg("handling compile-from-source with AI")
 
 	if r.DryRun {
-		log.Info().Msgf("[dry-run] Would clone %s to %s, generate build script at %s, and execute compilation", r.Repository, repoDir, scriptPath)
+		if symlinkDir != "" {
+			log.Info().Msgf("[dry-run] Would clone %s to %s, generate build script at %s, compile/install to %s, and symlink to %s", r.Repository, repoDir, scriptPath, symlinkDir, targetPath)
+		} else {
+			log.Info().Msgf("[dry-run] Would clone %s to %s, generate build script at %s, and execute compilation", r.Repository, repoDir, scriptPath)
+		}
 		return nil
 	}
 
@@ -694,7 +723,7 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 		aiCmdTemplate = `agy -p "%s"`
 	}
 
-	prompt := buildCompilePrompt(r.Repository, repoDir, scriptPath, targetPath)
+	prompt := buildCompilePrompt(r.Repository, repoDir, scriptPath, targetPath, symlinkDir)
 	log.Info().Msgf("Generating AI compilation script using: %s", aiCmdTemplate)
 	if err := runAIAgent(aiCmdTemplate, prompt, repoDir); err != nil {
 		return fmt.Errorf("AI agent failed to generate/test compilation script: %w", err)
@@ -736,7 +765,7 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 
 		if attempt < maxRetries {
 			log.Info().Msgf("Prompting AI to fix compile script (retry %d of %d)...", attempt+1, maxRetries)
-			fixPrompt := buildCompileFixPrompt(r.Repository, repoDir, scriptPath, targetPath, lastOutput, attempt+1)
+			fixPrompt := buildCompileFixPrompt(r.Repository, repoDir, scriptPath, targetPath, symlinkDir, lastOutput, attempt+1)
 			if fixErr := runAIAgent(aiCmdTemplate, fixPrompt, repoDir); fixErr != nil {
 				log.Warn().Err(fixErr).Msg("AI repair command execution failed")
 			}
