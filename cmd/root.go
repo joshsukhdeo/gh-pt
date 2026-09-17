@@ -526,7 +526,7 @@ func buildCompilePrompt(repo, buildDir, scriptPath, targetPath, symlinkDir strin
 	}
 
 	if symlinkDir != "" {
-		return fmt.Sprintf("Please inspect the repository '%s' (cloned at '%s') and generate an automated compilation/build script at '%s'. The script should follow all build instructions for '%s', compile and install the application/binaries into '%s', and then create symlink(s) in '%s' pointing to the executable(s) in '%s'. Purge any temporary build artifacts. Format the output as an executable %s script. Please test and then attempt to run the compile script and it is only done when script runs successfully.", repo, buildDir, scriptPath, repo, symlinkDir, targetPath, symlinkDir, ext)
+		return fmt.Sprintf("Please inspect the repository '%s' (cloned at '%s') and generate an automated compilation/build script at '%s'. The script should follow all build instructions for '%s', compile and install the application/binaries into '%s' (this is the staging directory), then create symlink(s) in '%s' pointing to the executable(s) in '%s'. IMPORTANT: First install/stage everything in '%s', then symlink from there to '%s'. Purge any temporary build artifacts. Format the output as an executable %s script. Please test and then attempt to run the compile script and it is only done when script runs successfully.", repo, buildDir, scriptPath, repo, symlinkDir, targetPath, symlinkDir, symlinkDir, targetPath, ext)
 	}
 
 	return fmt.Sprintf("Please inspect the repository '%s' (cloned at '%s') and generate an automated compilation/build script at '%s'. The script should follow all build instructions for '%s', compile the application/binaries, install or copy them to '%s', and purge any temporary build artifacts. Format the output as an executable %s script. Please test and then attempt to run the compile script and it is only done when script runs successfully.", repo, buildDir, scriptPath, repo, targetPath, ext)
@@ -539,7 +539,7 @@ func buildCompileFixPrompt(repo, buildDir, scriptPath, targetPath, symlinkDir, e
 	}
 
 	if symlinkDir != "" {
-		return fmt.Sprintf("The automated compilation script at '%s' for repository '%s' (cloned at '%s') failed to run with the following error output (attempt %d of 2):\n\n%s\n\nPlease fix the script at '%s' so that it successfully compiles and installs the application into '%s', and creates symlink(s) in '%s' pointing to the executable(s) in '%s'. Format the output as an executable %s script. Please fix and then attempt to run the compile script and it is only done when script runs successfully.", scriptPath, repo, buildDir, attempt, errorOutput, scriptPath, symlinkDir, targetPath, symlinkDir, ext)
+		return fmt.Sprintf("The automated compilation script at '%s' for repository '%s' (cloned at '%s') failed to run with the following error output (attempt %d of 2):\n\n%s\n\nPlease fix the script at '%s' so that it successfully compiles and installs the application into '%s' (staging directory), then creates symlink(s) in '%s' pointing to the executable(s) in '%s'. REMEMBER: First stage everything in '%s', then symlink from there to '%s'. Format the output as an executable %s script. Please fix and then attempt to run the compile script and it is only done when script runs successfully.", scriptPath, repo, buildDir, attempt, errorOutput, scriptPath, symlinkDir, targetPath, symlinkDir, symlinkDir, targetPath, ext)
 	}
 
 	return fmt.Sprintf("The automated compilation script at '%s' for repository '%s' (cloned at '%s') failed to run with the following error output (attempt %d of 2):\n\n%s\n\nPlease fix the script at '%s' so that it successfully compiles and installs the binaries into '%s'. Format the output as an executable %s script. Please fix and then attempt to run the compile script and it is only done when script runs successfully.", scriptPath, repo, buildDir, attempt, errorOutput, scriptPath, targetPath, ext)
@@ -547,6 +547,8 @@ func buildCompileFixPrompt(repo, buildDir, scriptPath, targetPath, symlinkDir, e
 
 func runAIAgent(aiCmdTemplate, prompt, dir string) error {
 	var cmd *exec.Cmd
+	// Pre-process the template to wrap unquoted %s in double quotes
+	aiCmdTemplate = fixAICommandTemplate(aiCmdTemplate)
 	if strings.Contains(aiCmdTemplate, "%s") {
 		formattedCmd := fmt.Sprintf(aiCmdTemplate, prompt)
 		if runtime.GOOS == "windows" {
@@ -562,6 +564,37 @@ func runAIAgent(aiCmdTemplate, prompt, dir string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// fixAICommandTemplate wraps unquoted %s placeholders in double quotes
+// to prevent shell interpretation issues with prompts containing special characters
+func fixAICommandTemplate(template string) string {
+	// If no %s placeholder, return as-is
+	if !strings.Contains(template, "%s") {
+		return template
+	}
+
+	var result strings.Builder
+	quoted := false
+	for i := 0; i < len(template); i++ {
+		c := template[i]
+		if c == '"' || c == '\'' || c == '`' {
+			quoted = !quoted
+			result.WriteByte(c)
+			continue
+		}
+		if c == '%' && i+1 < len(template) && template[i+1] == 's' {
+			if !quoted {
+				result.WriteString("\"%s\"")
+			} else {
+				result.WriteString("%s")
+			}
+			i++ // skip the 's'
+			continue
+		}
+		result.WriteByte(c)
+	}
+	return result.String()
 }
 
 func (r *RootCLI) handleAISafetyScan(cfg *config.Config) error {
