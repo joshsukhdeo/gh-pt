@@ -296,9 +296,6 @@ func (r *RootCLI) RunInstall() error {
 		return PinAppState(r.Pin)
 	}
 
-	if r.Show || r.ShowAssets > -1 || r.ShowVersions > -1 || r.ShowDescription > -1 || r.ShowReadme > -1 {
-		return ShowInfo(r)
-	}
 
 	if r.Update || r.UpdateAll {
 		return DoUpdate(r, ghClient)
