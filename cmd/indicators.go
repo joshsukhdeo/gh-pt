@@ -2,7 +2,7 @@ package cmd
 
 import "strings"
 
-// GetStateIndicator returns visual indicators (📌🗻⚡🎯 or ^*!@) for an asset's state.
+// GetStateIndicator returns visual indicators (📌🗻🧪🎯 or ^*!@) for an asset's state.
 func GetStateIndicator(isInstalled, isPinned, isPrerelease, isLatestPrerelease, isLatestStable, disableIcons bool) string {
 	var sb strings.Builder
 	if isPinned {
@@ -23,7 +23,7 @@ func GetStateIndicator(isInstalled, isPinned, isPrerelease, isLatestPrerelease, 
 		if disableIcons {
 			sb.WriteRune('!')
 		} else {
-			sb.WriteString("⚡")
+			sb.WriteString("🧪")
 		}
 	}
 	if isInstalled {

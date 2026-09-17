@@ -128,10 +128,22 @@ func ListState(rList ...*RootCLI) error {
 		if helperScript == "" {
 			helperScript = "N/A"
 		}
+		
+		isInstalled := false
+		if app.TargetPath != "" {
+			if _, err := os.Stat(app.TargetPath); err == nil {
+				isInstalled = true
+			}
+		}
+		indicator := GetStateIndicator(isInstalled, app.Pinned, app.IsPrerelease, false, false, false)
+		displayRepo := repo
+		if indicator != "" {
+			displayRepo = indicator + " " + repo
+		}
 
 		if !r.Full {
 			tableData = append(tableData, []string{
-				repo,
+				displayRepo,
 				versionDisplay,
 				typeDisplay,
 				scope,
@@ -153,22 +165,25 @@ func ListState(rList ...*RootCLI) error {
 				if len(app.AssetBinaries) > 0 {
 					for _, asset := range app.AssetBinaries {
 						tableData = append(tableData, []string{
-							repo, typeDisplay, versionDisplay, asset, app.TargetPath, pinned, "MIXED", "Safe", "N/A", "false", wineStr, foreignStr, "N/A", "N/A", helperScript, "N/A", "N/A", "N/A",
+							displayRepo, typeDisplay, versionDisplay, asset, app.TargetPath, pinned, "MIXED", "Safe", "N/A", "false", wineStr, foreignStr, "N/A", "N/A", helperScript, "N/A", "N/A", "N/A",
 						})
 					}
 				} else {
 					tableData = append(tableData, []string{
-						repo, typeDisplay, versionDisplay, "N/A", app.TargetPath, pinned, "N/A", "Safe", "N/A", "false", wineStr, foreignStr, "N/A", "N/A", helperScript, "N/A", "N/A", "N/A",
+						displayRepo, typeDisplay, versionDisplay, app.ReleaseAsset, app.TargetPath, pinned, "MIXED", "Safe", "N/A", "false", wineStr, foreignStr, "N/A", "N/A", helperScript, "N/A", "N/A", "N/A",
 					})
 				}
 			} else {
 				// ls (short) - 1 entry per repo/type
 				assetNames := strings.Join(app.AssetBinaries, ", ")
 				if assetNames == "" {
-					assetNames = "N/A"
+					assetNames = app.ReleaseAsset
+					if assetNames == "" {
+						assetNames = "N/A"
+					}
 				}
 				tableData = append(tableData, []string{
-					repo, typeDisplay, versionDisplay, assetNames, app.TargetPath, pinned, "MIXED", "Safe", "N/A", "false", wineStr, foreignStr, "N/A", "N/A", helperScript, "N/A", "N/A", "N/A",
+					displayRepo, typeDisplay, versionDisplay, assetNames, app.TargetPath, pinned, "MIXED", "Safe", "N/A", "false", wineStr, foreignStr, "N/A", "N/A", helperScript, "N/A", "N/A", "N/A",
 				})
 			}
 		}

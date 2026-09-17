@@ -23,6 +23,7 @@ type CLI struct {
 	Source      SourceCmd      `cmd:"" help:"Compile repository from source."`
 	Completions CompletionsCmd `cmd:"" help:"Generate shell completions."`
 	Search      SearchCmd      `cmd:"" help:"Search for repositories on GitHub."`
+	Test        bool           `help:"Hidden flag for testing to dump parsed parameters." hidden:""`
 
 	// Global flags
 	LogLevel            string           `default:"info" enum:"error,warn,info,debug" short:"l" help:"Log level."`
@@ -57,13 +58,20 @@ type CommonInstallFlags struct {
 	Extractor            string            `env:"GH_PT_EXTRACTOR" help:"Archive extractor precedence (default, ouch, native, internal)." default:"${extractor}"`
 	TargetPathCreate     bool              `default:"true" negatable:"" help:"Create target installation directory if it does not exist."`
 	Overwrite            bool              `default:"false" short:"f" name:"force" aliases:"overwrite" help:"Overwrite target binaries."`
+	Symlink              bool              `help:"Extract entire release to ~/src/apps and symlink executables."`
+	AllowDowngrade       bool              `help:"Allow downgrades when updating or installing."`
+	SelfInflictedDebt    bool              `name:"self-inflicted-technical-debt" help:"Allow downgrades (alias for allow-downgrade)."`
+	LeRetrogrouch        bool              `name:"LE-RETROGROUCH" help:"Exclusively downgrade and save unpinned with Le_RetroGrouch flag."`
+	RetrogradeStopgap    bool              `name:"retrograde-stopgap" help:"Exclusively downgrade, unpin, and pin the resultant version."`
+	Barbarous            bool              `name:"BARBAROUS" help:"Bypass VT security, skip hashes, allow wine, foreign arch, downgrades."`
 	PinInstall           bool              `name:"pin-install" default:"false" help:"Pin this installation to the current version."`
 	DryRun               bool              `default:"false" help:"Show what would be downloaded."`
 	VerifyChecksum       bool              `default:"true" help:"Verify asset checksums."`
-	SkipVtSandbox        bool              `help:"Bypass VirusTotal sandbox upload for unknown zero-day hashes."`
-	Prerelease           bool              `help:"Include prereleases for install, updates, and list filters."`
+	SkipVtSandbox        bool              `default:"false" name:"skip-vt-sandbox" help:"Skip VirusTotal sandbox scan."`
+	Prerelease           bool              `short:"P" help:"Include prereleases."`
 	Stable               bool              `help:"Include only stable releases."`
-	AI                   bool              `help:"Enable AI-assisted installation."`
+	AI                   bool              `help:"Use AI to scan and analyze releases."`
+	IsUpgradeCmd         bool              `kong:"-"`
 }
 
 type InstallCmd struct {
@@ -162,8 +170,10 @@ type VtSetKeyCmd struct {
 
 type ShowCmd struct {
 	Repository string `arg:"" env:"GH_PT_REPOSITORY" predictor:"github_repos" predict:"github_repos" help:"Github repository."`
-	Assets     bool   `help:"Show all available assets."`
-	Versions   bool   `help:"Show all release versions."`
+	Assets      int    `default:"-1" help:"Show available assets (max number)."`
+	Versions    int    `default:"-1" help:"Show release versions (max number)."`
+	Description int    `default:"-1" help:"Show repository description (max lines)."`
+	Readme      int    `default:"-1" help:"Show repository readme (max lines)."`
 	Prerelease bool   `help:"Include prereleases."`
 	Stable     bool   `help:"Include only stable releases."`
 	Version    string `short:"v" default:"latest" help:"Version to show."`
@@ -236,6 +246,8 @@ type ExecContext struct {
 	Purge               string
 	Pin                 string
 	Show                bool
-	ShowAssets          bool
-	ShowVersions        bool
+	ShowAssets          int
+	ShowVersions        int
+	ShowDescription     int
+	ShowReadme          int
 }

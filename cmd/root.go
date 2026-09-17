@@ -52,7 +52,7 @@ func (r *RootCLI) Validate() error {
 		return fmt.Errorf("--compile-from-source can only be used with --ai")
 	}
 
-	if r.Clone || r.Fork || r.CompileFromSource || r.Show || r.ShowAssets || r.ShowVersions {
+	if r.Clone || r.Fork || r.CompileFromSource || r.Show || r.ShowAssets > -1 || r.ShowVersions > -1 || r.ShowDescription > -1 || r.ShowReadme > -1 {
 		return nil
 	}
 
@@ -130,6 +130,20 @@ func PostBuild(k *kong.Kong) error {
 }
 
 func (r *RootCLI) RunInstall() error {
+	if r.Barbarous {
+		r.VerifyChecksum = false
+		r.SkipVtSandbox = true
+		r.AllowForeignArch = true
+		r.AllowDowngrade = true
+	}
+	if r.LeRetrogrouch {
+		r.SkipVtSandbox = true
+		r.AllowDowngrade = true
+	}
+	if r.RetrogradeStopgap || r.SelfInflictedDebt {
+		r.AllowDowngrade = true
+	}
+
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	logLevel, _ := zerolog.ParseLevel(r.LogLevel)
 	if r.Verbose {
@@ -282,7 +296,7 @@ func (r *RootCLI) RunInstall() error {
 		return PinAppState(r.Pin)
 	}
 
-	if r.Show || r.ShowAssets || r.ShowVersions {
+	if r.Show || r.ShowAssets > -1 || r.ShowVersions > -1 || r.ShowDescription > -1 || r.ShowReadme > -1 {
 		return ShowInfo(r)
 	}
 
@@ -771,7 +785,7 @@ func GetDefaultClonePath() string {
 		return ""
 	}
 
-	return filepath.Join(homeDir, "src")
+	return filepath.Join(homeDir, "src", "repos")
 }
 
 func GetDefaultForkPath() string {

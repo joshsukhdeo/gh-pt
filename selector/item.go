@@ -54,6 +54,7 @@ type SelectorItem struct {
 	Compressed   bool
 	BinaryType   BinaryType
 	DownloadPath string
+	ExtractDir   string
 	FsPath       string
 	Fs           fs.FS
 	Prerelease   bool

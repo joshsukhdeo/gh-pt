@@ -17,11 +17,14 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/cli/go-gh/v2"
 	"github.com/joshsukhdeo/gh-pt/params"
 	"github.com/joshsukhdeo/gh-pt/selector"
 	"github.com/joshsukhdeo/gh-pt/state"
+	"github.com/joshsukhdeo/gh-pt/status"
+	"github.com/joshsukhdeo/gh-pt/ui"
 	"github.com/pterm/pterm"
 	"github.com/rs/zerolog/log"
 )
@@ -40,6 +43,8 @@ type GithubRelease struct {
 	PendingDebs           []string
 	PendingRpms           []string
 	Prompter              Prompter
+	StatusMessage         string
+	UI                    *ui.PacmanUI
 }
 
 type Prompter interface {
@@ -75,6 +80,10 @@ func (r *GithubRelease) interactiveConfirm(prompt string) bool {
 	if r.Prompter == nil {
 		r.Prompter = PtermPrompter{}
 	}
+	if r.UI != nil {
+		r.UI.Pause()
+		defer r.UI.Resume()
+	}
 	return r.Prompter.Confirm(prompt)
 }
 
@@ -84,6 +93,10 @@ func (r *GithubRelease) interactiveInput(prompt string, defaultValue string) str
 	}
 	if r.Prompter == nil {
 		r.Prompter = PtermPrompter{}
+	}
+	if r.UI != nil {
+		r.UI.Pause()
+		defer r.UI.Resume()
 	}
 	return r.Prompter.Input(prompt, defaultValue)
 }
@@ -565,6 +578,19 @@ func (r *GithubRelease) GetLatestRelease() (*selector.SelectorItem, error) {
 }
 
 func (r *GithubRelease) Install() error {
+	var pUI *ui.PacmanUI
+	if r.CliParams.Interactive {
+		pUI = ui.NewPacmanUI(r.CliParams.Repository)
+		r.UI = pUI
+		pUI.Update(0, "", "", "", r.CliParams.TargetPath, "")
+		pUI.Start()
+	}
+	defer func() {
+		if pUI != nil {
+			pUI.Stop()
+		}
+	}()
+
 	var prerelease, stable bool
 	if r.CliParams != nil {
 		prerelease = r.CliParams.Prerelease
@@ -579,7 +605,9 @@ func (r *GithubRelease) Install() error {
 			Msg("could not create release selector")
 		return err
 	}
+	if pUI != nil { pUI.Pause() }
 	releases, err := releaseSelector.Run()
+	if pUI != nil { pUI.Resume() }
 	if err != nil {
 		log.Error().
 			Str("repository", r.CliParams.Repository).
@@ -589,6 +617,9 @@ func (r *GithubRelease) Install() error {
 		return err
 	}
 	r.ResolvedVersion = releases[0].Name
+	if pUI != nil {
+		pUI.Update(1, r.ResolvedVersion, "", "", "", "")
+	}
 
 	assetSelector, err := selector.AssetSelector(r.Client, r.CliParams.Repository, selector.AssetMatchCriteria{
 		ReleaseId:        releases[0].Id,
@@ -607,7 +638,9 @@ func (r *GithubRelease) Install() error {
 			Msg("could not create release asset selector")
 		return err
 	}
+	if pUI != nil { pUI.Pause() }
 	assets, err := assetSelector.Run()
+	if pUI != nil { pUI.Resume() }
 	if err != nil {
 		log.Error().
 			Str("repository", r.CliParams.Repository).
@@ -617,6 +650,63 @@ func (r *GithubRelease) Install() error {
 			Msg("could not select release asset")
 		return err
 	}
+
+	// --- STATUS ABORTION CHECK ---
+	st, _ := state.LoadState()
+	var inState bool
+	var prevVersion string
+	var alreadyInstalled bool
+	if st != nil && st.Apps != nil {
+		if app, ok := st.Apps[r.CliParams.Repository]; ok {
+			inState = true
+			prevVersion = app.Version
+			if app.TargetPath != "" {
+				// Assume already installed if target path exists and it's in state. 
+				// We do a fast stat on the directory or binary if we know it.
+				// For simplicity, checking if the path exists:
+				if _, err := os.Stat(app.TargetPath); err == nil {
+					alreadyInstalled = true
+				}
+			}
+		}
+	}
+
+	installState := status.InstallState{
+		InState:           inState,
+		AlreadyInstalled:  alreadyInstalled,
+		PrevVersion:       prevVersion,
+		NewVersion:        releases[0].Name,
+		AppName:           r.CliParams.Repository,
+		Type:              strings.Join(r.CliParams.Type, ","),
+		Repo:              r.CliParams.Repository,
+		AssetName:         assets[0].Name,
+		Force:             r.CliParams.Overwrite,
+		AllowDowngrade:    r.CliParams.AllowDowngrade,
+		LeRetrogrouch:     r.CliParams.LeRetrogrouch,
+		RetrogradeStopgap: r.CliParams.RetrogradeStopgap,
+		Barbarous:         r.CliParams.Barbarous,
+		SelfInflictedDebt: r.CliParams.SelfInflictedDebt,
+		IsUpgradeCmd:      r.CliParams.IsUpgradeCmd,
+	}
+
+	statusMsg, abortErr := status.GenerateStatusMessage(installState)
+	if abortErr != nil {
+		return abortErr
+	}
+	r.StatusMessage = statusMsg // We need to add StatusMessage to GithubRelease struct
+	
+	if pUI != nil {
+		ghostType := "🍒"
+		if alreadyInstalled {
+			if r.CliParams.Overwrite {
+				ghostType = "\033[5m👻\033[0m" // flashing ghost
+			} else {
+				ghostType = "ᗣ" // solid ghost
+			}
+		}
+		pUI.Update(2, "", assets[0].Name, "", "", ghostType)
+	}
+	// -----------------------------
 
 	sort.Slice(assets, func(i, j int) bool {
 		scoreI := getScore(assets[i].Name, r.CliParams.Type)
@@ -707,9 +797,10 @@ func (r *GithubRelease) Install() error {
 	}
 
 	for _, asset := range assets {
-		var downloadSpinner *pterm.SpinnerPrinter
 		if r.CliParams.Interactive {
-			downloadSpinner, _ = pterm.DefaultSpinner.Start(fmt.Sprintf("Downloading asset '%s'...", asset.Name))
+			if pUI != nil {
+				pUI.Update(3, "", "", "", "", "")
+			}
 		}
 
 		stdOut, stdErr, execErr := ghExec("release", "download", releases[0].Name,
@@ -725,13 +816,18 @@ func (r *GithubRelease) Install() error {
 				Err(execErr).
 				Msg("could not download release asset")
 			if r.CliParams.Interactive {
-				downloadSpinner.Fail(fmt.Sprintf("Failed - '%s' failed", stdErr.String()))
+				if pUI != nil {
+					pUI.Stop()
+					fmt.Printf("\nFailed - '%s' failed\n", stdErr.String())
+				}
 			}
 			return execErr
 		}
 
 		if r.CliParams.Interactive {
-			downloadSpinner.Success("Downloaded!")
+			if pUI != nil {
+				pUI.Update(4, "", "", "", "", "")
+			}
 		}
 
 		log.Info().
@@ -760,7 +856,10 @@ func (r *GithubRelease) Install() error {
 			if hashErr != nil {
 				return fmt.Errorf("failed to calculate SHA-256 for VirusTotal: %w", hashErr)
 			}
-			if err := VerifyHashWithVirusTotal(vtHash, downloadedAssetPath, r.CliParams.VTApiKey, r.CliParams.Interactive && !r.CliParams.DisablePrompts, r.CliParams.SkipVtSandbox); err != nil {
+			if pUI != nil { pUI.Pause() }
+			err := VerifyHashWithVirusTotal(vtHash, downloadedAssetPath, r.CliParams.VTApiKey, r.CliParams.Interactive && !r.CliParams.DisablePrompts, r.CliParams.SkipVtSandbox)
+			if pUI != nil { pUI.Resume() }
+			if err != nil {
 				return err
 			}
 		}
@@ -786,7 +885,9 @@ func (r *GithubRelease) Install() error {
 				Msg("could not create release asset binary selector")
 			return execErr
 		}
+		if pUI != nil { pUI.Pause() }
 		binaries, execErr := binarySelector.Run()
+		if pUI != nil { pUI.Resume() }
 		if execErr != nil {
 			log.Error().
 				Str("repository", r.CliParams.Repository).
@@ -801,7 +902,28 @@ func (r *GithubRelease) Install() error {
 			return execErr
 		}
 
+		if r.CliParams.Interactive && pUI != nil {
+			var bNames []string
+			for _, b := range binaries {
+				bNames = append(bNames, b.Name)
+			}
+			pUI.Update(4, "", "", strings.Join(bNames, ", "), "", "")
+		}
+
 		binariesOutput := make(map[string]string)
+
+		if r.CliParams.Symlink {
+			symlinkDir, err := r.executeSymlinkInstall(binaries, filepath.Join(downloadDir, asset.Name))
+			if err != nil {
+				return err
+			}
+			if pUI != nil {
+				pUI.UpdateSymlink(symlinkDir)
+				pUI.Update(6, "", "", "", "", "")
+			}
+			continue
+		}
+
 		for _, binary := range binaries {
 			log.Info().
 				Str("repository", r.CliParams.Repository).
@@ -969,6 +1091,11 @@ func (r *GithubRelease) Install() error {
 		}
 	}
 
+	if pUI != nil {
+		pUI.Update(5, "", "", "", "", "")
+		time.Sleep(500 * time.Millisecond) // Let the animation finish eating dots
+	}
+
 	if !r.CliParams.NoSaveState && !r.CliParams.DryRun {
 		st, err := state.LoadState()
 		if err == nil {
@@ -995,12 +1122,15 @@ func (r *GithubRelease) Install() error {
 		}
 	}
 
-	// Extract just the repo name from "owner/repo"
-	repoName := r.CliParams.Repository
-	if parts := strings.Split(repoName, "/"); len(parts) == 2 {
-		repoName = parts[1]
+	if r.StatusMessage != "" {
+		fmt.Printf("\n\033[1;32m%s\033[0m\n", r.StatusMessage)
+	} else {
+		repoName := r.CliParams.Repository
+		if parts := strings.Split(repoName, "/"); len(parts) == 2 {
+			repoName = parts[1]
+		}
+		fmt.Printf("\n\033[1;32mInstalled %s successfully!\033[0m\n", repoName)
 	}
-	fmt.Printf("\n\033[1;32mInstalled %s successfully!\033[0m\n", repoName)
 
 	if r.CliParams == nil || (!r.CliParams.Update && !r.CliParams.UpdateAll) {
 		repo := ""

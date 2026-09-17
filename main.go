@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -68,8 +69,15 @@ func main() {
 	ctx, err := parser.Parse(os.Args[1:])
 	parser.FatalIfErrorf(err)
 
+	if cli.Test {
+		importJsonBytes, _ := json.MarshalIndent(cli, "", "  ")
+		fmt.Println(string(importJsonBytes))
+		os.Exit(0)
+	}
+
 	err = cmd.RunCommand(ctx.Command(), &cli)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }

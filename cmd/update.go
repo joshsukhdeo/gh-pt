@@ -13,6 +13,20 @@ import (
 )
 
 func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
+	if r.Barbarous {
+		r.VerifyChecksum = false
+		r.SkipVtSandbox = true
+		r.AllowForeignArch = true
+		r.AllowDowngrade = true
+	}
+	if r.LeRetrogrouch {
+		r.SkipVtSandbox = true
+		r.AllowDowngrade = true
+	}
+	if r.RetrogradeStopgap || r.SelfInflictedDebt {
+		r.AllowDowngrade = true
+	}
+
 	st, err := state.LoadState()
 	if err != nil {
 		return err
@@ -160,6 +174,7 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 			appParams.Prerelease = false
 			appParams.Stable = true
 		}
+		appParams.IsUpgradeCmd = true
 
 		// Check if there's a new version before updating
 		installRelease := release.MakeGithubRelease(&appParams, ghClient)

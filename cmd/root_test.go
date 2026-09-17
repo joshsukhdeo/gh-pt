@@ -77,7 +77,7 @@ func TestResolveRepoPath(t *testing.T) {
 	home, _ := os.UserHomeDir()
 
 	p1 := resolveRepoPath("cli/cli", true, false, "", "")
-	assert.Equal(t, filepath.Join(home, "src", "cli"), p1)
+	assert.Equal(t, filepath.Join(home, "src", "repos", "cli"), p1)
 
 	p2 := resolveRepoPath("cli/cli", false, true, "", "")
 	assert.Equal(t, filepath.Join(home, "projects", "cli"), p2)

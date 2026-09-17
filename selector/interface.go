@@ -335,6 +335,7 @@ func BinarySelector(criteria BinaryMatchCriteria) (ISelector, error) {
 						Compressed:   false,
 						BinaryType:   BinaryTypeFromPath(info.Name()),
 						DownloadPath: path,
+						ExtractDir:   extractDir,
 					})
 				}
 				return nil

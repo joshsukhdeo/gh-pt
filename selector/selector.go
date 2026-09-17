@@ -80,6 +80,11 @@ func (s *Selector) Run() ([]*SelectorItem, error) {
 		var levels []fallbackLevel
 		if repoid != "" {
 			levels = append(levels, fallbackLevel{"repoid", func(n string) bool { return strings.Contains(strings.ToLower(n), repoid) }})
+			// Add a fallback for cases where the binary is a prefix of the repo (e.g., 'nu' for 'nushell')
+			levels = append(levels, fallbackLevel{"repoid_prefix", func(n string) bool { 
+				lowerN := strings.ToLower(n)
+				return strings.HasPrefix(repoid, lowerN) || strings.HasPrefix(lowerN, repoid)
+			}})
 		}
 		if lcp != "" {
 			levels = append(levels, fallbackLevel{"lcp", func(n string) bool { return strings.HasPrefix(n, lcp) }})
@@ -118,8 +123,13 @@ func (s *Selector) Run() ([]*SelectorItem, error) {
 						var execMatches []*SelectorItem
 						for _, item := range currentMatches {
 							ext := strings.ToLower(filepath.Ext(item.Name))
-							if ext == "" || ext == ".exe" || ext == ".appimage" || ext == ".bin" || ext == ".deb" || ext == ".rpm" || ext == ".msi" || ext == ".dmg" || ext == ".pkg" {
+							if ext == ".exe" || ext == ".appimage" || ext == ".bin" || ext == ".deb" || ext == ".rpm" || ext == ".msi" || ext == ".dmg" || ext == ".pkg" {
 								execMatches = append(execMatches, item)
+							} else if ext == "" {
+								// Strictly filter extensionless files using magic bytes
+								if IsActuallyExecutable(item) {
+									execMatches = append(execMatches, item)
+								}
 							}
 						}
 						if len(execMatches) > 0 {

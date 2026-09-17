@@ -157,54 +157,131 @@ func showInfoWithClient(r *RootCLI, client ghRestClient) error {
 		return assets, nil
 	}
 
-	if r.ExecContext.ShowVersions {
-		for i := range releases {
-			printRelease(&releases[i])
-		}
-		return nil
+	showVersionsLimit := r.ExecContext.ShowVersions
+	showAssetsLimit := r.ExecContext.ShowAssets
+	showDescLimit := r.ExecContext.ShowDescription
+	showReadmeLimit := r.ExecContext.ShowReadme
+
+	if showVersionsLimit <= -1 && showAssetsLimit <= -1 && showDescLimit <= -1 && showReadmeLimit <= -1 {
+		showVersionsLimit = 10
+		showAssetsLimit = 25
+		showDescLimit = 10
+		showReadmeLimit = 50
 	}
 
-	if r.ExecContext.ShowAssets {
-		target := pickTargetRelease()
+	order := getShowFlagOrder()
+	if len(order) == 0 {
+		if showVersionsLimit > -1 { order = append(order, "versions") }
+		if showAssetsLimit > -1 { order = append(order, "assets") }
+		if showDescLimit > -1 { order = append(order, "description") }
+		if showReadmeLimit > -1 { order = append(order, "readme") }
+	}
+
+	target := pickTargetRelease()
+	var assets []ReleaseAsset
+	if showAssetsLimit > -1 {
 		if target == nil {
 			return fmt.Errorf("no release found for %s", repo)
 		}
-		assets, err := fetchAssets(target)
-		if err != nil {
-			return fmt.Errorf("failed to fetch assets: %w", err)
+		{
+			var err error
+			assets, err = fetchAssets(target)
+			if err != nil {
+				return fmt.Errorf("failed to fetch assets: %w", err)
+			}
 		}
-		for _, asset := range assets {
-			fmt.Println(asset.Name)
-		}
-		return nil
 	}
 
-	if r.ExecContext.Show {
-		limit := len(releases)
-		if limit > 10 {
-			limit = 10
+	for i, section := range order {
+		if i > 0 {
+			fmt.Println()
 		}
-		for i := 0; i < limit; i++ {
-			printRelease(&releases[i])
+		switch section {
+		case "versions":
+			if showVersionsLimit <= -1 { continue }
+			if disableIcons {
+				fmt.Println("--- VERSIONS ---")
+			} else {
+				fmt.Println("--- 📦 VERSIONS 📦 ---")
+			}
+			limit := len(releases)
+			if showVersionsLimit > -1 && limit > showVersionsLimit {
+				limit = showVersionsLimit
+			}
+			for j := 0; j < limit; j++ {
+				printRelease(&releases[j])
+			}
+			if len(releases) > limit {
+				fmt.Println("...")
+			}
+		case "assets":
+			if showAssetsLimit <= -1 { continue }
+			if disableIcons {
+				fmt.Println("--- ASSETS ---")
+			} else {
+				fmt.Println("--- 📂 ASSETS 📂 ---")
+			}
+			limit := len(assets)
+			if showAssetsLimit > -1 && limit > showAssetsLimit {
+				limit = showAssetsLimit
+			}
+			for j := 0; j < limit; j++ {
+				fmt.Println(assets[j].Name)
+			}
+			if len(assets) > limit {
+				fmt.Println("...")
+			}
+		case "description":
+			if showDescLimit <= -1 { continue }
+			if disableIcons {
+				fmt.Println("--- DESCRIPTION ---")
+			} else {
+				fmt.Println("--- 📝 DESCRIPTION 📝 ---")
+			}
+			
+			var repoInfo struct {
+				Description string `json:"description"`
+			}
+			err := client.Get("repos/"+repo, &repoInfo)
+			if err == nil && repoInfo.Description != "" {
+				lines := strings.Split(repoInfo.Description, "\n")
+				limit := len(lines)
+				if showDescLimit > -1 && limit > showDescLimit {
+					limit = showDescLimit
+				}
+				for j := 0; j < limit; j++ {
+					fmt.Println(lines[j])
+				}
+				if len(lines) > limit {
+					fmt.Println("...")
+				}
+			}
+		case "readme":
+			if showReadmeLimit <= -1 { continue }
+			if disableIcons {
+				fmt.Println("--- README ---")
+			} else {
+				fmt.Println("--- 📖 README 📖 ---")
+			}
+			
+			var readme struct {
+				Content string `json:"content"`
+			}
+			err := client.Get("repos/"+repo+"/readme", &readme)
+			if err == nil && readme.Content != "" {
+				lines := strings.Split(readme.Content, "\n")
+				limit := len(lines)
+				if showReadmeLimit > -1 && limit > showReadmeLimit {
+					limit = showReadmeLimit
+				}
+				for j := 0; j < limit; j++ {
+					fmt.Println(lines[j])
+				}
+				if len(lines) > limit {
+					fmt.Println("...")
+				}
+			}
 		}
-
-		target := pickTargetRelease()
-		if target == nil {
-			return fmt.Errorf("no release found for %s", repo)
-		}
-		assets, err := fetchAssets(target)
-		if err != nil {
-			return fmt.Errorf("failed to fetch assets: %w", err)
-		}
-		assetLimit := len(assets)
-		if assetLimit > 50 {
-			assetLimit = 50
-		}
-		for i := 0; i < assetLimit; i++ {
-			fmt.Println(assets[i].Name)
-		}
-		return nil
 	}
-
 	return nil
 }

@@ -37,7 +37,7 @@ func TestGetStateIndicator(t *testing.T) {
 			isPrerelease:       true,
 			isLatestPrerelease: true,
 			disableIcons:       false,
-			expected:           "🗻⚡🎯",
+			expected:           "🗻🧪🎯",
 		},
 		{
 			name:               "latest prerelease installed (text fallback)",
@@ -90,7 +90,7 @@ func TestGetStateIndicator(t *testing.T) {
 			isInstalled:  true,
 			isPrerelease: true,
 			disableIcons: false,
-			expected:     "⚡🎯",
+			expected:     "🧪🎯",
 		},
 		{
 			name:         "older prerelease installed (text fallback)",
@@ -103,7 +103,7 @@ func TestGetStateIndicator(t *testing.T) {
 			name:               "latest prerelease not installed (emoji)",
 			isLatestPrerelease: true,
 			disableIcons:       false,
-			expected:           "🗻⚡",
+			expected:           "🗻🧪",
 		},
 		{
 			name:               "latest prerelease not installed (text fallback)",
