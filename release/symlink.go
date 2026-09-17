@@ -6,45 +6,11 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/joshsukhdeo/gh-pt/selector"
 	"github.com/rs/zerolog/log"
 )
-
-func computeSymlinkDirName(repository string, installedBinaryName string) string {
-	parts := strings.Split(repository, "/")
-	var ownerid, repoid string
-	if len(parts) >= 2 {
-		ownerid = parts[0]
-		repoid = parts[1]
-	} else if len(parts) == 1 {
-		repoid = parts[0]
-	}
-
-	cleanBin := strings.ToLower(installedBinaryName)
-	cleanRepo := strings.ToLower(repoid)
-	cleanOwner := strings.ToLower(ownerid)
-
-	if cleanBin == cleanRepo {
-		return repoid
-	}
-
-	if cleanOwner != "" && cleanBin == cleanOwner {
-		return ownerid + "-" + repoid
-	}
-
-	versionRegex := regexp.MustCompile(`[-_.]?(v?\d+\.\d+.*|x86_64|amd64|arm64|linux|windows|darwin|mac|apple).*$`)
-	cleaned := versionRegex.ReplaceAllString(installedBinaryName, "")
-	cleaned = strings.TrimRight(cleaned, " .-")
-	
-	if cleaned != "" {
-		return cleaned
-	}
-
-	return repoid
-}
 
 func copyDir(src, dst string) error {
 	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
@@ -139,8 +105,19 @@ func (r *GithubRelease) executeSymlinkInstall(binaries []*selector.SelectorItem,
 		return "", err
 	}
 
-	appDir := computeSymlinkDirName(r.CliParams.Repository, binaries[0].Name)
-	symlinkDir := filepath.Join(homeDir, "src", "apps", appDir)
+	// Parse owner and repo from repository string
+	parts := strings.Split(r.CliParams.Repository, "/")
+	var ownerID, repoID string
+	if len(parts) >= 2 {
+		ownerID = parts[0]
+		repoID = parts[1]
+	} else if len(parts) == 1 {
+		ownerID = ""
+		repoID = parts[0]
+	}
+
+	// Always use ~/src/apps/{ownerID}/{repoID}
+	symlinkDir := filepath.Join(homeDir, "src", "apps", ownerID, repoID)
 
 	if err := os.MkdirAll(symlinkDir, 0755); err != nil {
 		return "", err

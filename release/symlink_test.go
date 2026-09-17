@@ -11,36 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestComputeSymlinkDirName(t *testing.T) {
-	tests := []struct {
-		repository string
-		binaryName string
-		expected   string
-	}{
-		// 1. appname matched repoid -> repoid
-		{"jqlang/jq", "jq", "jq"},
-		{"jqlang/jq", "jq-linux-amd64", "jq"},
-		
-		// 2. appname matched ownerid -> ownerid-repoid
-		{"nushell/nushell", "nu", "nu"}, // Wait, if repo is nushell/nushell and binary is nu, how does it match ownerid?
-		// "if appname matched ownerid"
-		{"hashicorp/terraform", "hashicorp", "hashicorp-terraform"},
-		
-		// 3. longest common name with version tag/numbers/id removed followed by right trim of spaces . and dashes
-		{"cli/cli", "gh-1.0.0-linux-amd64", "gh"},
-		{"neovim/neovim", "nvim-linux64", "nvim"},
-		{"burntsushi/ripgrep", "rg-13.0.0", "rg"},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.repository+"_"+tc.binaryName, func(t *testing.T) {
-			actual := computeSymlinkDirName(tc.repository, tc.binaryName)
-			assert.Equal(t, tc.expected, actual)
-		})
-	}
-}
-
-
 
 func TestExecuteSymlinkInstall(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -71,7 +41,8 @@ func TestExecuteSymlinkInstall(t *testing.T) {
 	symlinkDir, err := r.executeSymlinkInstall(binaries, assetFile)
 	assert.NoError(t, err)
 
-	expectedAppDir := filepath.Join(homeDir, "src", "apps", "jq")
+	// Now using owner/repo path: ~/src/apps/jqlang/jq
+	expectedAppDir := filepath.Join(homeDir, "src", "apps", "jqlang", "jq")
 	assert.Equal(t, expectedAppDir, symlinkDir)
 
 	// Verify the file was copied to the app dir
