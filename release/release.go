@@ -695,8 +695,8 @@ func (r *GithubRelease) Install() error {
 	}
 	r.StatusMessage = statusMsg // We need to add StatusMessage to GithubRelease struct
 
-	// Automatically allow overwriting if it is an upgrade command and the version is higher
-	if r.CliParams.IsUpgradeCmd && status.CompareVersions(installState.PrevVersion, installState.NewVersion) > 0 {
+	// Automatically allow overwriting for version upgrades
+	if installState.InState && status.CompareVersions(installState.PrevVersion, installState.NewVersion) > 0 {
 		r.CliParams.Overwrite = true
 	}
 
