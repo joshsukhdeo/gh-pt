@@ -163,15 +163,15 @@ type RepoCmd struct {
 }
 
 type RepoCloneCmd struct {
-	Repository string `arg:"" env:"GH_PT_REPOSITORY" predictor:"github_repos" predict:"github_repos" help:"Github repository."`
-	Force      bool   `short:"f" help:"Overwrite existing."`
-	MaxDepth   int    `help:"Max clone depth."`
+	Repository string `arg:"" env:"GH_PT_REPOSITORY" optional:"" help:"Github repository in OWNER/REPOSITORY_NAME format."`
+	Force      bool    `short:"f" help:"Overwrite existing."`
+	MaxDepth   int     `help:"Max clone depth."`
 }
 
 type RepoForkCmd struct {
-	Repository string `arg:"" env:"GH_PT_REPOSITORY" predictor:"github_repos" predict:"github_repos" help:"Github repository."`
-	Force      bool   `short:"f" help:"Overwrite existing."`
-	MaxDepth   int    `help:"Max clone depth."`
+	Repository string `arg:"" env:"GH_PT_REPOSITORY" optional:"" help:"Github repository in OWNER/REPOSITORY_NAME format."`
+	Force      bool    `short:"f" help:"Overwrite existing."`
+	MaxDepth   int     `help:"Max clone depth."`
 }
 
 type ScanCmd struct {

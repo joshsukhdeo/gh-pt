@@ -72,20 +72,33 @@ func RunCommand(cmdStr string, cli *params.CLI) error {
 		return StateEdit()
 	case "show", "show <repository>":
 		return ShowInfo(&RootCLI{ExecContext: params.ExecContext{Repository: cli.Show.Repository, Show: true, ShowAssets: cli.Show.Assets, ShowVersions: cli.Show.Versions, ShowDescription: cli.Show.Description, ShowReadme: cli.Show.Readme, CommonInstallFlags: params.CommonInstallFlags{ReleaseVersion: cli.Show.Version, Stable: cli.Show.Stable, Prerelease: cli.Show.Prerelease}}})
-	case "repo clone":
-		r.CommonInstallFlags = cli.Install.CommonInstallFlags // fallback
-		r.Repository = cli.Repo.Clone.Repository
-		r.Clone = true
-		r.Overwrite = cli.Repo.Clone.Force
-		r.MaxDepth = cli.Repo.Clone.MaxDepth
-		return r.RunInstall()
-	case "repo fork":
-		r.CommonInstallFlags = cli.Install.CommonInstallFlags
-		r.Repository = cli.Repo.Fork.Repository
-		r.Fork = true
-		r.Overwrite = cli.Repo.Fork.Force
-		r.MaxDepth = cli.Repo.Fork.MaxDepth
-		return r.RunInstall()
+	case "repo", "repo clone", "repo clone <repository>", "repo fork", "repo fork <repository>":
+		// Handle both repo clone and repo fork subcommands
+		// kong populates either cli.Repo.Clone or cli.Repo.Fork based on subcommand used
+		if cli.Repo.Clone.Repository != "" {
+			r.CommonInstallFlags = cli.Install.CommonInstallFlags
+			r.Repository = cli.Repo.Clone.Repository
+			r.Clone = true
+			r.Overwrite = cli.Repo.Clone.Force
+			r.MaxDepth = cli.Repo.Clone.MaxDepth
+			return r.RunInstall()
+		}
+		if cli.Repo.Fork.Repository != "" {
+			r.CommonInstallFlags = cli.Install.CommonInstallFlags
+			r.Repository = cli.Repo.Fork.Repository
+			r.Fork = true
+			r.Overwrite = cli.Repo.Fork.Force
+			r.MaxDepth = cli.Repo.Fork.MaxDepth
+			return r.RunInstall()
+		}
+		// If no repository specified, check if it was passed via env var
+		// kong should have populated it from GH_PT_REPOSITORY env var
+		if cli.Repo.Clone.Repository == "" && cli.Repo.Fork.Repository == "" {
+			// Try to determine which subcommand was intended
+			// Default to clone if neither has repository
+			return fmt.Errorf("repository argument is required for repo clone/fork")
+		}
+		return fmt.Errorf("unknown repo subcommand")
 	case "source", "source <repository>":
 		r.CommonInstallFlags = cli.Source.CommonInstallFlags
 		r.Repository = cli.Source.Repository
