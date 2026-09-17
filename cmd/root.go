@@ -961,8 +961,14 @@ func buildRegexFromTypes(types []string, wine string) []string {
 	if runtime.GOOS == "linux" {
 		if _, err := os.Stat("/sys/class/accel"); err == nil {
 			hwSpecific = "npu"
-		} else if _, err := os.Stat("/dev/dri"); err == nil {
-			hwSpecific = "(?:gpu|cuda|rocm)"
+		}
+		// Interrogate exact compute nodes, ignoring generic display interfaces
+		if _, err := os.Stat("/dev/nvidia0"); err == nil {
+			if hwSpecific != "" { hwSpecific += "|" }
+			hwSpecific += "cuda"
+		} else if _, err := os.Stat("/dev/kfd"); err == nil {
+			if hwSpecific != "" { hwSpecific += "|" }
+			hwSpecific += "rocm"
 		}
 	}
 
