@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -77,7 +78,11 @@ func main() {
 
 	err = cmd.RunCommand(ctx.Command(), &cli)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		if strings.HasPrefix(err.Error(), "Warning:") {
+			fmt.Fprintf(os.Stderr, "\033[33m%v\033[0m\n", err)
+		} else {
+			fmt.Fprintf(os.Stderr, "\033[31mError: %v\033[0m\n", err)
+		}
 		os.Exit(1)
 	}
 }
