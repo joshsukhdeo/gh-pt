@@ -79,11 +79,15 @@ func (s *Selector) Run() ([]*SelectorItem, error) {
 
 		var levels []fallbackLevel
 		if repoid != "" {
-			levels = append(levels, fallbackLevel{"repoid", func(n string) bool { return strings.Contains(strings.ToLower(n), repoid) }})
+			normalizedRepoid := strings.ReplaceAll(strings.ReplaceAll(repoid, "-", ""), "_", "")
+			levels = append(levels, fallbackLevel{"repoid", func(n string) bool {
+				normalizedN := strings.ReplaceAll(strings.ReplaceAll(strings.ToLower(n), "-", ""), "_", "")
+				return strings.Contains(normalizedN, normalizedRepoid)
+			}})
 			// Add a fallback for cases where the binary is a prefix of the repo (e.g., 'nu' for 'nushell')
-			levels = append(levels, fallbackLevel{"repoid_prefix", func(n string) bool { 
-				lowerN := strings.ToLower(n)
-				return strings.HasPrefix(repoid, lowerN) || strings.HasPrefix(lowerN, repoid)
+			levels = append(levels, fallbackLevel{"repoid_prefix", func(n string) bool {
+				normalizedN := strings.ReplaceAll(strings.ReplaceAll(strings.ToLower(n), "-", ""), "_", "")
+				return strings.HasPrefix(normalizedRepoid, normalizedN) || strings.HasPrefix(normalizedN, normalizedRepoid)
 			}})
 		}
 		if lcp != "" {
@@ -108,6 +112,26 @@ func (s *Selector) Run() ([]*SelectorItem, error) {
 						continue
 					}
 					if compiledRx.MatchString(item.Name) {
+						if s.Kind == Asset {
+							lowerName := strings.ToLower(item.Name)
+							if strings.Contains(lowerName, "checksum") ||
+								strings.Contains(lowerName, "sha256") ||
+								strings.Contains(lowerName, "sha512") ||
+								strings.Contains(lowerName, "source") ||
+								strings.HasSuffix(lowerName, ".txt") ||
+								strings.HasSuffix(lowerName, ".md") ||
+								strings.HasSuffix(lowerName, ".pem") ||
+								strings.HasSuffix(lowerName, ".sig") {
+								// Only allow if the regex explicitly looks for this type of file
+								if !strings.Contains(strings.ToLower(rx), "txt") && 
+								   !strings.Contains(strings.ToLower(rx), "checksum") &&
+								   !strings.Contains(strings.ToLower(rx), "sha") &&
+								   !strings.Contains(strings.ToLower(rx), "source") {
+									continue
+								}
+							}
+						}
+
 						if !s.AllowForeignArch && foreignArchRegex != nil && foreignArchRegex.MatchString(item.Name) {
 							// Only apply foreign filter if the regex itself didn't explicitly ask for it
 							if !foreignArchRegex.MatchString(rx) && !strings.Contains(strings.ToLower(rx), "arm") && !strings.Contains(strings.ToLower(rx), "386") {
