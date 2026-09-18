@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/sha256"
 	"crypto/sha512"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -35,19 +36,19 @@ var (
 )
 
 type GithubRelease struct {
-	CliParams               *params.ExecContext
-	Client                  selector.GithubClient
-	ResolvedVersion         string
-	InstalledPackageNames   []string
-	InstalledBinaries       []string
-	InstalledAssetFullNames []string
+	CliParams                *params.ExecContext
+	Client                   selector.GithubClient
+	ResolvedVersion          string
+	InstalledPackageNames    []string
+	InstalledBinaries        []string
+	InstalledAssetFullNames  []string
 	InstalledAssetCleanNames []string
-	ContainingArchive       string
-	PendingDebs             []string
-	PendingRpms             []string
-	Prompter                Prompter
-	StatusMessage           string
-	UI                      *ui.PacmanUI
+	ContainingArchive        string
+	PendingDebs              []string
+	PendingRpms              []string
+	Prompter                 Prompter
+	StatusMessage            string
+	UI                       *ui.PacmanUI
 }
 
 type Prompter interface {
@@ -201,7 +202,7 @@ func (r *GithubRelease) installArchivedBinary(fileSystem fs.FS, binaryPath strin
 func (r *GithubRelease) installBinary(binaryPath string) error {
 	if r.CliParams.DryRun {
 		destinationPath := r.resolveDestinationPath(binaryPath)
-	r.InstalledBinaries = append(r.InstalledBinaries, filepath.Base(destinationPath))
+		r.InstalledBinaries = append(r.InstalledBinaries, filepath.Base(destinationPath))
 		log.Info().Msgf("[dry-run] Would install binary: %s to %s", binaryPath, destinationPath)
 		return nil
 	}
@@ -581,13 +582,14 @@ func (r *GithubRelease) GetLatestRelease() (*selector.SelectorItem, error) {
 }
 
 func (r *GithubRelease) Install() error {
-	var pUI *ui.PacmanUI
-	if r.CliParams.Interactive {
-		pUI = ui.NewPacmanUI(r.CliParams.Repository)
-		r.UI = pUI
-		pUI.Update(0, "", "", "", r.CliParams.TargetPath, "")
-		pUI.Start()
+	var pUI *ui.PacmanUI = ui.NewPacmanUI(r.CliParams.Repository)
+	if r.CliParams.DisableIcons {
+		pUI.DisableIcons = true
 	}
+	r.UI = pUI
+	ui.GlobalPacman = pUI
+	pUI.Update(0, "", "", "", r.CliParams.TargetPath, "")
+	pUI.Start()
 	defer func() {
 		if pUI != nil {
 			pUI.Stop()
@@ -608,9 +610,7 @@ func (r *GithubRelease) Install() error {
 			Msg("could not create release selector")
 		return err
 	}
-	if pUI != nil { pUI.Pause() }
 	releases, err := releaseSelector.Run()
-	if pUI != nil { pUI.Resume() }
 	if err != nil {
 		log.Error().
 			Str("repository", r.CliParams.Repository).
@@ -641,10 +641,11 @@ func (r *GithubRelease) Install() error {
 			Msg("could not create release asset selector")
 		return err
 	}
-	if pUI != nil { pUI.Pause() }
 	assets, err := assetSelector.Run()
-	if pUI != nil { pUI.Resume() }
 	if err != nil {
+		if r.CliParams.SearchForInstallInstructionsIfNoReleaseAssets {
+			r.fallbackToReadmeInstructions()
+		}
 		log.Error().
 			Str("repository", r.CliParams.Repository).
 			Int("release id", releases[0].Id).
@@ -664,7 +665,7 @@ func (r *GithubRelease) Install() error {
 			inState = true
 			prevVersion = app.Version
 			if app.TargetPath != "" {
-				// Assume already installed if target path exists and it's in state. 
+				// Assume already installed if target path exists and it's in state.
 				// We do a fast stat on the directory or binary if we know it.
 				// For simplicity, checking if the path exists:
 				if _, err := os.Stat(app.TargetPath); err == nil {
@@ -703,7 +704,6 @@ func (r *GithubRelease) Install() error {
 		r.CliParams.Overwrite = true
 	}
 
-	
 	if pUI != nil {
 		ghostType := "🍒"
 		if alreadyInstalled {
@@ -865,9 +865,7 @@ func (r *GithubRelease) Install() error {
 			if hashErr != nil {
 				return fmt.Errorf("failed to calculate SHA-256 for VirusTotal: %w", hashErr)
 			}
-			if pUI != nil { pUI.Pause() }
 			err := VerifyHashWithVirusTotal(vtHash, downloadedAssetPath, r.CliParams.VTApiKey, r.CliParams.Interactive && !r.CliParams.DisablePrompts, r.CliParams.SkipVtSandbox)
-			if pUI != nil { pUI.Resume() }
 			if err != nil {
 				return err
 			}
@@ -894,9 +892,7 @@ func (r *GithubRelease) Install() error {
 				Msg("could not create release asset binary selector")
 			return execErr
 		}
-		if pUI != nil { pUI.Pause() }
 		binaries, execErr := binarySelector.Run()
-		if pUI != nil { pUI.Resume() }
 		if execErr != nil {
 			log.Error().
 				Str("repository", r.CliParams.Repository).
@@ -1287,4 +1283,72 @@ func generateStrictAssetRegex(assetName string, resolvedVersion string) string {
 	parts = append(parts, regexp.QuoteMeta(assetName[lastIdx:]))
 
 	return fmt.Sprintf("^%s$", strings.Join(parts, ".*"))
+}
+
+func (r *GithubRelease) fallbackToReadmeInstructions() {
+	var readmeData struct {
+		Content string `json:"content"`
+	}
+	err := r.Client.Get(fmt.Sprintf("repos/%s/readme", r.CliParams.Repository), &readmeData)
+	if err != nil {
+		return
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(readmeData.Content, "\n", ""))
+	if err != nil {
+		return
+	}
+
+	content := string(decoded)
+	lines := strings.Split(content, "\n")
+
+	headerRe := regexp.MustCompile(`(?i)^(\#{1,6})\s*(?:quick\s*start|install(?:ation)?|setup)`)
+	anyHeaderRe := regexp.MustCompile(`^(\#{1,6})\s`)
+	cmdRe := regexp.MustCompile(`^\s*(pipx|uv tool|pnpm|npm|snap|cargo|go install|curl)\b`)
+
+	inInstallSection := false
+	headerLevel := 0
+	var capturedLines []string
+
+	for _, line := range lines {
+		if !inInstallSection {
+			matches := headerRe.FindStringSubmatch(line)
+			if len(matches) > 0 {
+				inInstallSection = true
+				headerLevel = len(matches[1])
+			}
+			continue
+		}
+
+		matches := anyHeaderRe.FindStringSubmatch(line)
+		if len(matches) > 0 {
+			level := len(matches[1])
+			if level <= headerLevel {
+				break
+			}
+		}
+		capturedLines = append(capturedLines, line)
+	}
+
+	if len(capturedLines) == 0 {
+		return
+	}
+
+	inCodeBlock := false
+	for _, line := range capturedLines {
+		if strings.HasPrefix(strings.TrimSpace(line), "```") {
+			inCodeBlock = !inCodeBlock
+			continue
+		}
+		if inCodeBlock {
+			if cmdRe.MatchString(line) {
+				if r.UI != nil {
+					r.UI.Stop()
+				}
+				pterm.Info.Println("No compatible release assets found. Found alternative installation method in README:")
+				fmt.Println(strings.TrimSpace(line))
+				os.Exit(0)
+			}
+		}
+	}
 }

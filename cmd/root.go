@@ -19,6 +19,7 @@ import (
 	"github.com/joshsukhdeo/gh-pt/params"
 	"github.com/joshsukhdeo/gh-pt/release"
 	"github.com/joshsukhdeo/gh-pt/state"
+	"github.com/joshsukhdeo/gh-pt/ui"
 	"github.com/pterm/pterm"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -149,7 +150,9 @@ func (r *RootCLI) RunInstall() error {
 
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	logLevel, _ := zerolog.ParseLevel(r.LogLevel)
-	if r.Verbose {
+	if !r.Verbose {
+		logLevel = zerolog.WarnLevel
+	} else {
 		logLevel = zerolog.DebugLevel
 	}
 	if r.LogQuietInteractive && r.Interactive {
@@ -158,6 +161,9 @@ func (r *RootCLI) RunInstall() error {
 	zerolog.SetGlobalLevel(logLevel)
 
 	cfg := loadConfig()
+	
+	stdoutWrapper := ui.PacmanLogWriter{Writer: os.Stdout}
+
 	if cfg != nil && cfg.Core.LogToFile {
 		fileLogger := &lumberjack.Logger{
 			Filename:   filepath.Join(xdg.DataHome, "gh-pt", "gh-pt.log"),
@@ -167,12 +173,14 @@ func (r *RootCLI) RunInstall() error {
 			Compress:   true,
 		}
 		if r.LogFormat == "console" {
-			log.Logger = log.Output(zerolog.ConsoleWriter{Out: io.MultiWriter(os.Stdout, fileLogger)})
+			log.Logger = log.Output(zerolog.ConsoleWriter{Out: io.MultiWriter(stdoutWrapper, fileLogger)})
 		} else {
-			log.Logger = log.Output(io.MultiWriter(os.Stdout, fileLogger))
+			log.Logger = log.Output(io.MultiWriter(stdoutWrapper, fileLogger))
 		}
 	} else if r.LogFormat == "console" {
-		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout})
+		log.Logger = log.Output(zerolog.ConsoleWriter{Out: stdoutWrapper})
+	} else {
+		log.Logger = log.Output(stdoutWrapper)
 	}
 
 	if cfg != nil {
@@ -182,6 +190,7 @@ func (r *RootCLI) RunInstall() error {
 		if cfg.Core.AllowPrerelease {
 			r.Prerelease = true
 		}
+		r.DisableIcons = cfg.Core.DisableIcons
 	}
 	if r.Stable {
 		r.Prerelease = false

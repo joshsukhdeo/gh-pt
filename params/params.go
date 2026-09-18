@@ -70,8 +70,9 @@ type CommonInstallFlags struct {
 	SkipVtSandbox        bool              `default:"false" name:"skip-vt-sandbox" help:"Skip VirusTotal sandbox scan."`
 	Prerelease           bool              `short:"P" help:"Include prereleases."`
 	Stable               bool              `help:"Include only stable releases."`
-	AI                   bool              `help:"Use AI to scan and analyze releases."`
-	IsUpgradeCmd         bool              `kong:"-"`
+	AI                                            bool              `help:"Use AI to scan and analyze releases."`
+	IsUpgradeCmd                                  bool              `kong:"-"`
+	SearchForInstallInstructionsIfNoReleaseAssets bool              `env:"GH_PT_README_FALLBACK" help:"Extract alternative installation instructions from README if release asset matching fails."`
 }
 
 type InstallCmd struct {
@@ -278,4 +279,5 @@ type ExecContext struct {
 	ShowVersions        int
 	ShowDescription     int
 	ShowReadme          int
+	DisableIcons        bool
 }

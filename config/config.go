@@ -27,19 +27,20 @@ type AIConfig struct {
 }
 
 type CoreConfig struct {
-	InstallTypes    string `yaml:"install_types"`
-	AddDeps         bool   `yaml:"add_deps"`
-	NoDeps          bool   `yaml:"no_deps"`
-	DisablePrompts  bool   `yaml:"disable_prompts"`
-	NoSaveState     bool   `yaml:"no_save_state"`
-	Wine            string `yaml:"wine"`
-	Extractor       string `yaml:"extractor"`
-	KeepSuffixes    bool   `yaml:"keep_suffixes"`
-	VTApiKey        string `yaml:"vt_api_key"`
-	AllowPrerelease bool   `yaml:"allow_prerelease"`
-	DisableIcons    bool   `yaml:"disable_icons"`
-	LogToFile       bool   `yaml:"log_to_file"`
-	Symlink         bool   `yaml:"symlink"`
+	InstallTypes                                  string `yaml:"install_types"`
+	AddDeps                                       bool   `yaml:"add_deps"`
+	NoDeps                                        bool   `yaml:"no_deps"`
+	DisablePrompts                                bool   `yaml:"disable_prompts"`
+	NoSaveState                                   bool   `yaml:"no_save_state"`
+	Wine                                          string `yaml:"wine"`
+	Extractor                                     string `yaml:"extractor"`
+	KeepSuffixes                                  bool   `yaml:"keep_suffixes"`
+	VTApiKey                                      string `yaml:"vt_api_key"`
+	AllowPrerelease                               bool   `yaml:"allow_prerelease"`
+	DisableIcons                                  bool   `yaml:"disable_icons"`
+	LogToFile                                     bool   `yaml:"log_to_file"`
+	Symlink                                       bool   `yaml:"symlink"`
+	SearchForInstallInstructionsIfNoReleaseAssets bool   `yaml:"readme_fallback"`
 }
 
 func GetConfigPath() string {
