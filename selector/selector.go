@@ -98,87 +98,109 @@ func (s *Selector) Run() ([]*SelectorItem, error) {
 		}
 		levels = append(levels, fallbackLevel{"blind", func(n string) bool { return true }})
 
-		// Try fallback levels in order
-		for _, level := range levels {
-			// Try regex matchers in priority order
-			for _, rx := range s.RegexpMatchers {
-				compiledRx, err := regexp.Compile(rx)
-				if err != nil {
-					return nil, err
-				}
-				var currentMatches []*SelectorItem
-				for _, item := range s.Items {
-					if !level.filter(item.Name) {
-						continue
+		var strictRegexps []string
+		var weakRegexps []string
+		for _, rx := range s.RegexpMatchers {
+			if rx == "^.*$" || strings.HasPrefix(rx, "^.*\\.(?i:") {
+				weakRegexps = append(weakRegexps, rx)
+			} else {
+				strictRegexps = append(strictRegexps, rx)
+			}
+		}
+
+		executePass := func(regexps []string) ([]*SelectorItem, error) {
+			for _, level := range levels {
+				for _, rx := range regexps {
+					compiledRx, err := regexp.Compile(rx)
+					if err != nil {
+						return nil, err
 					}
-					if compiledRx.MatchString(item.Name) {
-						if s.Kind == Asset {
-							lowerName := strings.ToLower(item.Name)
-							if strings.Contains(lowerName, "checksum") ||
-								strings.Contains(lowerName, "sha256") ||
-								strings.Contains(lowerName, "sha512") ||
-								strings.Contains(lowerName, "source") ||
-								strings.HasSuffix(lowerName, ".txt") ||
-								strings.HasSuffix(lowerName, ".md") ||
-								strings.HasSuffix(lowerName, ".pem") ||
-								strings.HasSuffix(lowerName, ".sig") {
-								// Only allow if the regex explicitly looks for this type of file
-								if !strings.Contains(strings.ToLower(rx), "txt") && 
-								   !strings.Contains(strings.ToLower(rx), "checksum") &&
-								   !strings.Contains(strings.ToLower(rx), "sha") &&
-								   !strings.Contains(strings.ToLower(rx), "source") {
+					var currentMatches []*SelectorItem
+					for _, item := range s.Items {
+						if !level.filter(item.Name) {
+							continue
+						}
+						if compiledRx.MatchString(item.Name) {
+							if s.Kind == Asset {
+								lowerName := strings.ToLower(item.Name)
+								if strings.Contains(lowerName, "checksum") ||
+									strings.Contains(lowerName, "sha256") ||
+									strings.Contains(lowerName, "sha512") ||
+									strings.Contains(lowerName, "source") ||
+									strings.HasSuffix(lowerName, ".txt") ||
+									strings.HasSuffix(lowerName, ".md") ||
+									strings.HasSuffix(lowerName, ".pem") ||
+									strings.HasSuffix(lowerName, ".sig") {
+									// Only allow if the regex explicitly looks for this type of file
+									if !strings.Contains(strings.ToLower(rx), "txt") && 
+									   !strings.Contains(strings.ToLower(rx), "checksum") &&
+									   !strings.Contains(strings.ToLower(rx), "sha") &&
+									   !strings.Contains(strings.ToLower(rx), "source") {
+										continue
+									}
+								}
+							}
+
+							if !s.AllowForeignArch && foreignArchRegex != nil && foreignArchRegex.MatchString(item.Name) {
+								// Only apply foreign filter if the regex itself didn't explicitly ask for it
+								if !foreignArchRegex.MatchString(rx) && !strings.Contains(strings.ToLower(rx), "arm") && !strings.Contains(strings.ToLower(rx), "386") {
 									continue
 								}
 							}
+							currentMatches = append(currentMatches, item)
 						}
-
-						if !s.AllowForeignArch && foreignArchRegex != nil && foreignArchRegex.MatchString(item.Name) {
-							// Only apply foreign filter if the regex itself didn't explicitly ask for it
-							if !foreignArchRegex.MatchString(rx) && !strings.Contains(strings.ToLower(rx), "arm") && !strings.Contains(strings.ToLower(rx), "386") {
-								continue
-							}
-						}
-						currentMatches = append(currentMatches, item)
 					}
-				}
-				if len(currentMatches) > 0 {
-
-					if s.Kind == Binary {
-						var execMatches []*SelectorItem
-						for _, item := range currentMatches {
-							ext := strings.ToLower(filepath.Ext(item.Name))
-							switch ext {
-							case ".exe", ".appimage", ".bin", ".deb", ".rpm", ".msi", ".dmg", ".pkg":
-								execMatches = append(execMatches, item)
-							case "":
-								// Strictly filter extensionless files using magic bytes
-								if IsActuallyExecutable(item) {
+					if len(currentMatches) > 0 {
+						if s.Kind == Binary {
+							var execMatches []*SelectorItem
+							for _, item := range currentMatches {
+								ext := strings.ToLower(filepath.Ext(item.Name))
+								switch ext {
+								case ".exe", ".appimage", ".bin", ".deb", ".rpm", ".msi", ".dmg", ".pkg":
 									execMatches = append(execMatches, item)
+								case "":
+									// Strictly filter extensionless files using magic bytes
+									if IsActuallyExecutable(item) {
+										execMatches = append(execMatches, item)
+									}
 								}
 							}
+							if len(execMatches) > 0 {
+								currentMatches = execMatches
+							}
 						}
-						if len(execMatches) > 0 {
-							currentMatches = execMatches
+						// If multiple items match, prefer non-musl over musl on Linux/standard distros
+						var nonMusl []*SelectorItem
+						for _, item := range currentMatches {
+							if !muslRegex.MatchString(item.Name) {
+								nonMusl = append(nonMusl, item)
+							}
 						}
-					}
-					// If multiple items match, prefer non-musl over musl on Linux/standard distros
-					var nonMusl []*SelectorItem
-					for _, item := range currentMatches {
-						if !muslRegex.MatchString(item.Name) {
-							nonMusl = append(nonMusl, item)
+						if len(nonMusl) > 0 {
+							currentMatches = nonMusl
 						}
-					}
-					if len(nonMusl) > 0 {
-						currentMatches = nonMusl
-					}
 
-					for _, item := range currentMatches {
-						item.Selected = true
-						selectedItems = append(selectedItems, item)
+						for _, item := range currentMatches {
+							item.Selected = true
+							selectedItems = append(selectedItems, item)
+						}
+						return selectedItems, nil // Return immediately upon finding the highest priority match
 					}
-					return selectedItems, nil // Return immediately upon finding the highest priority match
 				}
 			}
+			return nil, nil
+		}
+
+		if matches, err := executePass(strictRegexps); err != nil {
+			return nil, err
+		} else if len(matches) > 0 {
+			return matches, nil
+		}
+
+		if matches, err := executePass(weakRegexps); err != nil {
+			return nil, err
+		} else if len(matches) > 0 {
+			return matches, nil
 		}
 	}
 
