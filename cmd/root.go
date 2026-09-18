@@ -475,9 +475,11 @@ func (r *RootCLI) handleRepoCloneOrFork(cfg *config.Config) error {
 
 	if _, err := os.Stat(targetDir); err == nil {
 		if !r.Overwrite {
-			return fmt.Errorf("target path %s already exists; use force to overwrite", targetDir)
+			return fmt.Errorf("target path %s already exists; use -f or --force to overwrite", targetDir)
 		}
-		_ = os.RemoveAll(targetDir)
+		if err := forceRemoveAll(targetDir); err != nil {
+			return fmt.Errorf("failed to forcefully remove existing target directory %s: %w", targetDir, err)
+		}
 	}
 
 	if err := os.MkdirAll(filepath.Dir(targetDir), 0755); err != nil {
@@ -556,54 +558,30 @@ func buildCompileFixPrompt(repo, buildDir, scriptPath, targetPath, symlinkDir, e
 
 func runAIAgent(aiCmdTemplate, prompt, dir string) error {
 	var cmd *exec.Cmd
-	// Pre-process the template to wrap unquoted %s in double quotes
-	aiCmdTemplate = fixAICommandTemplate(aiCmdTemplate)
+	
 	if strings.Contains(aiCmdTemplate, "%s") {
-		formattedCmd := fmt.Sprintf(aiCmdTemplate, prompt)
+		// Strip any surrounding quotes from the %s placeholder in the user's template
+		aiCmdTemplate = strings.ReplaceAll(aiCmdTemplate, `"%s"`, `%s`)
+		aiCmdTemplate = strings.ReplaceAll(aiCmdTemplate, `'%s'`, `%s`)
+		
+		var formattedCmd string
 		if runtime.GOOS == "windows" {
-			cmd = exec.Command("cmd", "/C", formattedCmd)
+			formattedCmd = strings.ReplaceAll(aiCmdTemplate, "%s", `$env:GH_PT_PROMPT`)
+			cmd = exec.Command("powershell", "-NoProfile", "-Command", formattedCmd)
 		} else {
+			formattedCmd = strings.ReplaceAll(aiCmdTemplate, "%s", `"$GH_PT_PROMPT"`)
 			cmd = exec.Command("sh", "-c", formattedCmd)
 		}
+		cmd.Env = append(os.Environ(), "GH_PT_PROMPT="+prompt)
 	} else {
 		cmd = exec.Command(aiCmdTemplate, prompt)
 	}
+	
 	cmd.Dir = dir
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
-}
-
-// fixAICommandTemplate wraps unquoted %s placeholders in double quotes
-// to prevent shell interpretation issues with prompts containing special characters
-func fixAICommandTemplate(template string) string {
-	// If no %s placeholder, return as-is
-	if !strings.Contains(template, "%s") {
-		return template
-	}
-
-	var result strings.Builder
-	quoted := false
-	for i := 0; i < len(template); i++ {
-		c := template[i]
-		if c == '"' || c == '\'' || c == '`' {
-			quoted = !quoted
-			result.WriteByte(c)
-			continue
-		}
-		if c == '%' && i+1 < len(template) && template[i+1] == 's' {
-			if !quoted {
-				result.WriteString("\"%s\"")
-			} else {
-				result.WriteString("%s")
-			}
-			i++ // skip the 's'
-			continue
-		}
-		result.WriteByte(c)
-	}
-	return result.String()
 }
 
 func (r *RootCLI) handleAISafetyScan(cfg *config.Config) error {
@@ -631,6 +609,19 @@ func (r *RootCLI) handleAISafetyScan(cfg *config.Config) error {
 		}
 	}
 
+	return nil
+}
+
+func forceRemoveAll(path string) error {
+	err := os.RemoveAll(path)
+	if err != nil {
+		if runtime.GOOS != "windows" {
+			exec.Command("rm", "-rf", path).Run()
+		} else {
+			exec.Command("cmd", "/C", "rmdir", "/s", "/q", path).Run()
+		}
+		return os.RemoveAll(path)
+	}
 	return nil
 }
 
@@ -670,7 +661,11 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 	}
 
 	// Ensure fresh clone
-	_ = os.RemoveAll(repoDir)
+	if r.Overwrite {
+		_ = forceRemoveAll(repoDir)
+	} else if _, err := os.Stat(repoDir); err == nil {
+		return fmt.Errorf("git repo already exists at %s, use -f or --force to overwrite", repoDir)
+	}
 
 	log.Info().
 		Str("repository", r.Repository).
