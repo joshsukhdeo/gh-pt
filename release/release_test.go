@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/joshsukhdeo/gh-pt/params"
+	"github.com/joshsukhdeo/gh-pt/resolver"
 	"github.com/joshsukhdeo/gh-pt/selector"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,6 +30,9 @@ func TestHelperProcess(t *testing.T) {
 	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
 		return
 	}
+	if out := os.Getenv("MOCK_LDD_OUTPUT"); out != "" {
+		_, _ = os.Stdout.WriteString(out)
+	}
 	os.Exit(0)
 }
 
@@ -37,8 +41,10 @@ func mockGhExec(args ...string) (bytes.Buffer, bytes.Buffer, error) {
 }
 
 type MockPrompter struct {
-	MockConfirm bool
-	MockInput   string
+	MockConfirm     bool
+	MockInput       string
+	MockMultiselect []string
+	MultiselectErr  error
 }
 
 func (m MockPrompter) Confirm(message string) bool {
@@ -47,6 +53,10 @@ func (m MockPrompter) Confirm(message string) bool {
 
 func (m MockPrompter) Input(prompt string, defaultValue string) string {
 	return m.MockInput
+}
+
+func (m MockPrompter) Multiselect(prompt string, options []string) ([]string, error) {
+	return m.MockMultiselect, m.MultiselectErr
 }
 
 type MockGithubClient struct {
@@ -713,4 +723,276 @@ func TestGithubRelease_InstallDebSuccess(t *testing.T) {
 	}
 
 	_ = gr.Install()
+}
+
+type MockTestPackageManager struct {
+	NameVal        string
+	IsInstalledVal bool
+	InstallCalls   [][]string
+	InstallErr     error
+}
+
+func (m *MockTestPackageManager) Name() string {
+	if m.NameVal != "" {
+		return m.NameVal
+	}
+	return "mock"
+}
+
+func (m *MockTestPackageManager) IsInstalled() bool {
+	return m.IsInstalledVal
+}
+
+func (m *MockTestPackageManager) Install(pkgs []string) error {
+	m.InstallCalls = append(m.InstallCalls, pkgs)
+	return m.InstallErr
+}
+
+func TestFindBundledSharedObjects(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create directory hierarchy with .so, .so.1, .so.2.0 and non-so files
+	libDir1 := filepath.Join(tempDir, "lib")
+	libDir2 := filepath.Join(tempDir, "plugins", "sub")
+	require.NoError(t, os.MkdirAll(libDir1, 0755))
+	require.NoError(t, os.MkdirAll(libDir2, 0755))
+
+	so1 := filepath.Join(libDir1, "libcustom.so")
+	so2 := filepath.Join(libDir1, "libversioned.so.1")
+	so3 := filepath.Join(libDir2, "libsub.so.2.1.0")
+	txt := filepath.Join(libDir1, "readme.txt")
+
+	require.NoError(t, os.WriteFile(so1, []byte("so1"), 0644))
+	require.NoError(t, os.WriteFile(so2, []byte("so2"), 0644))
+	require.NoError(t, os.WriteFile(so3, []byte("so3"), 0644))
+	require.NoError(t, os.WriteFile(txt, []byte("not an so"), 0644))
+
+	files, dirs, err := findBundledSharedObjects(tempDir)
+	require.NoError(t, err)
+
+	assert.Len(t, files, 3)
+	assert.Contains(t, files, so1)
+	assert.Contains(t, files, so2)
+	assert.Contains(t, files, so3)
+
+	assert.Len(t, dirs, 2)
+	assert.Contains(t, dirs, libDir1)
+	assert.Contains(t, dirs, libDir2)
+}
+
+func TestParseMissingLibraries(t *testing.T) {
+	t.Run("ldd output with missing libraries", func(t *testing.T) {
+		lddOutput := `	linux-vdso.so.1 (0x00007fffa5be6000)
+	libssl.so.3 => not found
+	libcrypto.so.3 => /usr/lib/libcrypto.so.3 (0x00007f35b6a00000)
+	libc.so.6 => /usr/lib/libc.so.6 (0x00007f35b6818000)
+	libfoo.so.1 => not found
+	/lib64/ld-linux-x86-64.so.2 => /usr/lib64/ld-linux-x86-64.so.2 (0x00007f35b6fb8000)
+`
+		missing := parseMissingLibraries(lddOutput)
+		assert.Equal(t, []string{"libssl.so.3", "libfoo.so.1"}, missing)
+	})
+
+	t.Run("ldd output with no missing libraries", func(t *testing.T) {
+		lddOutput := `	linux-vdso.so.1 (0x00007fffa5be6000)
+	libc.so.6 => /usr/lib/libc.so.6 (0x00007f35b6818000)
+`
+		missing := parseMissingLibraries(lddOutput)
+		assert.Empty(t, missing)
+	})
+
+	t.Run("not a dynamic executable output", func(t *testing.T) {
+		lddOutput := "\tnot a dynamic executable\n"
+		missing := parseMissingLibraries(lddOutput)
+		assert.Empty(t, missing)
+	})
+}
+
+func TestScanMissingDependencies_WithMockedLdd(t *testing.T) {
+	tempDir := t.TempDir()
+	binPath := filepath.Join(tempDir, "mybinary")
+	require.NoError(t, os.WriteFile(binPath, []byte("fake binary"), 0755))
+
+	soDir := filepath.Join(tempDir, "bundled_libs")
+	require.NoError(t, os.MkdirAll(soDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(soDir, "libbundled.so"), []byte("so"), 0644))
+
+	origExecCommand := execCommand
+	defer func() { execCommand = origExecCommand }()
+
+	t.Run("mocked ldd returns missing dependencies and checks LD_LIBRARY_PATH", func(t *testing.T) {
+		var capturedLdLibraryPath string
+		execCommand = func(name string, args ...string) *exec.Cmd {
+			assert.Equal(t, "ldd", name)
+			assert.Equal(t, []string{binPath}, args)
+			cs := []string{"-test.run=TestHelperProcess", "--", "mock-ldd-missing"}
+			cmd := exec.Command(os.Args[0], cs...)
+			cmd.Env = []string{
+				"GO_WANT_HELPER_PROCESS=1",
+				"MOCK_LDD_OUTPUT=\tlibmissing.so.2 => not found\n\tlibssl.so.3 => not found\n",
+			}
+			// Read parent process env during call
+			capturedLdLibraryPath = os.Getenv("LD_LIBRARY_PATH")
+			return cmd
+		}
+
+		missing, err := scanMissingDependencies(binPath, tempDir)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"libmissing.so.2", "libssl.so.3"}, missing)
+		assert.Contains(t, capturedLdLibraryPath, tempDir)
+		assert.Contains(t, capturedLdLibraryPath, soDir)
+	})
+
+	t.Run("mocked ldd clean with no missing dependencies", func(t *testing.T) {
+		execCommand = func(name string, args ...string) *exec.Cmd {
+			cs := []string{"-test.run=TestHelperProcess", "--", "mock-ldd-clean"}
+			cmd := exec.Command(os.Args[0], cs...)
+			cmd.Env = []string{
+				"GO_WANT_HELPER_PROCESS=1",
+				"MOCK_LDD_OUTPUT=\tlibc.so.6 => /lib64/libc.so.6 (0x00007f)\n",
+			}
+			return cmd
+		}
+
+		missing, err := scanMissingDependencies(binPath, tempDir)
+		require.NoError(t, err)
+		assert.Empty(t, missing)
+	})
+}
+
+func TestResolveBinaryDependencies(t *testing.T) {
+	tempDir := t.TempDir()
+	binPath := filepath.Join(tempDir, "app")
+	require.NoError(t, os.WriteFile(binPath, []byte("fake binary"), 0755))
+
+	origExecCommand := execCommand
+	origGetNativeManager := getNativeManager
+	defer func() {
+		execCommand = origExecCommand
+		getNativeManager = origGetNativeManager
+	}()
+
+	mockMgr := &MockTestPackageManager{
+		NameVal:        "apt",
+		IsInstalledVal: true,
+	}
+	getNativeManager = func() (resolver.PackageManager, error) {
+		return mockMgr, nil
+	}
+
+	execCommand = func(name string, args ...string) *exec.Cmd {
+		cs := []string{"-test.run=TestHelperProcess", "--", "mock-ldd"}
+		cmd := exec.Command(os.Args[0], cs...)
+		cmd.Env = []string{
+			"GO_WANT_HELPER_PROCESS=1",
+			"MOCK_LDD_OUTPUT=\tlibz.so.1 => not found\n\tlibssl.so.3 => not found\n",
+		}
+		return cmd
+	}
+
+	t.Run("when ResolveDeps is false, do not install packages", func(t *testing.T) {
+		mockMgr.InstallCalls = nil
+		gr := &GithubRelease{
+			CliParams: &params.ExecContext{
+				CommonInstallFlags: params.CommonInstallFlags{
+					ResolveDeps: false,
+				},
+			},
+		}
+
+		err := gr.resolveBinaryDependencies(binPath, tempDir)
+		require.NoError(t, err)
+		assert.Empty(t, mockMgr.InstallCalls)
+		assert.Empty(t, gr.InstalledPackageNames)
+	})
+
+	t.Run("when ResolveDeps is true, install mapped packages", func(t *testing.T) {
+		mockMgr.InstallCalls = nil
+		gr := &GithubRelease{
+			CliParams: &params.ExecContext{
+				CommonInstallFlags: params.CommonInstallFlags{
+					ResolveDeps: true,
+				},
+			},
+		}
+
+		err := gr.resolveBinaryDependencies(binPath, tempDir)
+		require.NoError(t, err)
+		require.Len(t, mockMgr.InstallCalls, 1)
+		// On apt, libz.so.1 -> zlib1g, libssl.so.3 -> libssl3
+		assert.Contains(t, mockMgr.InstallCalls[0], "zlib1g")
+		assert.Contains(t, mockMgr.InstallCalls[0], "libssl3")
+		assert.ElementsMatch(t, []string{"zlib1g", "libssl3"}, gr.InstalledPackageNames)
+	})
+
+	t.Run("when NoDeps is true, skip ldd and resolution completely", func(t *testing.T) {
+		mockMgr.InstallCalls = nil
+		gr := &GithubRelease{
+			CliParams: &params.ExecContext{
+				CommonInstallFlags: params.CommonInstallFlags{
+					ResolveDeps: true,
+					NoDeps:      true,
+				},
+			},
+		}
+
+		err := gr.resolveBinaryDependencies(binPath, tempDir)
+		require.NoError(t, err)
+		assert.Empty(t, mockMgr.InstallCalls)
+	})
+}
+
+func TestInstallArchivedBinary_StaticDependencyResolution(t *testing.T) {
+	tempDir := t.TempDir()
+	targetDir := filepath.Join(tempDir, "target")
+	require.NoError(t, os.MkdirAll(targetDir, 0755))
+
+	origExecCommand := execCommand
+	origGetNativeManager := getNativeManager
+	defer func() {
+		execCommand = origExecCommand
+		getNativeManager = origGetNativeManager
+	}()
+
+	mockMgr := &MockTestPackageManager{
+		NameVal:        "apt",
+		IsInstalledVal: true,
+	}
+	getNativeManager = func() (resolver.PackageManager, error) {
+		return mockMgr, nil
+	}
+
+	execCommand = func(name string, args ...string) *exec.Cmd {
+		cs := []string{"-test.run=TestHelperProcess", "--", "mock-ldd"}
+		cmd := exec.Command(os.Args[0], cs...)
+		cmd.Env = []string{
+			"GO_WANT_HELPER_PROCESS=1",
+			"MOCK_LDD_OUTPUT=\tlibz.so.1 => not found\n",
+		}
+		return cmd
+	}
+
+	archiveFS := os.DirFS(tempDir)
+	binaryRelPath := "mybinary"
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, binaryRelPath), []byte("#!/bin/sh\necho ok"), 0755))
+
+	gr := &GithubRelease{
+		CliParams: &params.ExecContext{
+			CommonInstallFlags: params.CommonInstallFlags{
+				TargetPath:  targetDir,
+				ResolveDeps: true,
+				Overwrite:   true,
+			},
+			Repository: "owner/repo",
+		},
+	}
+
+	err := gr.installArchivedBinary(archiveFS, binaryRelPath)
+	require.NoError(t, err)
+
+	destPath := filepath.Join(targetDir, binaryRelPath)
+	assert.FileExists(t, destPath)
+	require.Len(t, mockMgr.InstallCalls, 1)
+	assert.Contains(t, mockMgr.InstallCalls[0], "zlib1g")
+	assert.Contains(t, gr.InstalledPackageNames, "zlib1g")
 }

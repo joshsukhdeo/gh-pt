@@ -2,10 +2,10 @@ package selector
 
 import (
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
-	"path/filepath"
 )
 
 type Selector struct {
@@ -17,7 +17,6 @@ type Selector struct {
 	AllowForeignArch bool
 	Repository       string
 }
-
 
 func getMajorityPrefix(items []*SelectorItem) string {
 	n := len(items)
@@ -132,10 +131,10 @@ func (s *Selector) Run() ([]*SelectorItem, error) {
 									strings.HasSuffix(lowerName, ".pem") ||
 									strings.HasSuffix(lowerName, ".sig") {
 									// Only allow if the regex explicitly looks for this type of file
-									if !strings.Contains(strings.ToLower(rx), "txt") && 
-									   !strings.Contains(strings.ToLower(rx), "checksum") &&
-									   !strings.Contains(strings.ToLower(rx), "sha") &&
-									   !strings.Contains(strings.ToLower(rx), "source") {
+									if !strings.Contains(strings.ToLower(rx), "txt") &&
+										!strings.Contains(strings.ToLower(rx), "checksum") &&
+										!strings.Contains(strings.ToLower(rx), "sha") &&
+										!strings.Contains(strings.ToLower(rx), "source") {
 										continue
 									}
 								}

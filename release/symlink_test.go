@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-
 func TestExecuteSymlinkInstall(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := filepath.Join(tmpDir, "home")
@@ -26,14 +25,14 @@ func TestExecuteSymlinkInstall(t *testing.T) {
 
 	r := &GithubRelease{
 		CliParams: &params.ExecContext{
-			Repository: "jqlang/jq",
+			Repository:         "jqlang/jq",
 			CommonInstallFlags: params.CommonInstallFlags{TargetPath: targetPath},
 		},
 	}
 
 	binaries := []*selector.SelectorItem{
 		{
-			Name: "jq",
+			Name:         "jq",
 			DownloadPath: assetFile,
 		},
 	}

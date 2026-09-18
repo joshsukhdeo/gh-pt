@@ -88,7 +88,7 @@ func TestShowInfo_ShowVersions(t *testing.T) {
 	xdg.ConfigHome = tmpDir
 	defer func() { xdg.ConfigHome = "" }()
 	xdg.ConfigHome = tmpDir
-		defer func() { xdg.ConfigHome = "" }()
+	defer func() { xdg.ConfigHome = "" }()
 	// xdg.Reload()
 
 	st, err := state.LoadState()
@@ -133,7 +133,7 @@ func TestShowInfo_ShowVersions_DisableIcons(t *testing.T) {
 	xdg.ConfigHome = tmpDir
 	defer func() { xdg.ConfigHome = "" }()
 	xdg.ConfigHome = tmpDir
-		defer func() { xdg.ConfigHome = "" }()
+	defer func() { xdg.ConfigHome = "" }()
 	// xdg.Reload()
 
 	cfgPath := filepath.Join(tmpDir, "gh-pt", "config.yml")
@@ -180,7 +180,7 @@ func TestShowInfo_Show(t *testing.T) {
 	xdg.ConfigHome = tmpDir
 	defer func() { xdg.ConfigHome = "" }()
 	xdg.ConfigHome = tmpDir
-		defer func() { xdg.ConfigHome = "" }()
+	defer func() { xdg.ConfigHome = "" }()
 	// xdg.Reload()
 
 	var releases []Release
@@ -209,7 +209,7 @@ func TestShowInfo_Show(t *testing.T) {
 	r := &RootCLI{
 		ExecContext: params.ExecContext{
 			Repository: "test/repo",
-			Show: true, ShowVersions: -1, ShowAssets: -1, ShowDescription: -1, ShowReadme: -1,
+			Show:       true, ShowVersions: -1, ShowAssets: -1, ShowDescription: -1, ShowReadme: -1,
 			CommonInstallFlags: params.CommonInstallFlags{
 				ReleaseVersion: "latest",
 			},
@@ -221,9 +221,8 @@ func TestShowInfo_Show(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
-	
 	// 10 versions + 2 assets = 12 lines
-	
+
 	assert.Contains(t, out, "v1.15.0")
 	assert.Contains(t, out, "v1.6.0")
 	assert.NotContains(t, out, "v1.5.0") // truncated after 10 versions
@@ -234,7 +233,7 @@ func TestShowInfo_Show(t *testing.T) {
 	rPrerelease := &RootCLI{
 		ExecContext: params.ExecContext{
 			Repository: "test/repo",
-			Show: true, ShowVersions: -1, ShowAssets: -1, ShowDescription: -1, ShowReadme: -1,
+			Show:       true, ShowVersions: -1, ShowAssets: -1, ShowDescription: -1, ShowReadme: -1,
 			CommonInstallFlags: params.CommonInstallFlags{
 				Prerelease:     true,
 				ReleaseVersion: "latest",
@@ -352,7 +351,7 @@ func TestShowInfo_HeadersWithIcons(t *testing.T) {
 
 	mock := &mockGhClient{
 		releases: []Release{{ID: 1, TagName: "v1.0.0"}},
-		assets: map[int64][]ReleaseAsset{1: {{ID: 1, Name: "asset.deb"}}},
+		assets:   map[int64][]ReleaseAsset{1: {{ID: 1, Name: "asset.deb"}}},
 	}
 	defaultRestClient = func() (ghRestClient, error) {
 		return mock, nil
@@ -378,7 +377,7 @@ func TestShowInfo_HeadersWithIcons(t *testing.T) {
 	// loadConfig() reads from XDG_CONFIG_HOME
 	tmpDir := t.TempDir()
 	xdg.ConfigHome = tmpDir
-		defer func() { xdg.ConfigHome = "" }()
+	defer func() { xdg.ConfigHome = "" }()
 	cfgPath := filepath.Join(tmpDir, "gh-pt", "config.yml")
 	require.NoError(t, os.MkdirAll(filepath.Dir(cfgPath), 0755))
 	require.NoError(t, os.WriteFile(cfgPath, []byte("disable_icons: true\n"), 0644))

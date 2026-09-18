@@ -99,11 +99,11 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 					app.Version = remoteCommit
 				}
 
-			state.LogHistory("update", app.Repository, app.Version)
-			// Save the updated version to state
-			if err := st.AddApp(app); err != nil {
-				log.Warn().Err(err).Msgf("could not update state for %s", app.Repository)
-			}
+				state.LogHistory("update", app.Repository, app.Version)
+				// Save the updated version to state
+				if err := st.AddApp(app); err != nil {
+					log.Warn().Err(err).Msgf("could not update state for %s", app.Repository)
+				}
 			}
 			continue
 		}
@@ -167,6 +167,12 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 		appParams.AssetBinaries = app.AssetBinaries
 		appParams.AssetBinariesRegexp = app.AssetBinariesRegexp
 		appParams.Extractor = app.Extractor
+		appParams.Sidecars = app.Sidecars
+		appParams.SidecarTargetPath = app.SidecarTargetPath
+		appParams.SidecarSymlinkTo = app.SidecarSymlinkTo
+		appParams.IncludeSidecars = app.IncludeSidecars
+		appParams.EnvInject = app.EnvInject
+		appParams.FallbackReleases = app.FallbackReleases
 		// Reset version to latest to ensure we get the latest
 		appParams.ReleaseVersion = "latest"
 		if app.IsPrerelease {

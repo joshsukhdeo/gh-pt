@@ -464,6 +464,9 @@ func GetStateFields() []string {
 		"clone",
 		"fork",
 		"is_prerelease",
+		"sidecars",
+		"sidecar_target_path",
+		"installed_sidecars",
 	}
 }
 
@@ -482,9 +485,9 @@ func ParseStateUpdate(pairs []string) (map[string]interface{}, error) {
 
 		// Parse value based on field type
 		switch field {
-		case "target_path", "release_asset", "release_regexp", "version", "extractor", "compile_script", "asset_binaries_regexp", "containing_archive":
+		case "target_path", "release_asset", "release_regexp", "version", "extractor", "compile_script", "asset_binaries_regexp", "containing_archive", "sidecar_target_path":
 			updates[field] = value
-		case "type", "asset_binaries", "installed_asset_names", "installed_assets_full_names":
+		case "type", "asset_binaries", "installed_asset_names", "installed_assets_full_names", "sidecars":
 			updates[field] = parseCommaSeparated(value)
 		case "rename":
 			updates[field] = parseMap(value)

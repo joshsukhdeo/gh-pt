@@ -51,7 +51,7 @@ func IsActuallyExecutable(item *SelectorItem) bool {
 	if buf[0] == '#' && buf[1] == '!' {
 		return true
 	}
-    // AppImage (squashfs etc, but they usually have ELF header)
+	// AppImage (squashfs etc, but they usually have ELF header)
 
 	return false
 }

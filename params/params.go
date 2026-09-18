@@ -35,44 +35,53 @@ type CLI struct {
 
 // Shared flags across commands
 type CommonInstallFlags struct {
-	Interactive          bool              `default:"false" short:"i" help:"Use interactive installation."`
-	ReleaseVersion       string            `default:"latest" short:"v" help:"Repository release tag (version) to install."`
-	ReleaseAsset         string            `optional:"" short:"a" help:"Name of repository release asset to download."`
-	ReleaseAssetRegexp   string            `optional:"" short:"A" help:"Regular expression matching release asset to download."`
-	ReleaseAssetRegexps  []string          `kong:"-"`
-	Type                 []string          `default:"${install_types}" short:"T" name:"format" env:"GH_PT_TYPE" help:"Comma-separated list of types to match and prioritize."`
-	All                  bool              `default:"false" help:"Install all matched assets instead of just the first one."`
-	AssetBinaries        []string          `optional:"" short:"b" help:"If release asset is an archive - names of a binaries in the archive to install."`
-	AssetBinariesRegexp  string            `optional:"" short:"B" help:"If release asset is an archive - regular expression matching binaries in the archive to install."`
-	TargetPath           string            `default:"${install_path}" short:"p" type:"path" help:"Target installation directory (default: ~/.local/bin or /usr/local/bin if --global)."`
-	Global               bool              `short:"g" help:"Install globally (e.g. /usr/local/bin) instead of user bin."`
-	AddDeps              bool              `short:"y" help:"Automatically resolve and install dependencies without prompting."`
-	NoDeps               bool              `short:"n" help:"Do not install dependencies."`
-	Rename               map[string]string `optional:"" short:"t" help:"Rename binaries installed at target path."`
-	KeepSuffixes         bool              `short:"k" help:"Keep OS/hardware suffixes on extracted binaries."`
-	DisablePrompts       bool              `short:"D" env:"GH_PT_DISABLE_PROMPTS" help:"Disable all interactive prompts."`
-	NoSaveState          bool              `short:"S" env:"GH_PT_NO_SAVE_STATE" help:"Do not save installation to state."`
-	Wine                 string            `default:"off" enum:"force,priority,allow,off" env:"GH_PT_WINE" help:"Wine mode."`
-	AllowForeignArch     bool              `env:"GH_PT_ALLOW_FOREIGN_ARCH" help:"Allow installing assets with foreign architectures."`
-	AllowRootUserInstall bool              `help:"Allow installation to user-local paths when running as root."`
-	Extractor            string            `env:"GH_PT_EXTRACTOR" help:"Archive extractor precedence (default, ouch, native, internal)." default:"${extractor}"`
-	TargetPathCreate     bool              `default:"true" negatable:"" help:"Create target installation directory if it does not exist."`
-	Overwrite            bool              `default:"false" short:"f" name:"force" aliases:"overwrite" help:"Overwrite target binaries."`
-	Symlink              bool              `env:"GH_PT_SYMLINK" help:"Extract entire release to ~/src/apps and symlink executables."`
-	AllowDowngrade       bool              `help:"Allow downgrades when updating or installing."`
-	SelfInflictedDebt    bool              `name:"self-inflicted-technical-debt" help:"Allow downgrades (alias for allow-downgrade)."`
-	LeRetrogrouch        bool              `name:"LE-RETROGROUCH" help:"Exclusively downgrade and save unpinned with Le_RetroGrouch flag."`
-	RetrogradeStopgap    bool              `name:"retrograde-stopgap" help:"Exclusively downgrade, unpin, and pin the resultant version."`
-	Barbarous            bool              `name:"BARBAROUS" help:"Bypass VT security, skip hashes, allow wine, foreign arch, downgrades."`
-	PinInstall           bool              `name:"pin-install" default:"false" help:"Pin this installation to the current version."`
-	DryRun               bool              `default:"false" help:"Show what would be downloaded."`
-	VerifyChecksum       bool              `default:"true" help:"Verify asset checksums."`
-	SkipVtSandbox        bool              `default:"false" name:"skip-vt-sandbox" help:"Skip VirusTotal sandbox scan."`
-	Prerelease           bool              `short:"P" help:"Include prereleases."`
-	Stable               bool              `help:"Include only stable releases."`
+	Interactive                                   bool              `default:"false" short:"i" help:"Use interactive installation."`
+	ReleaseVersion                                string            `default:"latest" short:"v" help:"Repository release tag (version) to install."`
+	ReleaseAsset                                  string            `optional:"" short:"a" help:"Name of repository release asset to download."`
+	ReleaseAssetRegexp                            string            `optional:"" short:"A" help:"Regular expression matching release asset to download."`
+	ReleaseAssetRegexps                           []string          `kong:"-"`
+	Type                                          []string          `default:"${install_types}" short:"T" name:"format" env:"GH_PT_TYPE" help:"Comma-separated list of types to match and prioritize."`
+	All                                           bool              `default:"false" help:"Install all matched assets instead of just the first one."`
+	AssetBinaries                                 []string          `optional:"" short:"b" help:"If release asset is an archive - names of a binaries in the archive to install."`
+	AssetBinariesRegexp                           string            `optional:"" short:"B" help:"If release asset is an archive - regular expression matching binaries in the archive to install."`
+	TargetPath                                    string            `default:"${install_path}" short:"p" type:"path" help:"Target installation directory (default: ~/.local/bin or /usr/local/bin if --global)."`
+	Global                                        bool              `short:"g" help:"Install globally (e.g. /usr/local/bin) instead of user bin."`
+	ResolveDeps                                   bool              `short:"y" name:"resolve-deps" help:"Automatically resolve and install dependencies without prompting."`
+	PromptDeps                                    bool              `name:"prompt-deps" help:"Prompt before installing dependencies."`
+	NoDeps                                        bool              `short:"n" help:"Do not install dependencies."`
+	Rename                                        map[string]string `optional:"" short:"t" help:"Rename binaries installed at target path."`
+	KeepSuffixes                                  bool              `short:"k" help:"Keep OS/hardware suffixes on extracted binaries."`
+	DisablePrompts                                bool              `short:"D" env:"GH_PT_DISABLE_PROMPTS" help:"Disable all interactive prompts."`
+	NoSaveState                                   bool              `short:"S" env:"GH_PT_NO_SAVE_STATE" help:"Do not save installation to state."`
+	Wine                                          string            `default:"off" enum:"force,priority,allow,off" env:"GH_PT_WINE" help:"Wine mode."`
+	AllowForeignArch                              bool              `env:"GH_PT_ALLOW_FOREIGN_ARCH" help:"Allow installing assets with foreign architectures."`
+	AllowRootUserInstall                          bool              `help:"Allow installation to user-local paths when running as root."`
+	Extractor                                     string            `env:"GH_PT_EXTRACTOR" help:"Archive extractor precedence (default, ouch, native, internal)." default:"${extractor}"`
+	TargetPathCreate                              bool              `default:"true" negatable:"" help:"Create target installation directory if it does not exist."`
+	Overwrite                                     bool              `default:"false" short:"f" name:"force" aliases:"overwrite" help:"Overwrite target binaries."`
+	Symlink                                       bool              `env:"GH_PT_SYMLINK" help:"Extract entire release to ~/src/apps and symlink executables."`
+	AllowDowngrade                                bool              `help:"Allow downgrades when updating or installing."`
+	SelfInflictedDebt                             bool              `name:"self-inflicted-technical-debt" help:"Allow downgrades (alias for allow-downgrade)."`
+	LeRetrogrouch                                 bool              `name:"LE-RETROGROUCH" help:"Exclusively downgrade and save unpinned with Le_RetroGrouch flag."`
+	RetrogradeStopgap                             bool              `name:"retrograde-stopgap" help:"Exclusively downgrade, unpin, and pin the resultant version."`
+	Barbarous                                     bool              `name:"BARBAROUS" help:"Bypass VT security, skip hashes, allow wine, foreign arch, downgrades."`
+	PinInstall                                    bool              `name:"pin-install" default:"false" help:"Pin this installation to the current version."`
+	DryRun                                        bool              `default:"false" help:"Show what would be downloaded."`
+	VerifyChecksum                                bool              `default:"true" help:"Verify asset checksums."`
+	SkipVtSandbox                                 bool              `default:"false" name:"skip-vt-sandbox" help:"Skip VirusTotal sandbox scan."`
+	Prerelease                                    bool              `short:"P" help:"Include prereleases."`
+	Stable                                        bool              `help:"Include only stable releases."`
 	AI                                            bool              `help:"Use AI to scan and analyze releases."`
 	IsUpgradeCmd                                  bool              `kong:"-"`
 	SearchForInstallInstructionsIfNoReleaseAssets bool              `env:"GH_PT_README_FALLBACK" help:"Extract alternative installation instructions from README if release asset matching fails."`
+	FallbackReleases                              int               `default:"0" help:"Try this many older releases if no assets found in latest (0=disabled)."`
+	Sidecars                                      []string          `optional:"" short:"s" help:"Glob patterns for sidecar assets to capture."`
+	SidecarTargetPath                             string            `optional:"" type:"path" help:"Target directory for sidecar assets (default: XDG data home)."`
+	SidecarSymlinkTo                              []string          `optional:"" help:"Create symlinks from sidecars to these directories (can be specified multiple times)."`
+	IncludeSidecars                               bool              `optional:"" help:"Auto-detect and include suspected sidecar assets (implied by --sidecar-* params)."`
+	EnvInject                                     []string          `optional:"" help:"Environment variables pointing to sidecar directory (KEY=VALUE)."`
+	WarnUnmappedAssets                            bool              `default:"true" negatable:"" help:"Warn about suspected unmapped sidecar assets."`
+	AISetupSidecars                               bool              `help:"Use AI to analyze sidecars and generate post-install setup commands."`
 }
 
 type InstallCmd struct {
@@ -107,10 +116,10 @@ type StateAddCmd struct {
 }
 
 type StateRmCmd struct {
-	Target string `arg:"" predictor:"installed_apps" predict:"installed_apps" help:"Application or repository to remove."`
-	Force  bool   `short:"f" help:"Skip confirmation prompt."`
-	Purge  bool   `help:"Completely uninstall and purge."`
-	StateOnly bool `help:"Remove from state only without uninstalling."`
+	Target    string `arg:"" predictor:"installed_apps" predict:"installed_apps" help:"Application or repository to remove."`
+	Force     bool   `short:"f" help:"Skip confirmation prompt."`
+	Purge     bool   `help:"Completely uninstall and purge."`
+	StateOnly bool   `help:"Remove from state only without uninstalling."`
 }
 
 type StateUpdateCmd struct {
@@ -165,14 +174,14 @@ type RepoCmd struct {
 
 type RepoCloneCmd struct {
 	Repository string `arg:"" env:"GH_PT_REPOSITORY" optional:"" help:"Github repository in OWNER/REPOSITORY_NAME format."`
-	Force      bool    `short:"f" help:"Overwrite existing."`
-	MaxDepth   int     `help:"Max clone depth."`
+	Force      bool   `short:"f" help:"Overwrite existing."`
+	MaxDepth   int    `help:"Max clone depth."`
 }
 
 type RepoForkCmd struct {
 	Repository string `arg:"" env:"GH_PT_REPOSITORY" optional:"" help:"Github repository in OWNER/REPOSITORY_NAME format."`
-	Force      bool    `short:"f" help:"Overwrite existing."`
-	MaxDepth   int     `help:"Max clone depth."`
+	Force      bool   `short:"f" help:"Overwrite existing."`
+	MaxDepth   int    `help:"Max clone depth."`
 }
 
 type ScanCmd struct {
@@ -198,14 +207,15 @@ type VtSetKeyCmd struct {
 }
 
 type ShowCmd struct {
-	Repository string `arg:"" env:"GH_PT_REPOSITORY" predictor:"github_repos" predict:"github_repos" help:"Github repository."`
-	Assets      int    `default:"-1" optional:"" help:"Show available assets (max number)."`
-	Versions    int    `default:"-1" optional:"" help:"Show release versions (max number)."`
-	Description int    `default:"-1" optional:"" help:"Show repository description (max lines)."`
-	Readme      int    `default:"-1" optional:"" help:"Show repository readme (max lines)."`
-	Prerelease bool   `help:"Include prereleases."`
-	Stable     bool   `help:"Include only stable releases."`
-	Version    string `short:"v" default:"latest" help:"Version to show."`
+	Repository       string `arg:"" env:"GH_PT_REPOSITORY" predictor:"github_repos" predict:"github_repos" help:"Github repository."`
+	Assets           int    `default:"-1" optional:"" help:"Show available assets (max number)."`
+	Versions         int    `default:"-1" optional:"" help:"Show release versions (max number)."`
+	Description      int    `default:"-1" optional:"" help:"Show repository description (max lines)."`
+	Readme           int    `default:"-1" optional:"" help:"Show repository readme (max lines)."`
+	Prerelease       bool   `help:"Include prereleases."`
+	Stable           bool   `help:"Include only stable releases."`
+	Version          string `short:"v" default:"latest" help:"Version to show."`
+	DiscoverSidecars bool   `help:"Discover potential sidecar assets in the repository."`
 }
 
 type SourceCmd struct {
@@ -279,5 +289,13 @@ type ExecContext struct {
 	ShowVersions        int
 	ShowDescription     int
 	ShowReadme          int
+	DiscoverSidecars    bool
 	DisableIcons        bool
+	Sidecars            []string
+	SidecarTargetPath   string
+	SidecarSymlinkTo    []string
+	IncludeSidecars     bool
+	EnvInject           []string
+	AISetupSidecars     bool
+	FallbackReleases    int
 }

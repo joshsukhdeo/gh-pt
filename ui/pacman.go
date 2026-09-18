@@ -9,15 +9,15 @@ import (
 )
 
 type PacmanUI struct {
-	Repo         string
-	Version      string
-	Archive      string
-	Asset        string
-	Target       string
-	
-	GhostType    string
-	Symlink      string
-	
+	Repo    string
+	Version string
+	Archive string
+	Asset   string
+	Target  string
+
+	GhostType string
+	Symlink   string
+
 	DisableIcons bool
 
 	currentStage int
@@ -59,11 +59,11 @@ func (p *PacmanUI) Start() {
 
 func (p *PacmanUI) Stop() {
 	close(p.stopCh)
-    p.mu.Lock()
-    p.currentStage = 5
-    p.dotsEaten = 3
-    p.paused = false
-    p.mu.Unlock()
+	p.mu.Lock()
+	p.currentStage = 5
+	p.dotsEaten = 3
+	p.paused = false
+	p.mu.Unlock()
 	p.render()
 	fmt.Println()
 }
@@ -77,30 +77,40 @@ func (p *PacmanUI) Pause() {
 func (p *PacmanUI) Resume() { p.mu.Lock(); defer p.mu.Unlock(); p.paused = false }
 
 func (p *PacmanUI) tick() {
-    p.mu.Lock()
-    defer p.mu.Unlock()
-    if p.paused {
-        return
-    }
-    if p.currentStage < 5 && p.dotsEaten < 3 {
-        p.dotsEaten++
-    }
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.paused {
+		return
+	}
+	if p.currentStage < 5 && p.dotsEaten < 3 {
+		p.dotsEaten++
+	}
 }
 
 func (p *PacmanUI) Update(stage int, version, archive, asset, target, ghostType string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	if stage > p.currentStage {
 		p.currentStage = stage
 		p.dotsEaten = 0
 	}
-	
-	if version != "" { p.Version = version }
-	if archive != "" { p.Archive = archive }
-	if asset != "" { p.Asset = asset }
-	if target != "" { p.Target = target }
-	if ghostType != "" { p.GhostType = ghostType }
+
+	if version != "" {
+		p.Version = version
+	}
+	if archive != "" {
+		p.Archive = archive
+	}
+	if asset != "" {
+		p.Asset = asset
+	}
+	if target != "" {
+		p.Target = target
+	}
+	if ghostType != "" {
+		p.GhostType = ghostType
+	}
 }
 
 func (p *PacmanUI) renderTo(sb *strings.Builder) {
@@ -112,7 +122,7 @@ func (p *PacmanUI) renderTo(sb *strings.Builder) {
 		p.Asset,
 		p.Target,
 	}
-	
+
 	if !p.DisableIcons {
 		nodes[1] = "🐙 " + p.Repo
 		nodes[2] = "🏷️ " + p.Version
@@ -123,7 +133,7 @@ func (p *PacmanUI) renderTo(sb *strings.Builder) {
 
 	if p.Symlink != "" {
 		if !p.DisableIcons {
-			nodes = append(nodes, "🔗 " + p.Symlink)
+			nodes = append(nodes, "🔗 "+p.Symlink)
 		} else {
 			nodes = append(nodes, p.Symlink)
 		}
@@ -150,14 +160,16 @@ func (p *PacmanUI) renderTo(sb *strings.Builder) {
 		} else if i == p.currentStage+1 {
 			// Pacman is in this segment
 			eaten := p.dotsEaten
-			if eaten > 3 { eaten = 3 }
-			
+			if eaten > 3 {
+				eaten = 3
+			}
+
 			// spaces for eaten dots
 			sb.WriteString(strings.Repeat("  ", eaten))
-			
+
 			// draw pacman
 			sb.WriteString(pacman)
-			
+
 			// draw remaining dots
 			rem := 3 - eaten
 			for j := 0; j < rem; j++ {
@@ -169,7 +181,7 @@ func (p *PacmanUI) renderTo(sb *strings.Builder) {
 			sb.WriteString(dot + dot + dot + " ")
 		}
 	}
-	
+
 	// Final node
 	if p.currentStage >= maxStage {
 		sb.WriteString(nodes[maxStage] + " " + pacman)
@@ -206,14 +218,14 @@ func (w PacmanLogWriter) Write(p []byte) (int, error) {
 		GlobalPacman.mu.Lock()
 		defer GlobalPacman.mu.Unlock()
 		if !GlobalPacman.paused {
-			fmt.Fprint(w.Writer, "\r\033[K")
+			_, _ = fmt.Fprint(w.Writer, "\r\033[K")
 		}
 	}
 	n, err := w.Writer.Write(p)
 	if GlobalPacman != nil && !GlobalPacman.paused {
 		var sb strings.Builder
 		GlobalPacman.renderTo(&sb)
-		fmt.Fprint(w.Writer, sb.String())
+		_, _ = fmt.Fprint(w.Writer, sb.String())
 	}
 	return n, err
 }

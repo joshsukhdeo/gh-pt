@@ -24,7 +24,7 @@ gh extension install joshsukhdeo/gh-pt
 - **Native Package Manager Routing:** Seamlessly bridges GitHub releases with your system's package manager (`apt`, `dnf`, `pacman`, `pkg`).
 - **Advanced Extraction Engine (`--extractor`):** Configurable extraction pipelines supporting `ouch`, native commands (`tar`, `unzip`), and internal Go libraries.
 - **Robust State Management (`state.json`):** Tracks all installations, including flags and custom configurations, enabling seamless one-command upgrades.
-- **Dependency Resolution (`-y`):** Automatically resolves and installs dependencies for `.deb`, `.rpm`, and `.pkg.tar.zst` files.
+- **Dependency Resolution (`-y, --resolve-deps`):** Automatically resolves and installs dependencies for `.deb`, `.rpm`, and `.pkg.tar.zst` files.
 - **Source Compilation (`source`):** AI-assisted generation and execution of build scripts for repositories without pre-compiled binaries.
 - **Security & Integrity:** VirusTotal scanning integration and automatic checksum verification.
 
@@ -51,6 +51,14 @@ gh pt install <owner/repo> [flags]
 * **State & Tracking:**
   * `-S, --no-save-state`: Perform installation without tracking in `state.json`.
   * `--pin-install`: Install and immediately pin the version to prevent automatic updates.
+* **Sidecar Assets:**
+  * `--include-sidecars`: Auto-detect and include suspected sidecar assets (implied by `--sidecar-*` params).
+  * `-s, --sidecars`: Glob patterns for sidecar assets to capture (e.g., `plugins/*.red`).
+  * `--sidecar-target-path`: Target directory for sidecar assets (default: XDG data home).
+  * `--sidecar-symlink-to`: Create symlinks from sidecars to app-specific directories (can be specified multiple times).
+  * `--ai-setup-sidecars`: Use AI to analyze sidecars and generate post-install setup commands.
+* **Fallback & Recovery:**
+  * `--fallback-releases`: Try this many older releases if no assets found in latest (default: 0, disabled).
 
 ### `upgrade`
 Updates all tracked installations in `state.json` to their latest versions, preserving all original installation flags.
@@ -154,7 +162,7 @@ ai_interactive_cmd: ""
 
 # Core Behavior
 install_types: "deb,appimage,tar.gz,zip"
-add_deps: true
+resolve_deps: true
 no_deps: false
 disable_prompts: false
 no_save_state: false

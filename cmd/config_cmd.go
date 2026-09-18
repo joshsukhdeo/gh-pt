@@ -85,7 +85,7 @@ func handleCategoryMenu(cfg *config.Config, category string) {
 		case "Core":
 			options = []string{
 				fmt.Sprintf("InstallTypes: %s", cfg.Core.InstallTypes),
-				fmt.Sprintf("AddDeps: %t", cfg.Core.AddDeps),
+				fmt.Sprintf("ResolveDeps: %t", cfg.Core.ResolveDeps),
 				fmt.Sprintf("NoDeps: %t", cfg.Core.NoDeps),
 				fmt.Sprintf("DisablePrompts: %t", cfg.Core.DisablePrompts),
 				fmt.Sprintf("NoSaveState: %t", cfg.Core.NoSaveState),
@@ -149,8 +149,8 @@ func editField(cfg *config.Config, category, selected string) {
 			cfg.Core.Wine, _ = pterm.DefaultInteractiveTextInput.WithDefaultText("Wine").WithDefaultValue(cfg.Core.Wine).Show()
 		case "VTApiKey":
 			cfg.Core.VTApiKey, _ = pterm.DefaultInteractiveTextInput.WithDefaultText("VTApiKey").WithDefaultValue(cfg.Core.VTApiKey).Show()
-		case "AddDeps":
-			cfg.Core.AddDeps, _ = pterm.DefaultInteractiveConfirm.WithDefaultText("AddDeps").WithDefaultValue(cfg.Core.AddDeps).Show()
+		case "ResolveDeps":
+			cfg.Core.ResolveDeps, _ = pterm.DefaultInteractiveConfirm.WithDefaultText("ResolveDeps").WithDefaultValue(cfg.Core.ResolveDeps).Show()
 		case "NoDeps":
 			cfg.Core.NoDeps, _ = pterm.DefaultInteractiveConfirm.WithDefaultText("NoDeps").WithDefaultValue(cfg.Core.NoDeps).Show()
 		case "DisablePrompts":

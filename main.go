@@ -1,12 +1,12 @@
 package main
 
 import (
-	"strings"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/alecthomas/kong"
 	"github.com/joshsukhdeo/gh-pt/cmd"

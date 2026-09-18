@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -181,10 +182,18 @@ func showInfoWithClient(r *RootCLI, client ghRestClient) error {
 
 	order := getShowFlagOrder()
 	if len(order) == 0 {
-		if showVersionsLimit > -1 { order = append(order, "versions") }
-		if showAssetsLimit > -1 { order = append(order, "assets") }
-		if showDescLimit > -1 { order = append(order, "description") }
-		if showReadmeLimit > -1 { order = append(order, "readme") }
+		if showVersionsLimit > -1 {
+			order = append(order, "versions")
+		}
+		if showAssetsLimit > -1 {
+			order = append(order, "assets")
+		}
+		if showDescLimit > -1 {
+			order = append(order, "description")
+		}
+		if showReadmeLimit > -1 {
+			order = append(order, "readme")
+		}
 	}
 
 	target := pickTargetRelease()
@@ -208,7 +217,9 @@ func showInfoWithClient(r *RootCLI, client ghRestClient) error {
 		}
 		switch section {
 		case "versions":
-			if showVersionsLimit <= -1 { continue }
+			if showVersionsLimit <= -1 {
+				continue
+			}
 			if disableIcons {
 				fmt.Println("--- VERSIONS ---")
 			} else {
@@ -227,7 +238,9 @@ func showInfoWithClient(r *RootCLI, client ghRestClient) error {
 				fmt.Println("...")
 			}
 		case "assets":
-			if showAssetsLimit <= -1 { continue }
+			if showAssetsLimit <= -1 {
+				continue
+			}
 			if disableIcons {
 				fmt.Println("--- ASSETS ---")
 			} else {
@@ -246,13 +259,15 @@ func showInfoWithClient(r *RootCLI, client ghRestClient) error {
 				fmt.Println("...")
 			}
 		case "description":
-			if showDescLimit <= -1 { continue }
+			if showDescLimit <= -1 {
+				continue
+			}
 			if disableIcons {
 				fmt.Println("--- DESCRIPTION ---")
 			} else {
 				fmt.Println("--- 📝 DESCRIPTION 📝 ---")
 			}
-			
+
 			var repoInfo struct {
 				Description string `json:"description"`
 			}
@@ -271,13 +286,15 @@ func showInfoWithClient(r *RootCLI, client ghRestClient) error {
 				}
 			}
 		case "readme":
-			if showReadmeLimit <= -1 { continue }
+			if showReadmeLimit <= -1 {
+				continue
+			}
 			if disableIcons {
 				fmt.Println("--- README ---")
 			} else {
 				fmt.Println("--- 📖 README 📖 ---")
 			}
-			
+
 			var readme struct {
 				Content string `json:"content"`
 			}
@@ -302,7 +319,83 @@ func showInfoWithClient(r *RootCLI, client ghRestClient) error {
 			}
 		}
 	}
+
+	if r.DiscoverSidecars {
+		discoverSidecars(client, repo, r.ReleaseVersion)
+	}
+
 	return nil
+}
+
+func discoverSidecars(client ghRestClient, repo, version string) {
+	type treeItem struct {
+		Path string `json:"path"`
+		Type string `json:"type"`
+	}
+	type treeResponse struct {
+		Tree []treeItem `json:"tree"`
+	}
+
+	ref := version
+	if ref == "" || ref == "latest" {
+		ref = "HEAD"
+	}
+
+	var tree treeResponse
+	if err := client.Get(fmt.Sprintf("repos/%s/git/trees/%s?recursive=1", repo, ref), &tree); err != nil {
+		fmt.Printf("Failed to discover sidecars: %v\n", err)
+		return
+	}
+
+	sidecarExts := []string{".so", ".dll", ".dylib", ".red", ".pak", ".json", ".yaml", ".yml"}
+	var sidecars []string
+	for _, item := range tree.Tree {
+		if item.Type != "blob" {
+			continue
+		}
+		for _, ext := range sidecarExts {
+			if strings.HasSuffix(strings.ToLower(item.Path), ext) {
+				sidecars = append(sidecars, item.Path)
+				break
+			}
+		}
+	}
+
+	if len(sidecars) == 0 {
+		fmt.Println("\nNo potential sidecar assets found.")
+		return
+	}
+
+	fmt.Println("\nPotential Sidecar Assets:")
+	patterns := suggestSidecarPatterns(sidecars)
+	for _, p := range patterns {
+		fmt.Printf("  --sidecars '%s'\n", p)
+	}
+}
+
+func suggestSidecarPatterns(paths []string) []string {
+	dirExtMap := make(map[string]map[string]bool)
+	for _, p := range paths {
+		dir := filepath.Dir(p)
+		ext := filepath.Ext(p)
+		if dirExtMap[dir] == nil {
+			dirExtMap[dir] = make(map[string]bool)
+		}
+		dirExtMap[dir][ext] = true
+	}
+
+	var patterns []string
+	for dir, exts := range dirExtMap {
+		for ext := range exts {
+			pattern := filepath.Join(dir, "*"+ext)
+			if dir == "." {
+				pattern = "*" + ext
+			}
+			patterns = append(patterns, pattern)
+		}
+	}
+	sort.Strings(patterns)
+	return patterns
 }
 
 func printColumns(items []string, maxCols int) {

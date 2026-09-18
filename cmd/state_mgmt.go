@@ -37,7 +37,7 @@ func truncatePath(s string, maxLen int) string {
 	if maxLen <= 3 {
 		return s[:maxLen]
 	}
-	return "..."+s[len(s)-maxLen+3:]
+	return "..." + s[len(s)-maxLen+3:]
 }
 
 func ListState(rList ...*RootCLI) error {
@@ -148,7 +148,7 @@ func ListState(rList ...*RootCLI) error {
 			helperScript = "N/A"
 		}
 		helperScript = truncatePath(helperScript, 50)
-		
+
 		isInstalled := false
 		if app.TargetPath != "" {
 			if _, err := os.Stat(app.TargetPath); err == nil {
@@ -370,6 +370,14 @@ func RemoveApp(target string, purge bool) error {
 				} else if err == nil {
 					log.Info().Msgf("Deleted %s", binPath)
 				}
+			}
+		}
+
+		if app.SidecarTargetPath != "" {
+			if err := os.RemoveAll(app.SidecarTargetPath); err != nil {
+				log.Warn().Err(err).Msgf("Failed to purge sidecar directory %s", app.SidecarTargetPath)
+			} else {
+				log.Info().Msgf("Deleted sidecar assets at %s", app.SidecarTargetPath)
 			}
 		}
 

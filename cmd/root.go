@@ -98,31 +98,31 @@ func (r *RootCLI) Validate() error {
 			if createPath {
 				err := os.MkdirAll(r.TargetPath, os.ModePerm)
 				if err != nil {
+					log.Error().
+						Err(err).
+						Msgf("target installation path '%s' error", r.TargetPath)
+					return err
+				}
+				return nil
+			} else {
 				log.Error().
 					Err(err).
 					Msgf("target installation path '%s' error", r.TargetPath)
 				return err
 			}
-			return nil
-		} else {
-			log.Error().
-				Err(err).
-				Msgf("target installation path '%s' error", r.TargetPath)
-			return err
-		}
 
-	}
-	log.Error().
-		Err(err).
-		Msgf("target installation path '%s' error", r.TargetPath)
+		}
+		log.Error().
+			Err(err).
+			Msgf("target installation path '%s' error", r.TargetPath)
 		return err
 	}
 
 	if !targetPathInfo.Mode().IsDir() {
 		err = errors.New("not a directory")
-	log.Error().
-		Err(err).
-		Msgf("target installation path '%s' error", r.TargetPath)
+		log.Error().
+			Err(err).
+			Msgf("target installation path '%s' error", r.TargetPath)
 	}
 
 	return nil
@@ -149,7 +149,7 @@ func (r *RootCLI) RunInstall() error {
 	}
 
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-	logLevel, _ := zerolog.ParseLevel(r.LogLevel)
+	var logLevel zerolog.Level
 	if !r.Verbose {
 		logLevel = zerolog.WarnLevel
 	} else {
@@ -161,7 +161,7 @@ func (r *RootCLI) RunInstall() error {
 	zerolog.SetGlobalLevel(logLevel)
 
 	cfg := loadConfig()
-	
+
 	stdoutWrapper := ui.PacmanLogWriter{Writer: os.Stdout}
 
 	if cfg != nil && cfg.Core.LogToFile {
@@ -209,22 +209,22 @@ func (r *RootCLI) RunInstall() error {
 		}
 	}
 
-	if r.AddDeps && r.NoDeps {
-		r.AddDeps = false
+	if r.ResolveDeps && r.NoDeps {
+		r.ResolveDeps = false
 		r.NoDeps = false
-	} else if !r.AddDeps && !r.NoDeps {
+	} else if !r.ResolveDeps && !r.NoDeps {
 		envDeps := strings.ToUpper(os.Getenv("GH_PT_ADD_DEPS"))
 		if envDeps == "" {
 			envDeps = strings.ToUpper(os.Getenv("GH_INSTALL_ADD_DEPS"))
 		}
 		switch envDeps {
 		case "TRUE":
-			r.AddDeps = true
+			r.ResolveDeps = true
 		case "FALSE":
 			r.NoDeps = true
 		default:
 			if cfg != nil {
-				r.AddDeps = cfg.Core.AddDeps
+				r.ResolveDeps = cfg.Core.ResolveDeps
 				r.NoDeps = cfg.Core.NoDeps
 				if !r.DisablePrompts {
 					r.DisablePrompts = cfg.Core.DisablePrompts
@@ -250,7 +250,7 @@ func (r *RootCLI) RunInstall() error {
 		switch runtime.GOOS {
 		case "windows":
 			r.TargetPath = os.Getenv("ProgramFiles")
-	if r.TargetPath == "" {
+			if r.TargetPath == "" {
 				r.TargetPath = "C:\\Program Files"
 			}
 		default:
@@ -311,7 +311,6 @@ func (r *RootCLI) RunInstall() error {
 	if r.Pin != "" {
 		return PinAppState(r.Pin)
 	}
-
 
 	if r.Update || r.UpdateAll {
 		return DoUpdate(r, ghClient)
@@ -558,12 +557,12 @@ func buildCompileFixPrompt(repo, buildDir, scriptPath, targetPath, symlinkDir, e
 
 func runAIAgent(aiCmdTemplate, prompt, dir string) error {
 	var cmd *exec.Cmd
-	
+
 	if strings.Contains(aiCmdTemplate, "%s") {
 		// Strip any surrounding quotes from the %s placeholder in the user's template
 		aiCmdTemplate = strings.ReplaceAll(aiCmdTemplate, `"%s"`, `%s`)
 		aiCmdTemplate = strings.ReplaceAll(aiCmdTemplate, `'%s'`, `%s`)
-		
+
 		var formattedCmd string
 		if runtime.GOOS == "windows" {
 			formattedCmd = strings.ReplaceAll(aiCmdTemplate, "%s", `$env:GH_PT_PROMPT`)
@@ -576,7 +575,7 @@ func runAIAgent(aiCmdTemplate, prompt, dir string) error {
 	} else {
 		cmd = exec.Command(aiCmdTemplate, prompt)
 	}
-	
+
 	cmd.Dir = dir
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -616,9 +615,9 @@ func forceRemoveAll(path string) error {
 	err := os.RemoveAll(path)
 	if err != nil {
 		if runtime.GOOS != "windows" {
-			exec.Command("rm", "-rf", path).Run()
+			_ = exec.Command("rm", "-rf", path).Run()
 		} else {
-			exec.Command("cmd", "/C", "rmdir", "/s", "/q", path).Run()
+			_ = exec.Command("cmd", "/C", "rmdir", "/s", "/q", path).Run()
 		}
 		return os.RemoveAll(path)
 	}
@@ -968,10 +967,14 @@ func buildRegexFromTypes(types []string, wine string) []string {
 		}
 		// Interrogate exact compute nodes, ignoring generic display interfaces
 		if _, err := os.Stat("/dev/nvidia0"); err == nil {
-			if hwSpecific != "" { hwSpecific += "|" }
+			if hwSpecific != "" {
+				hwSpecific += "|"
+			}
 			hwSpecific += "cuda"
 		} else if _, err := os.Stat("/dev/kfd"); err == nil {
-			if hwSpecific != "" { hwSpecific += "|" }
+			if hwSpecific != "" {
+				hwSpecific += "|"
+			}
 			hwSpecific += "rocm"
 		}
 	}

@@ -9,9 +9,10 @@ import (
 )
 
 type Config struct {
-	Paths PathsConfig `yaml:",inline"`
-	AI    AIConfig    `yaml:",inline"`
-	Core  CoreConfig  `yaml:",inline"`
+	Paths                PathsConfig                `yaml:",inline"`
+	AI                   AIConfig                   `yaml:",inline"`
+	Core                 CoreConfig                 `yaml:",inline"`
+	DependencyResolution DependencyResolutionConfig `yaml:"dependency_resolution"`
 }
 
 type PathsConfig struct {
@@ -19,6 +20,7 @@ type PathsConfig struct {
 	GlobalPath  string `yaml:"global_path"`
 	ClonePath   string `yaml:"clone_path"`
 	ForkPath    string `yaml:"fork_path"`
+	SidecarPath string `yaml:"sidecar_path"`
 }
 
 type AIConfig struct {
@@ -28,7 +30,7 @@ type AIConfig struct {
 
 type CoreConfig struct {
 	InstallTypes                                  string `yaml:"install_types"`
-	AddDeps                                       bool   `yaml:"add_deps"`
+	ResolveDeps                                   bool   `yaml:"resolve_deps"`
 	NoDeps                                        bool   `yaml:"no_deps"`
 	DisablePrompts                                bool   `yaml:"disable_prompts"`
 	NoSaveState                                   bool   `yaml:"no_save_state"`
@@ -41,7 +43,14 @@ type CoreConfig struct {
 	LogToFile                                     bool   `yaml:"log_to_file"`
 	Symlink                                       bool   `yaml:"symlink"`
 	SearchForInstallInstructionsIfNoReleaseAssets bool   `yaml:"readme_fallback"`
+	WarnUnmappedAssets                            bool   `yaml:"warn_unmapped_assets"`
 }
+
+type DependencyResolutionConfig struct {
+	Priorities map[string][]string `yaml:"priorities"`
+}
+
+type DependencyResolution = DependencyResolutionConfig
 
 func GetConfigPath() string {
 	return filepath.Join(xdg.ConfigHome, "gh-pt", "config.yml")

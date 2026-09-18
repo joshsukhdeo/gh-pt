@@ -29,7 +29,7 @@ func TestConfigManagement(t *testing.T) {
 		// yaml.v3 inline structs map to the same top-level root keys, so we don't nest them in the yaml
 		yamlContent := []byte(`
 install_types: deb,rpm
-add_deps: true
+resolve_deps: true
 disable_prompts: false
 no_save_state: true
 install_path: /custom/bin
@@ -52,7 +52,7 @@ ai_cmd: "my-ai -p '%s'"
 		assert.Equal(t, "/custom/src", cfg.Paths.ClonePath)
 		assert.Equal(t, "/custom/projects", cfg.Paths.ForkPath)
 		assert.Equal(t, "my-ai -p '%s'", cfg.AI.AICmd)
-		assert.True(t, cfg.Core.AddDeps)
+		assert.True(t, cfg.Core.ResolveDeps)
 		assert.False(t, cfg.Core.NoDeps)
 		assert.True(t, cfg.Core.NoSaveState)
 	})

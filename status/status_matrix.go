@@ -39,11 +39,11 @@ func CompareVersions(prev, new string) int {
 	if !strings.HasPrefix(n, "v") {
 		n = "v" + n
 	}
-	
+
 	if semver.IsValid(p) && semver.IsValid(n) {
 		return semver.Compare(n, p)
 	}
-	
+
 	// Fallback to string comparison if not semver
 	if new > prev {
 		return 1
@@ -118,4 +118,3 @@ func GenerateStatusMessage(s InstallState) (string, error) {
 		}
 	}
 }
-

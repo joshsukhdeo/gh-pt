@@ -28,9 +28,9 @@ func RunCommand(cmdStr string, cli *params.CLI) error {
 		return ListState(&RootCLI{ExecContext: params.ExecContext{Ll: cli.Ll.Filter, Full: true, CommonInstallFlags: params.CommonInstallFlags{Global: cli.Ll.Global}}})
 	case "rm", "rm <target>":
 
-			if cli.Rm.StateOnly {
-				return RmStateOnly(cli.Rm.Target)
-			}
+		if cli.Rm.StateOnly {
+			return RmStateOnly(cli.Rm.Target)
+		}
 		return RemoveApp(cli.Rm.Target, cli.Rm.Purge)
 	case "upgrade", "upgrade <repository>":
 		r.Repository = cli.Upgrade.Repository
@@ -71,7 +71,7 @@ func RunCommand(cmdStr string, cli *params.CLI) error {
 	case "state edit":
 		return StateEdit()
 	case "show", "show <repository>":
-		return ShowInfo(&RootCLI{ExecContext: params.ExecContext{Repository: cli.Show.Repository, Show: true, ShowAssets: cli.Show.Assets, ShowVersions: cli.Show.Versions, ShowDescription: cli.Show.Description, ShowReadme: cli.Show.Readme, CommonInstallFlags: params.CommonInstallFlags{ReleaseVersion: cli.Show.Version, Stable: cli.Show.Stable, Prerelease: cli.Show.Prerelease}}})
+		return ShowInfo(&RootCLI{ExecContext: params.ExecContext{Repository: cli.Show.Repository, Show: true, ShowAssets: cli.Show.Assets, ShowVersions: cli.Show.Versions, ShowDescription: cli.Show.Description, ShowReadme: cli.Show.Readme, DiscoverSidecars: cli.Show.DiscoverSidecars, CommonInstallFlags: params.CommonInstallFlags{ReleaseVersion: cli.Show.Version, Stable: cli.Show.Stable, Prerelease: cli.Show.Prerelease}}})
 	case "repo", "repo clone", "repo clone <repository>", "repo fork", "repo fork <repository>":
 		// Handle both repo clone and repo fork subcommands
 		// kong populates either cli.Repo.Clone or cli.Repo.Fork based on subcommand used

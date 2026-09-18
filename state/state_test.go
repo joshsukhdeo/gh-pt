@@ -207,4 +207,147 @@ func TestStateManagement(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, s.Apps)
 	})
+
+	t.Run("MigrateV1toV2_Segregation", func(t *testing.T) {
+		st := &State{
+			Apps: map[string]*InstalledApp{
+				"junegunn/fzf": {
+					Repository:   "junegunn/fzf",
+					Version:      "v1.2.3",
+					TargetPath:   "/tmp/bin",
+					PackageNames: []string{"fzf-bin"},
+				},
+				"sharkdp/fd": {
+					Repository: "sharkdp/fd",
+					TargetPath: "/home/user/src/fd",
+					Clone:      true,
+				},
+				"BurntSushi/ripgrep": {
+					Repository: "BurntSushi/ripgrep",
+					TargetPath: "/home/user/projects/ripgrep",
+					Fork:       true,
+				},
+				"my/tool": {
+					Repository:   "my/tool",
+					PackageNames: []string{"libfoo", "libbar"},
+				},
+			},
+		}
+
+		err := st.migrateV1toV2()
+		require.NoError(t, err)
+		assert.Equal(t, 2, st.Version)
+
+		// Repos should be segregated from Apps
+		assert.Len(t, st.Apps, 2)
+		assert.Contains(t, st.Apps, "junegunn/fzf")
+		assert.Contains(t, st.Apps, "my/tool")
+		assert.NotContains(t, st.Apps, "sharkdp/fd")
+		assert.NotContains(t, st.Apps, "BurntSushi/ripgrep")
+
+		assert.Len(t, st.Repos, 2)
+		assert.Contains(t, st.Repos, "sharkdp/fd")
+		assert.Contains(t, st.Repos, "BurntSushi/ripgrep")
+		assert.True(t, st.Repos["sharkdp/fd"].Clone)
+		assert.True(t, st.Repos["BurntSushi/ripgrep"].Fork)
+
+		// SystemPackages should be aggregated and migrated
+		assert.Contains(t, st.SystemPackages, "fzf-bin")
+		assert.Contains(t, st.SystemPackages, "libfoo")
+		assert.Contains(t, st.SystemPackages, "libbar")
+		assert.Equal(t, []string{"fzf-bin"}, st.Apps["junegunn/fzf"].SystemPackages)
+		assert.Equal(t, []string{"libfoo", "libbar"}, st.Apps["my/tool"].SystemPackages)
+
+		// Hooks should be initialized
+		assert.NotNil(t, st.Hooks)
+	})
+
+	t.Run("MigrateV1toV2_Idempotent", func(t *testing.T) {
+		st := &State{
+			Version: 2,
+			Apps: map[string]*InstalledApp{
+				"app1": {Repository: "app1"},
+			},
+			Repos: map[string]*InstalledApp{
+				"repo1": {Repository: "repo1", Clone: true},
+			},
+		}
+
+		err := st.migrateV1toV2()
+		require.NoError(t, err)
+		assert.Equal(t, 2, st.Version)
+		assert.Len(t, st.Apps, 1)
+		assert.Len(t, st.Repos, 1)
+
+		err = migrateV1toV2(st)
+		require.NoError(t, err)
+		assert.Equal(t, 2, st.Version)
+	})
+
+	t.Run("MigrateV1toV2_LoadStateMigration", func(t *testing.T) {
+		t.Setenv("XDG_DATA_HOME", filepath.Join(tmpDir, "migrateload"))
+		xdg.Reload()
+		stateDir := filepath.Join(tmpDir, "migrateload", "gh-pt")
+		err := os.MkdirAll(stateDir, 0755)
+		require.NoError(t, err)
+
+		v1JSON := `{
+  "apps": {
+    "sharkdp/fd": {
+      "repository": "sharkdp/fd",
+      "target_path": "/home/user/src/fd",
+      "clone": true
+    },
+    "junegunn/fzf": {
+      "repository": "junegunn/fzf",
+      "version": "v1.2.3",
+      "target_path": "/tmp/bin",
+      "package_names": ["fzf-pkg"]
+    }
+  }
+}`
+		statePath := filepath.Join(stateDir, "state.json")
+		err = os.WriteFile(statePath, []byte(v1JSON), 0644)
+		require.NoError(t, err)
+
+		st, err := LoadState()
+		require.NoError(t, err)
+		assert.Equal(t, 2, st.Version)
+		assert.NotContains(t, st.Apps, "sharkdp/fd")
+		assert.Contains(t, st.Apps, "junegunn/fzf")
+		assert.Contains(t, st.Repos, "sharkdp/fd")
+		assert.Contains(t, st.SystemPackages, "fzf-pkg")
+	})
+
+	t.Run("InstalledApp_V2Fields", func(t *testing.T) {
+		t.Setenv("XDG_DATA_HOME", filepath.Join(tmpDir, "v2fields"))
+		xdg.Reload()
+
+		st, err := LoadState()
+		require.NoError(t, err)
+
+		app := &InstalledApp{
+			Repository:        "owner/sidecar-app",
+			Version:           "1.0.0",
+			Hooks:             []string{"post-install"},
+			SystemPackages:    []string{"libssl3"},
+			Sidecars:          []string{"plugins/*", "assets/**"},
+			SidecarTargetPath: "/tmp/sidecars/owner/sidecar-app",
+			InstalledSidecars: []string{"/tmp/sidecars/owner/sidecar-app/plugin.so"},
+		}
+
+		err = st.AddApp(app)
+		require.NoError(t, err)
+
+		st2, err := LoadState()
+		require.NoError(t, err)
+
+		loaded, exists := st2.Apps["owner/sidecar-app"]
+		require.True(t, exists)
+		assert.Equal(t, []string{"post-install"}, loaded.Hooks)
+		assert.Equal(t, []string{"libssl3"}, loaded.SystemPackages)
+		assert.Equal(t, []string{"plugins/*", "assets/**"}, loaded.Sidecars)
+		assert.Equal(t, "/tmp/sidecars/owner/sidecar-app", loaded.SidecarTargetPath)
+		assert.Equal(t, []string{"/tmp/sidecars/owner/sidecar-app/plugin.so"}, loaded.InstalledSidecars)
+	})
 }
