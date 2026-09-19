@@ -95,8 +95,18 @@ func (p *PacmanUI) Stop() {
 
 	// Complete the animation for all assets
 	p.completeAllAnimations()
-	p.render()
-	fmt.Println()
+	
+	// In non-TTY mode, print the final state
+	if !term.IsTerminal(int(os.Stdout.Fd())) {
+		var sb strings.Builder
+		p.renderAssets(&sb)
+		if sb.Len() > 0 {
+			fmt.Println(sb.String())
+		}
+	} else {
+		p.render()
+		fmt.Println()
+	}
 
 	// Signal that animation is done
 	select {
@@ -165,12 +175,13 @@ func (p *PacmanUI) tick() {
 			if !asset.Completed {
 				if p.dotsEaten < 3 {
 					p.dotsEaten++
-				} else {
-					// Move to next asset
-					asset.Completed = true
-					slog.Debug("pacman asset completed", "index", p.CurrentAsset, "name", asset.Name, "total", len(p.Assets))
-					p.CurrentAsset++
-					p.dotsEaten = 0
+					if p.dotsEaten == 3 {
+						// Complete the asset after 3 dots
+						asset.Completed = true
+						slog.Debug("pacman asset completed", "index", p.CurrentAsset, "name", asset.Name, "total", len(p.Assets))
+						p.CurrentAsset++
+						p.dotsEaten = 0
+					}
 				}
 			}
 		}
@@ -456,16 +467,17 @@ func (p *PacmanUI) render() {
 
 	// Check if stdout is a TTY - if not, disable animation
 	if !term.IsTerminal(int(os.Stdout.Fd())) {
-		// Non-interactive mode: just print without cursor control
-		var sb strings.Builder
+		// Non-interactive mode: only print header once, suppress animation
 		if !p.headerPrinted {
+			var sb strings.Builder
 			p.renderHeader(&sb)
 			sb.WriteString("\n")
 			p.headerPrinted = true
 			slog.Debug("pacman header printed (non-TTY mode)")
+			fmt.Print(sb.String())
 		}
-		p.renderAssets(&sb)
-		fmt.Println(sb.String())
+		// Don't print assets during animation in non-TTY mode
+		// They will be printed in Stop() when completeAllAnimations() is called
 		return
 	}
 
