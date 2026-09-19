@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 	"sync"
@@ -64,6 +65,12 @@ func NewPacmanUI(repo string) *PacmanUI {
 }
 
 func (p *PacmanUI) Start() {
+	slog.Debug("pacman animation starting",
+		"repo", p.Repo,
+		"version", p.Version,
+		"archive", p.Archive,
+		"tty", term.IsTerminal(int(os.Stdout.Fd())),
+	)
 	go func() {
 		ticker := time.NewTicker(250 * time.Millisecond)
 		defer ticker.Stop()
@@ -80,6 +87,7 @@ func (p *PacmanUI) Start() {
 }
 
 func (p *PacmanUI) Stop() {
+	slog.Info("pacman animation stopping", "assets_completed", p.CurrentAsset, "total_assets", len(p.Assets))
 	close(p.stopCh)
 	p.mu.Lock()
 	p.paused = false
@@ -132,6 +140,7 @@ func (p *PacmanUI) tick() {
 			p.phase = 1
 			p.horizontalPos = 0
 			p.wrapLine = 0
+			slog.Debug("pacman phase transition", "from", 0, "to", 1, "reason", "header_complete")
 		}
 	case 1: // Horizontal movement
 		p.horizontalPos++
@@ -145,6 +154,7 @@ func (p *PacmanUI) tick() {
 			p.phase = 2
 			p.CurrentAsset = 0
 			p.dotsEaten = 0
+			slog.Debug("pacman phase transition", "from", 1, "to", 2, "reason", "assets_resolved", "asset_count", len(p.Assets))
 		}
 	case 2: // Asset resolution
 		if len(p.Assets) == 0 {
@@ -158,6 +168,7 @@ func (p *PacmanUI) tick() {
 				} else {
 					// Move to next asset
 					asset.Completed = true
+					slog.Debug("pacman asset completed", "index", p.CurrentAsset, "name", asset.Name, "total", len(p.Assets))
 					p.CurrentAsset++
 					p.dotsEaten = 0
 				}
@@ -189,7 +200,7 @@ func (p *PacmanUI) Update(stage int, version, archive, asset, target, ghostType 
 func (p *PacmanUI) AddAsset(name, fullName, symlink, installCmd string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-
+	
 	p.Assets = append(p.Assets, AssetInfo{
 		Name:       name,
 		FullName:   fullName,
@@ -197,6 +208,7 @@ func (p *PacmanUI) AddAsset(name, fullName, symlink, installCmd string) {
 		InstallCmd: installCmd,
 		Completed:  false,
 	})
+	slog.Debug("pacman asset added", "name", name, "total", len(p.Assets))
 }
 
 func (p *PacmanUI) completeAllAnimations() {
@@ -442,6 +454,21 @@ func (p *PacmanUI) render() {
 		return
 	}
 
+	// Check if stdout is a TTY - if not, disable animation
+	if !term.IsTerminal(int(os.Stdout.Fd())) {
+		// Non-interactive mode: just print without cursor control
+		var sb strings.Builder
+		if !p.headerPrinted {
+			p.renderHeader(&sb)
+			sb.WriteString("\n")
+			p.headerPrinted = true
+			slog.Debug("pacman header printed (non-TTY mode)")
+		}
+		p.renderAssets(&sb)
+		fmt.Println(sb.String())
+		return
+	}
+
 	var sb strings.Builder
 	
 	// If header not printed yet, print it first
@@ -452,6 +479,7 @@ func (p *PacmanUI) render() {
 		p.lastLineCount = 0
 		fmt.Print(sb.String())
 		sb.Reset()
+		slog.Debug("pacman header printed (TTY mode)")
 	}
 	
 	// Always move cursor to the line after header and clear from there
