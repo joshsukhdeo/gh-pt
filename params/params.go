@@ -58,7 +58,7 @@ type CommonInstallFlags struct {
 	AllowRootUserInstall                          bool              `help:"Allow installation to user-local paths when running as root."`
 	Extractor                                     string            `env:"GH_PT_EXTRACTOR" help:"Archive extractor precedence (default, ouch, native, internal)." default:"${extractor}"`
 	TargetPathCreate                              bool              `default:"true" negatable:"" help:"Create target installation directory if it does not exist."`
-	Overwrite                                     bool              `default:"false" short:"f" name:"force" aliases:"overwrite" help:"Overwrite target binaries."`
+	Overwrite                                     bool              `default:"false" short:"f" name:"force" aliases:"overwrite" env:"GH_PT_FORCE" help:"Overwrite target binaries."`
 	Symlink                                       bool              `env:"GH_PT_SYMLINK" help:"Extract entire release to ~/src/apps and symlink executables."`
 	AllowDowngrade                                bool              `help:"Allow downgrades when updating or installing."`
 	SelfInflictedDebt                             bool              `name:"self-inflicted-technical-debt" help:"Allow downgrades (alias for allow-downgrade)."`
