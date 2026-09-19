@@ -1827,7 +1827,16 @@ func (r *GithubRelease) Install() error {
 			continue
 		}
 
-		for _, binary := range binaries {
+		// Add all binaries to UI for animation
+		if pUI != nil {
+			for _, binary := range binaries {
+				cleanName := GenerateCleanName(binary.Name, r.CliParams.Repository, releases[0].Name)
+				fullName := filepath.Join(r.CliParams.TargetPath, cleanName)
+				pUI.AddAsset(cleanName, fullName, "", "")
+			}
+		}
+
+		for binaryIdx, binary := range binaries {
 			log.Info().
 				Str("repository", r.CliParams.Repository).
 				Int("release id", releases[0].Id).
@@ -1862,30 +1871,42 @@ func (r *GithubRelease) Install() error {
 				}
 			}
 
+			// Update UI to current asset
+			if pUI != nil {
+				pUI.SetCurrentAsset(binaryIdx)
+			}
+
+			var installCmd string
 			switch binary.BinaryType {
 			case selector.BinaryDebInstaller:
 				log.Debug().Msg("binary is a deb installer")
 				binariesOutput[binary.Name] = "deb"
+				installCmd = fmt.Sprintf("sudo apt install %s", actualDownloadPath)
 				execErr = r.installDeb(actualDownloadPath)
 			case selector.BinaryRpmInstaller:
 				log.Debug().Msg("binary is a rpm installer")
 				binariesOutput[binary.Name] = "rpm"
+				installCmd = fmt.Sprintf("sudo dnf install %s", actualDownloadPath)
 				execErr = r.installRpm(actualDownloadPath)
 			case selector.BinaryPacmanInstaller:
 				log.Debug().Msg("binary is a pacman installer")
 				binariesOutput[binary.Name] = "pacman"
+				installCmd = fmt.Sprintf("sudo pacman -U %s", actualDownloadPath)
 				execErr = r.installPacman(actualDownloadPath)
 			case selector.BinaryPkgInstaller:
 				log.Debug().Msg("binary is a freebsd pkg/txz installer")
 				binariesOutput[binary.Name] = "pkg"
+				installCmd = fmt.Sprintf("sudo pkg install %s", actualDownloadPath)
 				execErr = r.installPkg(actualDownloadPath)
 			case selector.BinaryMacInstaller:
 				log.Debug().Msg("binary is a mac installer")
 				binariesOutput[binary.Name] = "mac"
+				installCmd = fmt.Sprintf("sudo installer -pkg %s -target /", actualDownloadPath)
 				execErr = r.installMac(actualDownloadPath)
 			case selector.BinaryWindowsInstaller:
 				log.Debug().Msg("binary is a windows installer")
 				binariesOutput[binary.Name] = "windows"
+				installCmd = fmt.Sprintf("msiexec /i %s", actualDownloadPath)
 				execErr = r.installWindows(actualDownloadPath)
 			default:
 				log.Debug().Msg("binary is a plain executable")
@@ -1895,6 +1916,11 @@ func (r *GithubRelease) Install() error {
 				} else {
 					execErr = r.installBinary(actualDownloadPath)
 				}
+			}
+
+			// Update UI with install command
+			if pUI != nil && installCmd != "" {
+				pUI.SetAssetInstallCmd(installCmd)
 			}
 
 			if execErr != nil {
@@ -2040,6 +2066,11 @@ func (r *GithubRelease) Install() error {
 		} else {
 			log.Warn().Err(err).Msg("could not save installed app state")
 		}
+	}
+
+	// Wait for pacman animation to complete before showing final message
+	if pUI != nil {
+		pUI.WaitForAnimation()
 	}
 
 	if r.StatusMessage != "" {
