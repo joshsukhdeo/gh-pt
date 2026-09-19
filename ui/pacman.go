@@ -450,22 +450,28 @@ func (p *PacmanUI) render() {
 		sb.WriteString("\n")
 		p.headerPrinted = true
 		p.lastLineCount = 0
+		fmt.Print(sb.String())
+		sb.Reset()
 	}
 	
-	// If we have previous asset lines, move cursor up to overwrite them
+	// Move cursor up to the start of asset lines
 	if p.lastLineCount > 0 {
-		// Move cursor up to the start of asset lines
 		sb.WriteString(fmt.Sprintf("\033[%dA", p.lastLineCount))
-		// Clear from cursor to end of screen
-		sb.WriteString("\033[J")
 	}
+	// Clear from cursor to end of screen
+	sb.WriteString("\033[J")
 	
 	// Render asset lines
-	p.renderAssets(&sb)
+	var assetSb strings.Builder
+	p.renderAssets(&assetSb)
+	assetOutput := assetSb.String()
 	
-	// Count lines for next render
-	lines := strings.Count(sb.String(), "\n")
-	p.lastLineCount = lines - 1 // -1 because header doesn't change
+	// Count lines in asset output
+	// Each \n represents a line break, so count them and add 1 for the last line
+	lines := strings.Count(assetOutput, "\n") + 1
+	p.lastLineCount = lines
+	
+	sb.WriteString(assetOutput)
 	
 	fmt.Print(sb.String())
 }
