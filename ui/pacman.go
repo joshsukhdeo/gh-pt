@@ -43,6 +43,10 @@ type PacmanUI struct {
 	mu            sync.Mutex
 	stopCh        chan struct{}
 	animationDone chan struct{}
+	
+	// Terminal state tracking
+	headerPrinted bool
+	lastLineCount int
 }
 
 var GlobalPacman *PacmanUI
@@ -211,15 +215,12 @@ func (p *PacmanUI) getTerminalWidth() int {
 	return width
 }
 
-func (p *PacmanUI) renderTo(sb *strings.Builder) {
+func (p *PacmanUI) renderAssets(sb *strings.Builder) {
 	pacman := "\033[1;33mᗧ\033[0m"
 	dot := " •"
 	cherry := "🍒"
 	flag := "🏁"
 	link := "🔗"
-	octopus := "🐙"
-	tag := "🏷️"
-	packageIcon := "📦"
 
 	if p.DisableIcons {
 		pacman = "\033[1;33mC\033[0m"
@@ -227,24 +228,21 @@ func (p *PacmanUI) renderTo(sb *strings.Builder) {
 		cherry = "*"
 		flag = "F"
 		link = "L"
-		octopus = "R:"
-		tag = "V:"
-		packageIcon = "A:"
 	}
 
 	termWidth := p.getTerminalWidth()
 
 	switch p.phase {
 	case 0: // Header animation - pacman eating through elements
-		p.renderPhase0(sb, pacman, dot, cherry, octopus, tag, packageIcon, termWidth)
+		p.renderPhase0(sb, pacman, dot, cherry, termWidth)
 	case 1: // Horizontal movement - pacman moving right
-		p.renderPhase1(sb, pacman, dot, octopus, tag, packageIcon, cherry, termWidth)
+		p.renderPhase1(sb, pacman, dot, cherry, termWidth)
 	case 2: // Asset resolution - show actual assets
-		p.renderPhase2(sb, pacman, dot, cherry, flag, link, octopus, tag, packageIcon, termWidth)
+		p.renderPhase2(sb, pacman, dot, cherry, flag, link, termWidth)
 	}
 }
 
-func (p *PacmanUI) renderPhase0(sb *strings.Builder, pacman, dot, cherry, octopus, tag, packageIcon string, termWidth int) {
+func (p *PacmanUI) renderPhase0(sb *strings.Builder, pacman, dot, cherry string, termWidth int) {
 	// Build header with pacman eating through elements
 	var line strings.Builder
 
@@ -256,10 +254,16 @@ func (p *PacmanUI) renderPhase0(sb *strings.Builder, pacman, dot, cherry, octopu
 		icon string
 		text string
 	}{
-		{octopus, p.Repo},
-		{tag, p.Version},
-		{packageIcon, p.Archive},
+		{"🐙", p.Repo},
+		{"🏷️", p.Version},
+		{"📦", p.Archive},
 		{cherry, "?"},
+	}
+
+	if p.DisableIcons {
+		elements[0].icon = "R:"
+		elements[1].icon = "V:"
+		elements[2].icon = "A:"
 	}
 
 	for i, elem := range elements {
@@ -308,12 +312,7 @@ func (p *PacmanUI) renderPhase0(sb *strings.Builder, pacman, dot, cherry, octopu
 	sb.WriteString(lineStr)
 }
 
-func (p *PacmanUI) renderPhase1(sb *strings.Builder, pacman, dot, octopus, tag, packageIcon, cherry string, termWidth int) {
-	// Static header
-	header := fmt.Sprintf("%s %s      %s %s      %s %s",
-		octopus, p.Repo, tag, p.Version, packageIcon, p.Archive)
-	sb.WriteString(header + "\n")
-
+func (p *PacmanUI) renderPhase1(sb *strings.Builder, pacman, dot, cherry string, termWidth int) {
 	// Pacman moving horizontally
 	var line strings.Builder
 
@@ -349,12 +348,7 @@ func (p *PacmanUI) renderPhase1(sb *strings.Builder, pacman, dot, octopus, tag, 
 	sb.WriteString(lineStr)
 }
 
-func (p *PacmanUI) renderPhase2(sb *strings.Builder, pacman, dot, cherry, flag, link, octopus, tag, packageIcon string, termWidth int) {
-	// Static header
-	header := fmt.Sprintf("%s %s      %s %s      %s %s",
-		octopus, p.Repo, tag, p.Version, packageIcon, p.Archive)
-	sb.WriteString(header + "\n")
-
+func (p *PacmanUI) renderPhase2(sb *strings.Builder, pacman, dot, cherry, flag, link string, termWidth int) {
 	if len(p.Assets) == 0 {
 		return
 	}
@@ -448,19 +442,48 @@ func (p *PacmanUI) render() {
 		return
 	}
 
-	// Move cursor up to overwrite previous render
-	if len(p.Assets) > 0 {
-		fmt.Printf("\033[%dA", len(p.Assets)+1)
-	} else {
-		fmt.Printf("\033[1A")
+	var sb strings.Builder
+	
+	// If header not printed yet, print it first
+	if !p.headerPrinted {
+		p.renderHeader(&sb)
+		sb.WriteString("\n")
+		p.headerPrinted = true
+		p.lastLineCount = 0
+	}
+	
+	// If we have previous asset lines, move cursor up to overwrite them
+	if p.lastLineCount > 0 {
+		// Move cursor up to the start of asset lines
+		sb.WriteString(fmt.Sprintf("\033[%dA", p.lastLineCount))
+		// Clear from cursor to end of screen
+		sb.WriteString("\033[J")
+	}
+	
+	// Render asset lines
+	p.renderAssets(&sb)
+	
+	// Count lines for next render
+	lines := strings.Count(sb.String(), "\n")
+	p.lastLineCount = lines - 1 // -1 because header doesn't change
+	
+	fmt.Print(sb.String())
+}
+
+func (p *PacmanUI) renderHeader(sb *strings.Builder) {
+	octopus := "🐙"
+	tag := "🏷️"
+	packageIcon := "📦"
+
+	if p.DisableIcons {
+		octopus = "R:"
+		tag = "V:"
+		packageIcon = "A:"
 	}
 
-	// Clear from cursor to end of screen
-	fmt.Print("\033[J")
-
-	var sb strings.Builder
-	p.renderTo(&sb)
-	fmt.Print(sb.String())
+	header := fmt.Sprintf("%s %s      %s %s      %s %s",
+		octopus, p.Repo, tag, p.Version, packageIcon, p.Archive)
+	sb.WriteString(header)
 }
 
 func (p *PacmanUI) SetCurrentAsset(index int) {
@@ -512,7 +535,9 @@ func (w PacmanLogWriter) Write(p []byte) (int, error) {
 	n, err := w.Writer.Write(p)
 	if GlobalPacman != nil && !GlobalPacman.paused {
 		var sb strings.Builder
-		GlobalPacman.renderTo(&sb)
+		GlobalPacman.renderHeader(&sb)
+		sb.WriteString("\n")
+		GlobalPacman.renderAssets(&sb)
 		fmt.Print(sb.String())
 	}
 	return n, err
