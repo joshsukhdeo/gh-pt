@@ -454,24 +454,18 @@ func (p *PacmanUI) render() {
 		sb.Reset()
 	}
 	
-	// Move cursor up to the start of asset lines
-	if p.lastLineCount > 0 {
-		sb.WriteString(fmt.Sprintf("\033[%dA", p.lastLineCount))
-	}
-	// Clear from cursor to end of screen
-	sb.WriteString("\033[J")
+	// Always move cursor to the line after header and clear from there
+	// This ensures we overwrite any previous asset lines
+	sb.WriteString("\033[1G") // Move to column 1
+	sb.WriteString("\033[2J") // Clear entire screen
+	sb.WriteString("\033[1;1H") // Move to top-left
+	
+	// Reprint header
+	p.renderHeader(&sb)
+	sb.WriteString("\n")
 	
 	// Render asset lines
-	var assetSb strings.Builder
-	p.renderAssets(&assetSb)
-	assetOutput := assetSb.String()
-	
-	// Count lines in asset output
-	// Each \n represents a line break, so count them and add 1 for the last line
-	lines := strings.Count(assetOutput, "\n") + 1
-	p.lastLineCount = lines
-	
-	sb.WriteString(assetOutput)
+	p.renderAssets(&sb)
 	
 	fmt.Print(sb.String())
 }
