@@ -329,7 +329,7 @@ func TestStateManagement(t *testing.T) {
 		app := &InstalledApp{
 			Repository:        "owner/sidecar-app",
 			Version:           "1.0.0",
-			Hooks:             []string{"post-install"},
+			Hooks:             map[string]string{"post-install": "echo hello"},
 			SystemPackages:    []string{"libssl3"},
 			Sidecars:          []string{"plugins/*", "assets/**"},
 			SidecarTargetPath: "/tmp/sidecars/owner/sidecar-app",
@@ -344,7 +344,7 @@ func TestStateManagement(t *testing.T) {
 
 		loaded, exists := st2.Apps["owner/sidecar-app"]
 		require.True(t, exists)
-		assert.Equal(t, []string{"post-install"}, loaded.Hooks)
+		assert.Equal(t, map[string]string{"post-install": "echo hello"}, loaded.Hooks)
 		assert.Equal(t, []string{"libssl3"}, loaded.SystemPackages)
 		assert.Equal(t, []string{"plugins/*", "assets/**"}, loaded.Sidecars)
 		assert.Equal(t, "/tmp/sidecars/owner/sidecar-app", loaded.SidecarTargetPath)

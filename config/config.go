@@ -44,6 +44,7 @@ type CoreConfig struct {
 	Symlink                                       bool   `yaml:"symlink"`
 	SearchForInstallInstructionsIfNoReleaseAssets bool   `yaml:"readme_fallback"`
 	WarnUnmappedAssets                            bool   `yaml:"warn_unmapped_assets"`
+	ProgressBar                                   string `yaml:"progress_bar"`
 }
 
 type DependencyResolutionConfig struct {

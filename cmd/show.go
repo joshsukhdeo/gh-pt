@@ -3,6 +3,8 @@ package cmd
 import (
 	"encoding/base64"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -12,6 +14,7 @@ import (
 	"github.com/cli/go-gh/v2/pkg/api"
 	"github.com/joshsukhdeo/gh-pt/state"
 	"github.com/mattn/go-runewidth"
+	"github.com/pterm/pterm"
 	"golang.org/x/term"
 )
 
@@ -38,12 +41,194 @@ type Release struct {
 	Assets     []ReleaseAsset `json:"assets"`
 }
 
-func ShowInfo(r *RootCLI) error {
+type gitTreeItem struct {
+	Path string `json:"path"`
+	Mode string `json:"mode"`
+	Type string `json:"type"`
+	Size int64  `json:"size"`
+	SHA  string `json:"sha"`
+}
+
+type gitTreeResponse struct {
+	SHA       string        `json:"sha"`
+	Tree      []gitTreeItem `json:"tree"`
+	Truncated bool          `json:"truncated"`
+}
+
+var multiselectFiles = func(r *RootCLI, prompt string, options []string) ([]string, error) {
+	if r != nil {
+		return r.interactiveMultiselect(prompt, options)
+	}
+	return pterm.DefaultInteractiveMultiselect.WithOptions(options).Show(prompt)
+}
+
+var downloadRawFile = func(url string) ([]byte, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to download from %s: HTTP %d", url, resp.StatusCode)
+	}
+	return io.ReadAll(resp.Body)
+}
+
+func (r *RootCLI) handleShow() error {
 	client, err := defaultRestClient()
 	if err != nil {
 		return fmt.Errorf("could not init GitHub REST client: %w", err)
 	}
-	return showInfoWithClient(r, client)
+	return r.handleShowWithClient(client)
+}
+
+func (r *RootCLI) handleShowWithClient(client ghRestClient) error {
+	repo := r.Repository
+	if repo == "" {
+		return fmt.Errorf("repository must be provided")
+	}
+
+	parts := strings.Split(strings.Trim(repo, "/"), "/")
+	if len(parts) != 2 {
+		return fmt.Errorf("repository must be in 'owner/repo' format (provided: '%s')", repo)
+	}
+	owner := parts[0]
+	repoName := parts[1]
+
+	var repoInfo struct {
+		DefaultBranch string `json:"default_branch"`
+	}
+	if err := client.Get(fmt.Sprintf("repos/%s/%s", owner, repoName), &repoInfo); err != nil {
+		return fmt.Errorf("failed to fetch repository info: %w", err)
+	}
+
+	branch := repoInfo.DefaultBranch
+	if branch == "" {
+		branch = "main"
+	}
+	if r.ReleaseVersion != "" && r.ReleaseVersion != "latest" {
+		branch = r.ReleaseVersion
+	}
+
+	var treeResp gitTreeResponse
+	treePath := fmt.Sprintf("repos/%s/%s/git/trees/%s?recursive=1", owner, repoName, branch)
+	if err := client.Get(treePath, &treeResp); err != nil {
+		return fmt.Errorf("failed to fetch git tree: %w", err)
+	}
+
+	var files []string
+	for _, item := range treeResp.Tree {
+		if item.Type == "blob" {
+			files = append(files, item.Path)
+		}
+	}
+	if len(files) == 0 {
+		pterm.Info.Println("No files found in repository tree.")
+		return nil
+	}
+	sort.Strings(files)
+
+	selected, err := multiselectFiles(r, "Select files to download:", files)
+	if err != nil {
+		return fmt.Errorf("selection failed: %w", err)
+	}
+	if len(selected) == 0 {
+		pterm.Info.Println("No files selected.")
+		return nil
+	}
+
+	targetDir := r.resolveSidecarTargetPath(nil)
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		return fmt.Errorf("failed to create sidecar target directory %s: %w", targetDir, err)
+	}
+
+	var installedSidecars []string
+	for _, file := range selected {
+		rawURL := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s/%s", owner, repoName, branch, strings.TrimPrefix(file, "/"))
+		content, err := downloadRawFile(rawURL)
+		if err != nil {
+			return fmt.Errorf("failed to download %s: %w", file, err)
+		}
+
+		destPath := filepath.Join(targetDir, filepath.FromSlash(file))
+		if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+			return fmt.Errorf("failed to create directory for %s: %w", destPath, err)
+		}
+
+		perm := os.FileMode(0644)
+		if strings.HasSuffix(destPath, ".so") || strings.HasSuffix(destPath, ".dll") || strings.HasSuffix(destPath, ".dylib") || strings.HasSuffix(destPath, ".red") {
+			perm = 0755
+		}
+		if err := os.WriteFile(destPath, content, perm); err != nil {
+			return fmt.Errorf("failed to write file %s: %w", destPath, err)
+		}
+
+		absPath, err := filepath.Abs(destPath)
+		if err == nil {
+			destPath = absPath
+		}
+		installedSidecars = append(installedSidecars, destPath)
+		r.InstalledSidecars = append(r.InstalledSidecars, destPath)
+	}
+
+	st, err := state.LoadState()
+	if err != nil || st == nil {
+		st = &state.State{
+			Apps: make(map[string]*state.InstalledApp),
+		}
+	}
+	if st.Apps == nil {
+		st.Apps = make(map[string]*state.InstalledApp)
+	}
+	app, ok := st.Apps[repo]
+	if !ok || app == nil {
+		for k, a := range st.Apps {
+			if strings.EqualFold(k, repo) {
+				app = a
+				break
+			}
+		}
+	}
+	if app == nil {
+		if st.Repos != nil {
+			app = st.Repos[repo]
+		}
+	}
+	if app == nil {
+		app = &state.InstalledApp{
+			Repository:        repo,
+			SidecarTargetPath: targetDir,
+		}
+		st.Apps[repo] = app
+	}
+	app.SidecarTargetPath = targetDir
+	for _, sc := range installedSidecars {
+		if !sliceContains(app.InstalledSidecars, sc) {
+			app.InstalledSidecars = append(app.InstalledSidecars, sc)
+		}
+	}
+	for _, f := range selected {
+		if !sliceContains(app.Sidecars, f) {
+			app.Sidecars = append(app.Sidecars, f)
+		}
+	}
+	if err := st.Save(); err != nil {
+		return fmt.Errorf("failed to update state: %w", err)
+	}
+
+	pterm.Success.Printf("Successfully saved %d sidecar file(s) to %s\n", len(installedSidecars), targetDir)
+	return nil
+}
+
+func ShowInfo(r *RootCLI) error {
+	if r.ShowAssets > -1 || r.ShowVersions > -1 || r.ShowDescription > -1 || r.ShowReadme > -1 || r.DiscoverSidecars {
+		client, err := defaultRestClient()
+		if err != nil {
+			return fmt.Errorf("could not init GitHub REST client: %w", err)
+		}
+		return showInfoWithClient(r, client)
+	}
+	return r.handleShow()
 }
 
 func showInfoWithClient(r *RootCLI, client ghRestClient) error {

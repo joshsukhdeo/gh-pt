@@ -13,11 +13,11 @@ import (
 )
 
 type AssetInfo struct {
-	Name        string
-	FullName    string
-	Symlink     string
-	InstallCmd  string
-	Completed   bool
+	Name       string
+	FullName   string
+	Symlink    string
+	InstallCmd string
+	Completed  bool
 }
 
 type PacmanUI struct {
@@ -26,9 +26,9 @@ type PacmanUI struct {
 	Archive string
 	Target  string
 
-	Assets        []AssetInfo
-	CurrentAsset  int
-	DisableIcons  bool
+	Assets       []AssetInfo
+	CurrentAsset int
+	DisableIcons bool
 
 	// Animation phases
 	// Phase 0: Header animation (eating through repo, version, archive)
@@ -44,10 +44,15 @@ type PacmanUI struct {
 	mu            sync.Mutex
 	stopCh        chan struct{}
 	animationDone chan struct{}
-	
+
 	// Terminal state tracking
 	headerPrinted bool
 	lastLineCount int
+
+	// Debug mode
+	Debug     bool
+	debugLog  []string
+	tickCount int
 }
 
 var GlobalPacman *PacmanUI
@@ -61,7 +66,51 @@ func NewPacmanUI(repo string) *PacmanUI {
 		phase:         0,
 		stopCh:        make(chan struct{}),
 		animationDone: make(chan struct{}),
+		Debug:         os.Getenv("GH_PT_DEBUG_PACMAN") == "1",
 	}
+}
+
+// debugf logs a message if debug mode is enabled
+func (p *PacmanUI) debugf(format string, args ...interface{}) {
+	if !p.Debug {
+		return
+	}
+	msg := fmt.Sprintf(format, args...)
+	p.debugLog = append(p.debugLog, msg)
+	slog.Debug("pacman-debug", "msg", msg, "tick", p.tickCount, "phase", p.phase)
+}
+
+// DumpDebugLog returns the debug log for inspection
+func (p *PacmanUI) DumpDebugLog() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	result := make([]string, len(p.debugLog))
+	copy(result, p.debugLog)
+	return result
+}
+
+// StateSnapshot returns a string representation of the current state for debugging
+func (p *PacmanUI) StateSnapshot() string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("PacmanUI State:\n"))
+	sb.WriteString(fmt.Sprintf("  Repo: %s\n", p.Repo))
+	sb.WriteString(fmt.Sprintf("  Version: %s\n", p.Version))
+	sb.WriteString(fmt.Sprintf("  Archive: %s\n", p.Archive))
+	sb.WriteString(fmt.Sprintf("  Phase: %d\n", p.phase))
+	sb.WriteString(fmt.Sprintf("  HeaderEaten: %d\n", p.headerEaten))
+	sb.WriteString(fmt.Sprintf("  HorizontalPos: %d\n", p.horizontalPos))
+	sb.WriteString(fmt.Sprintf("  CurrentAsset: %d/%d\n", p.CurrentAsset, len(p.Assets)))
+	sb.WriteString(fmt.Sprintf("  DotsEaten: %d\n", p.dotsEaten))
+	sb.WriteString(fmt.Sprintf("  Paused: %v\n", p.paused))
+	sb.WriteString(fmt.Sprintf("  HeaderPrinted: %v\n", p.headerPrinted))
+	sb.WriteString(fmt.Sprintf("  TickCount: %d\n", p.tickCount))
+	sb.WriteString(fmt.Sprintf("  Assets:\n"))
+	for i, a := range p.Assets {
+		sb.WriteString(fmt.Sprintf("    [%d] %s (completed=%v)\n", i, a.Name, a.Completed))
+	}
+	return sb.String()
 }
 
 func (p *PacmanUI) Start() {
@@ -70,13 +119,17 @@ func (p *PacmanUI) Start() {
 		"version", p.Version,
 		"archive", p.Archive,
 		"tty", term.IsTerminal(int(os.Stdout.Fd())),
+		"debug", p.Debug,
 	)
+	p.debugf("Start() called")
+
 	go func() {
 		ticker := time.NewTicker(250 * time.Millisecond)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-p.stopCh:
+				p.debugf("animation goroutine exiting")
 				return
 			case <-ticker.C:
 				p.tick()
@@ -87,6 +140,7 @@ func (p *PacmanUI) Start() {
 }
 
 func (p *PacmanUI) Stop() {
+	p.debugf("Stop() called: assets_completed=%d, total_assets=%d", p.CurrentAsset, len(p.Assets))
 	slog.Info("pacman animation stopping", "assets_completed", p.CurrentAsset, "total_assets", len(p.Assets))
 	close(p.stopCh)
 	p.mu.Lock()
@@ -95,17 +149,20 @@ func (p *PacmanUI) Stop() {
 
 	// Complete the animation for all assets
 	p.completeAllAnimations()
-	
+	p.debugf("Stop() completed all animations")
+
 	// In non-TTY mode, print the final state
 	if !term.IsTerminal(int(os.Stdout.Fd())) {
 		var sb strings.Builder
 		p.renderAssets(&sb)
 		if sb.Len() > 0 {
 			fmt.Println(sb.String())
+			p.debugf("Stop() printed final state (non-TTY)")
 		}
 	} else {
 		p.render()
 		fmt.Println()
+		p.debugf("Stop() rendered final state (TTY)")
 	}
 
 	// Signal that animation is done
@@ -114,6 +171,15 @@ func (p *PacmanUI) Stop() {
 		// Already closed
 	default:
 		close(p.animationDone)
+		p.debugf("Stop() closed animationDone channel")
+	}
+
+	// Dump debug log if debug mode is enabled
+	if p.Debug {
+		slog.Info("pacman debug log", "entries", len(p.debugLog))
+		for i, entry := range p.debugLog {
+			slog.Info("pacman-debug-entry", "index", i, "msg", entry)
+		}
 	}
 }
 
@@ -137,20 +203,27 @@ func (p *PacmanUI) Resume() {
 func (p *PacmanUI) tick() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.tickCount++
+
 	if p.paused {
+		p.debugf("tick skipped (paused)")
 		return
 	}
+
+	p.debugf("tick start: phase=%d, headerEaten=%d, currentAsset=%d, dotsEaten=%d",
+		p.phase, p.headerEaten, p.CurrentAsset, p.dotsEaten)
 
 	switch p.phase {
 	case 0: // Header animation
 		if p.headerEaten < 4 { // repo, version, archive, cherry
 			p.headerEaten++
+			p.debugf("phase 0: headerEaten incremented to %d", p.headerEaten)
 		} else {
 			// Move to phase 1
 			p.phase = 1
 			p.horizontalPos = 0
 			p.wrapLine = 0
-			slog.Debug("pacman phase transition", "from", 0, "to", 1, "reason", "header_complete")
+			p.debugf("phase transition: 0 -> 1 (header complete)")
 		}
 	case 1: // Horizontal movement
 		p.horizontalPos++
@@ -158,16 +231,18 @@ func (p *PacmanUI) tick() {
 		if p.horizontalPos >= termWidth {
 			p.horizontalPos = 0
 			p.wrapLine++
+			p.debugf("phase 1: wrapped to line %d", p.wrapLine)
 		}
 		// Check if assets are resolved
 		if len(p.Assets) > 0 && p.Assets[0].Name != "?" {
 			p.phase = 2
 			p.CurrentAsset = 0
 			p.dotsEaten = 0
-			slog.Debug("pacman phase transition", "from", 1, "to", 2, "reason", "assets_resolved", "asset_count", len(p.Assets))
+			p.debugf("phase transition: 1 -> 2 (assets resolved, count=%d)", len(p.Assets))
 		}
 	case 2: // Asset resolution
 		if len(p.Assets) == 0 {
+			p.debugf("phase 2: no assets, skipping")
 			return
 		}
 		if p.CurrentAsset < len(p.Assets) {
@@ -175,15 +250,22 @@ func (p *PacmanUI) tick() {
 			if !asset.Completed {
 				if p.dotsEaten < 3 {
 					p.dotsEaten++
+					p.debugf("phase 2: asset[%d] dotsEaten=%d", p.CurrentAsset, p.dotsEaten)
 					if p.dotsEaten == 3 {
 						// Complete the asset after 3 dots
 						asset.Completed = true
-						slog.Debug("pacman asset completed", "index", p.CurrentAsset, "name", asset.Name, "total", len(p.Assets))
+						p.debugf("phase 2: asset[%d] '%s' completed", p.CurrentAsset, asset.Name)
 						p.CurrentAsset++
 						p.dotsEaten = 0
 					}
 				}
+			} else {
+				p.debugf("phase 2: asset[%d] already completed, moving to next", p.CurrentAsset)
+				p.CurrentAsset++
+				p.dotsEaten = 0
 			}
+		} else {
+			p.debugf("phase 2: all assets completed (%d/%d)", p.CurrentAsset, len(p.Assets))
 		}
 	}
 }
@@ -211,7 +293,7 @@ func (p *PacmanUI) Update(stage int, version, archive, asset, target, ghostType 
 func (p *PacmanUI) AddAsset(name, fullName, symlink, installCmd string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	p.Assets = append(p.Assets, AssetInfo{
 		Name:       name,
 		FullName:   fullName,
@@ -462,6 +544,7 @@ func (p *PacmanUI) render() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.paused {
+		p.debugf("render skipped (paused)")
 		return
 	}
 
@@ -473,7 +556,7 @@ func (p *PacmanUI) render() {
 			p.renderHeader(&sb)
 			sb.WriteString("\n")
 			p.headerPrinted = true
-			slog.Debug("pacman header printed (non-TTY mode)")
+			p.debugf("non-TTY: header printed")
 			fmt.Print(sb.String())
 		}
 		// Don't print assets during animation in non-TTY mode
@@ -482,7 +565,7 @@ func (p *PacmanUI) render() {
 	}
 
 	var sb strings.Builder
-	
+
 	// If header not printed yet, print it first
 	if !p.headerPrinted {
 		p.renderHeader(&sb)
@@ -491,22 +574,33 @@ func (p *PacmanUI) render() {
 		p.lastLineCount = 0
 		fmt.Print(sb.String())
 		sb.Reset()
-		slog.Debug("pacman header printed (TTY mode)")
+		p.debugf("TTY: header printed")
 	}
-	
-	// Always move cursor to the line after header and clear from there
-	// This ensures we overwrite any previous asset lines
-	sb.WriteString("\033[1G") // Move to column 1
-	sb.WriteString("\033[2J") // Clear entire screen
-	sb.WriteString("\033[1;1H") // Move to top-left
-	
+
+	// Calculate how many lines we need to clear
+	// Header is 1 line, assets are len(Assets) lines
+	newLineCount := 1 + len(p.Assets)
+
+	// Move cursor to the line after header
+	// We use relative movement to avoid clearing the entire screen
+	if p.lastLineCount > 0 {
+		// Move up to the start of our previous output
+		sb.WriteString(fmt.Sprintf("\033[%dA", p.lastLineCount))
+	}
+
+	// Clear from cursor to end of screen (only our area)
+	sb.WriteString("\033[J")
+
 	// Reprint header
 	p.renderHeader(&sb)
 	sb.WriteString("\n")
-	
+
 	// Render asset lines
 	p.renderAssets(&sb)
-	
+
+	p.lastLineCount = newLineCount
+	p.debugf("render: lineCount=%d, assets=%d", newLineCount, len(p.Assets))
+
 	fmt.Print(sb.String())
 }
 

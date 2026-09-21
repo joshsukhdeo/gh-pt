@@ -392,3 +392,350 @@ func TestShowInfo_HeadersWithIcons(t *testing.T) {
 	assert.Contains(t, outDisabled, "--- VERSIONS ---")
 	assert.Contains(t, outDisabled, "--- ASSETS ---")
 }
+
+func TestCliParams_ShowStruct(t *testing.T) {
+	cli := &params.CliParams{
+		Show: params.Show{
+			Repository:       "owner/repo",
+			Assets:           10,
+			Versions:         5,
+			Description:      3,
+			Readme:           20,
+			Prerelease:       true,
+			Stable:           false,
+			Version:          "v1.0.0",
+			DiscoverSidecars: true,
+		},
+	}
+	assert.Equal(t, "owner/repo", cli.Show.Repository)
+	assert.Equal(t, 10, cli.Show.Assets)
+	assert.Equal(t, 5, cli.Show.Versions)
+	assert.Equal(t, "v1.0.0", cli.Show.Version)
+	assert.True(t, cli.Show.DiscoverSidecars)
+
+	var cmd params.ShowCmd = cli.Show
+	assert.Equal(t, "owner/repo", cmd.Repository)
+}
+
+type mockShowTreeClient struct {
+	defaultBranch string
+	treeItems     []gitTreeItem
+	repoErr       error
+	treeErr       error
+	requestedPath string
+}
+
+func (m *mockShowTreeClient) Get(path string, response interface{}) error {
+	trimmed := strings.TrimPrefix(path, "/")
+	if strings.Contains(trimmed, "git/trees/") {
+		m.requestedPath = path
+		if m.treeErr != nil {
+			return m.treeErr
+		}
+		data, err := json.Marshal(gitTreeResponse{
+			SHA:  "mock-sha-tree",
+			Tree: m.treeItems,
+		})
+		if err != nil {
+			return err
+		}
+		return json.Unmarshal(data, response)
+	}
+
+	if strings.HasPrefix(trimmed, "repos/") {
+		m.requestedPath = path
+		if m.repoErr != nil {
+			return m.repoErr
+		}
+		data, err := json.Marshal(map[string]interface{}{
+			"default_branch": m.defaultBranch,
+		})
+		if err != nil {
+			return err
+		}
+		return json.Unmarshal(data, response)
+	}
+
+	return fmt.Errorf("unhandled mock path: %s", path)
+}
+
+func TestHandleShow_Success(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tmpDir)
+	xdg.DataHome = tmpDir
+
+	mockClient := &mockShowTreeClient{
+		defaultBranch: "main",
+		treeItems: []gitTreeItem{
+			{Path: "plugins/core.red", Type: "blob", Size: 100},
+			{Path: "config/app.json", Type: "blob", Size: 50},
+			{Path: "README.md", Type: "blob", Size: 200},
+			{Path: "plugins", Type: "tree"},
+			{Path: "submodule", Type: "commit"},
+		},
+	}
+
+	origClient := defaultRestClient
+	origMultiselect := multiselectFiles
+	origDownload := downloadRawFile
+	defer func() {
+		defaultRestClient = origClient
+		multiselectFiles = origMultiselect
+		downloadRawFile = origDownload
+	}()
+
+	defaultRestClient = func() (ghRestClient, error) {
+		return mockClient, nil
+	}
+
+	var presentedOptions []string
+	multiselectFiles = func(r *RootCLI, prompt string, options []string) ([]string, error) {
+		presentedOptions = options
+		// Select the plugin and config files
+		return []string{"plugins/core.red", "config/app.json"}, nil
+	}
+
+	downloadedURLs := make(map[string]bool)
+	downloadRawFile = func(url string) ([]byte, error) {
+		downloadedURLs[url] = true
+		if strings.HasSuffix(url, "plugins/core.red") {
+			return []byte("plugin-binary-content"), nil
+		}
+		if strings.HasSuffix(url, "config/app.json") {
+			return []byte(`{"enabled": true}`), nil
+		}
+		return nil, fmt.Errorf("unexpected URL: %s", url)
+	}
+
+	r := &RootCLI{
+		ExecContext: params.ExecContext{
+			Repository: "my-org/cool-tool",
+		},
+	}
+
+	err := r.handleShow()
+	require.NoError(t, err)
+
+	// Verify only blob files were presented
+	assert.Equal(t, []string{"README.md", "config/app.json", "plugins/core.red"}, presentedOptions)
+
+	// Verify URLs requested for download
+	assert.True(t, downloadedURLs["https://raw.githubusercontent.com/my-org/cool-tool/main/plugins/core.red"])
+	assert.True(t, downloadedURLs["https://raw.githubusercontent.com/my-org/cool-tool/main/config/app.json"])
+
+	// Verify files written to SidecarTargetPath
+	targetDir := filepath.Join(tmpDir, "gh-pt", "sidecars", "my-org", "cool-tool")
+	pluginPath := filepath.Join(targetDir, "plugins", "core.red")
+	configPath := filepath.Join(targetDir, "config", "app.json")
+
+	pluginBytes, err := os.ReadFile(pluginPath)
+	require.NoError(t, err)
+	assert.Equal(t, "plugin-binary-content", string(pluginBytes))
+
+	configBytes, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	assert.Equal(t, `{"enabled": true}`, string(configBytes))
+
+	// Verify state.json updated
+	st, err := state.LoadState()
+	require.NoError(t, err)
+	app, exists := st.Apps["my-org/cool-tool"]
+	require.True(t, exists)
+	assert.Equal(t, targetDir, app.SidecarTargetPath)
+	assert.Contains(t, app.InstalledSidecars, pluginPath)
+	assert.Contains(t, app.InstalledSidecars, configPath)
+	assert.Contains(t, app.Sidecars, "plugins/core.red")
+	assert.Contains(t, app.Sidecars, "config/app.json")
+
+	// Verify r.InstalledSidecars
+	assert.Contains(t, r.InstalledSidecars, pluginPath)
+	assert.Contains(t, r.InstalledSidecars, configPath)
+}
+
+func TestHandleShow_CustomReleaseVersion(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tmpDir)
+	xdg.DataHome = tmpDir
+
+	mockClient := &mockShowTreeClient{
+		defaultBranch: "main",
+		treeItems: []gitTreeItem{
+			{Path: "plugin.red", Type: "blob"},
+		},
+	}
+
+	origClient := defaultRestClient
+	origMultiselect := multiselectFiles
+	origDownload := downloadRawFile
+	defer func() {
+		defaultRestClient = origClient
+		multiselectFiles = origMultiselect
+		downloadRawFile = origDownload
+	}()
+
+	defaultRestClient = func() (ghRestClient, error) {
+		return mockClient, nil
+	}
+
+	multiselectFiles = func(r *RootCLI, prompt string, options []string) ([]string, error) {
+		return []string{"plugin.red"}, nil
+	}
+
+	var downloadedURL string
+	downloadRawFile = func(url string) ([]byte, error) {
+		downloadedURL = url
+		return []byte("data"), nil
+	}
+
+	r := &RootCLI{
+		ExecContext: params.ExecContext{
+			Repository: "owner/repo",
+			CommonInstallFlags: params.CommonInstallFlags{
+				ReleaseVersion: "v2.5.0",
+			},
+		},
+	}
+
+	err := r.handleShow()
+	require.NoError(t, err)
+
+	assert.Contains(t, mockClient.requestedPath, "git/trees/v2.5.0")
+	assert.Equal(t, "https://raw.githubusercontent.com/owner/repo/v2.5.0/plugin.red", downloadedURL)
+}
+
+func TestHandleShow_NoBlobsFound(t *testing.T) {
+	mockClient := &mockShowTreeClient{
+		defaultBranch: "main",
+		treeItems: []gitTreeItem{
+			{Path: "scripts", Type: "tree"},
+			{Path: "submodule", Type: "commit"},
+		},
+	}
+
+	r := &RootCLI{
+		ExecContext: params.ExecContext{
+			Repository: "owner/repo",
+		},
+	}
+
+	err := r.handleShowWithClient(mockClient)
+	assert.NoError(t, err)
+	assert.Empty(t, r.InstalledSidecars)
+}
+
+func TestHandleShow_UserSelectsNothing(t *testing.T) {
+	mockClient := &mockShowTreeClient{
+		defaultBranch: "main",
+		treeItems: []gitTreeItem{
+			{Path: "plugin.red", Type: "blob"},
+		},
+	}
+
+	origMultiselect := multiselectFiles
+	defer func() { multiselectFiles = origMultiselect }()
+	multiselectFiles = func(r *RootCLI, prompt string, options []string) ([]string, error) {
+		return nil, nil
+	}
+
+	r := &RootCLI{
+		ExecContext: params.ExecContext{
+			Repository: "owner/repo",
+		},
+	}
+
+	err := r.handleShowWithClient(mockClient)
+	assert.NoError(t, err)
+	assert.Empty(t, r.InstalledSidecars)
+}
+
+func TestHandleShow_Errors(t *testing.T) {
+	// Empty repository
+	rEmpty := &RootCLI{}
+	err := rEmpty.handleShow()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "repository must be provided")
+
+	// Invalid repository format
+	rInvalid := &RootCLI{ExecContext: params.ExecContext{Repository: "noslash"}}
+	err = rInvalid.handleShow()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "repository must be in 'owner/repo' format")
+
+	// API error fetching repository info
+	mockRepoErr := &mockShowTreeClient{repoErr: fmt.Errorf("API rate limit exceeded")}
+	r := &RootCLI{ExecContext: params.ExecContext{Repository: "owner/repo"}}
+	err = r.handleShowWithClient(mockRepoErr)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to fetch repository info")
+
+	// API error fetching git tree
+	mockTreeErr := &mockShowTreeClient{defaultBranch: "main", treeErr: fmt.Errorf("Tree not found")}
+	err = r.handleShowWithClient(mockTreeErr)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to fetch git tree")
+
+	// Multiselect error
+	mockClient := &mockShowTreeClient{
+		defaultBranch: "main",
+		treeItems:     []gitTreeItem{{Path: "file.txt", Type: "blob"}},
+	}
+	origMultiselect := multiselectFiles
+	defer func() { multiselectFiles = origMultiselect }()
+	multiselectFiles = func(r *RootCLI, prompt string, options []string) ([]string, error) {
+		return nil, fmt.Errorf("terminal error")
+	}
+	err = r.handleShowWithClient(mockClient)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "selection failed")
+
+	// Download error
+	multiselectFiles = func(r *RootCLI, prompt string, options []string) ([]string, error) {
+		return []string{"file.txt"}, nil
+	}
+	origDownload := downloadRawFile
+	defer func() { downloadRawFile = origDownload }()
+	downloadRawFile = func(url string) ([]byte, error) {
+		return nil, fmt.Errorf("network connection refused")
+	}
+	err = r.handleShowWithClient(mockClient)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to download")
+}
+
+func TestShowInfo_DelegatesToHandleShow(t *testing.T) {
+	mockClient := &mockShowTreeClient{
+		defaultBranch: "main",
+		treeItems:     []gitTreeItem{{Path: "file.txt", Type: "blob"}},
+	}
+
+	origClient := defaultRestClient
+	origMultiselect := multiselectFiles
+	defer func() {
+		defaultRestClient = origClient
+		multiselectFiles = origMultiselect
+	}()
+
+	defaultRestClient = func() (ghRestClient, error) {
+		return mockClient, nil
+	}
+
+	var called bool
+	multiselectFiles = func(r *RootCLI, prompt string, options []string) ([]string, error) {
+		called = true
+		return nil, nil
+	}
+
+	r := &RootCLI{
+		ExecContext: params.ExecContext{
+			Repository:      "owner/repo",
+			ShowAssets:      -1,
+			ShowVersions:    -1,
+			ShowDescription: -1,
+			ShowReadme:      -1,
+		},
+	}
+
+	err := ShowInfo(r)
+	assert.NoError(t, err)
+	assert.True(t, called)
+}

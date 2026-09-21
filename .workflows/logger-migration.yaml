@@ -1,0 +1,191 @@
+# Logger Migration Workflow
+# Parallel fan-out to migrate all files from zerolog to charmbracelet/log
+
+name: logger-migration
+description: Migrate gh-pt from zerolog to charmbracelet/log using parallel execution
+
+# Input: List of files to migrate
+inputs:
+  files:
+    - cmd/root.go
+    - cmd/state_mgmt.go
+    - cmd/update.go
+    - release/release.go
+    - release/symlink.go
+    - release/virustotal.go
+    - selector/interface.go
+    - selector/magic.go
+
+# Workflow steps
+steps:
+  # Step 1: Parallel migration of all files
+  - id: migrate-files
+    type: parallel
+    description: Migrate all files from zerolog to charmbracelet/log in parallel
+    agents:
+      - id: migrate-root
+        description: Migrate cmd/root.go
+        inputs:
+          file: cmd/root.go
+        task: |
+          Migrate cmd/root.go from zerolog to charmbracelet/log.
+          
+          Key changes:
+          - Replace import "github.com/rs/zerolog/log" with "github.com/charmbracelet/log"
+          - Replace import "github.com/rs/zerolog" with "github.com/charmbracelet/log"
+          - Update logger initialization:
+            - Remove zerolog.TimeFieldFormat, zerolog.SetGlobalLevel
+            - Use log.SetLevel(log.DebugLevel) or appropriate level
+            - Use log.SetOutput() for output configuration
+            - Remove zerolog.ConsoleWriter (charmbracelet/log has built-in styling)
+          - Update log calls:
+            - log.Info().Msg("msg") → log.Info("msg")
+            - log.Info().Str("k", "v").Msg("msg") → log.Info("msg", "k", "v")
+            - log.Error().Err(err).Msg("msg") → log.Error("msg", "error", err)
+          - Replace zerolog.Dict() with structured key-value pairs
+          - Preserve all log messages and semantics
+          
+          After migration, run: go build ./cmd/...
+          
+        output:
+          status: success|failure
+          file: cmd/root.go
+      
+      - id: migrate-state-mgmt
+        description: Migrate cmd/state_mgmt.go
+        inputs:
+          file: cmd/state_mgmt.go
+        task: |
+          Migrate cmd/state_mgmt.go from zerolog to charmbracelet/log.
+          Replace import and update all log calls following the API mapping.
+          Preserve all log messages and semantics.
+          After migration, run: go build ./cmd/...
+        output:
+          status: success|failure
+          file: cmd/state_mgmt.go
+      
+      - id: migrate-update
+        description: Migrate cmd/update.go
+        inputs:
+          file: cmd/update.go
+        task: |
+          Migrate cmd/update.go from zerolog to charmbracelet/log.
+          Replace import and update all log calls following the API mapping.
+          Preserve all log messages and semantics.
+          After migration, run: go build ./cmd/...
+        output:
+          status: success|failure
+          file: cmd/update.go
+      
+      - id: migrate-release
+        description: Migrate release/release.go
+        inputs:
+          file: release/release.go
+        task: |
+          Migrate release/release.go from zerolog to charmbracelet/log.
+          Replace import and update all log calls following the API mapping.
+          Preserve all log messages and semantics.
+          After migration, run: go build ./release/...
+        output:
+          status: success|failure
+          file: release/release.go
+      
+      - id: migrate-symlink
+        description: Migrate release/symlink.go
+        inputs:
+          file: release/symlink.go
+        task: |
+          Migrate release/symlink.go from zerolog to charmbracelet/log.
+          Replace import and update all log calls following the API mapping.
+          Preserve all log messages and semantics.
+          After migration, run: go build ./release/...
+        output:
+          status: success|failure
+          file: release/symlink.go
+      
+      - id: migrate-virustotal
+        description: Migrate release/virustotal.go
+        inputs:
+          file: release/virustotal.go
+        task: |
+          Migrate release/virustotal.go from zerolog to charmbracelet/log.
+          Replace import and update all log calls following the API mapping.
+          Preserve all log messages and semantics.
+          After migration, run: go build ./release/...
+        output:
+          status: success|failure
+          file: release/virustotal.go
+      
+      - id: migrate-selector-interface
+        description: Migrate selector/interface.go
+        inputs:
+          file: selector/interface.go
+        task: |
+          Migrate selector/interface.go from zerolog to charmbracelet/log.
+          Replace import and update all log calls following the API mapping.
+          Preserve all log messages and semantics.
+          After migration, run: go build ./selector/...
+        output:
+          status: success|failure
+          file: selector/interface.go
+      
+      - id: migrate-selector-magic
+        description: Migrate selector/magic.go
+        inputs:
+          file: selector/magic.go
+        task: |
+          Migrate selector/magic.go from zerolog to charmbracelet/log.
+          Replace import and update all log calls following the API mapping.
+          Preserve all log messages and semantics.
+          After migration, run: go build ./selector/...
+        output:
+          status: success|failure
+          file: selector/magic.go
+    
+    # Wait for all parallel agents to complete
+    wait_for_all: true
+  
+  # Step 2: Update dependencies
+  - id: update-dependencies
+    type: sequential
+    depends_on: [migrate-files]
+    description: Remove zerolog from go.mod and tidy dependencies
+    task: |
+      Update go.mod to remove github.com/rs/zerolog dependency.
+      Run: go mod tidy
+      Verify: go build ./...
+    output:
+      status: success|failure
+  
+  # Step 3: Run tests
+  - id: run-tests
+    type: sequential
+    depends_on: [update-dependencies]
+    description: Run all tests to verify migration
+    task: |
+      Run: go test -v ./...
+      Verify all tests pass.
+      If any tests fail, report the failures.
+    output:
+      status: success|failure
+      test_results: string
+  
+  # Step 4: Final verification
+  - id: final-verification
+    type: sequential
+    depends_on: [run-tests]
+    description: Final build and verification
+    task: |
+      Run: go build -o gh-pt .
+      Verify binary builds successfully.
+      Check binary size and report.
+    output:
+      status: success|failure
+      binary_size: string
+
+# Execution settings
+settings:
+  max_parallel: 8  # Run all file migrations in parallel
+  timeout_minutes: 30
+  retry_on_failure: false
+  continue_on_failure: false

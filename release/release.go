@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/adrg/xdg"
+	"github.com/charmbracelet/log"
 	"github.com/cli/go-gh/v2"
 	"github.com/joshsukhdeo/gh-pt/config"
 	"github.com/joshsukhdeo/gh-pt/params"
@@ -30,7 +31,6 @@ import (
 	"github.com/joshsukhdeo/gh-pt/status"
 	"github.com/joshsukhdeo/gh-pt/ui"
 	"github.com/pterm/pterm"
-	"github.com/rs/zerolog/log"
 	"golang.org/x/term"
 )
 
@@ -53,13 +53,19 @@ type GithubRelease struct {
 	PendingRpms              []string
 	Prompter                 Prompter
 	StatusMessage            string
-	UI                       *ui.PacmanUI
-	Sidecars                 []string
-	SidecarTargetPath        string
-	SidecarSymlinkTo         []string
-	InstalledSidecars        []string
-	IsTTYFunc                func() bool
-	WarnUnmappedAssets       *bool
+	UI                       interface {
+		Start()
+		Stop()
+		Pause()
+		Resume()
+		Update(step int, a string, b string, c string, target string, e string)
+	}
+	Sidecars           []string
+	SidecarTargetPath  string
+	SidecarSymlinkTo   []string
+	InstalledSidecars  []string
+	IsTTYFunc          func() bool
+	WarnUnmappedAssets *bool
 }
 
 type Prompter interface {
@@ -329,7 +335,7 @@ func (r *GithubRelease) handleSuspectedSidecars(suspected []string, extractDir s
 
 	targetDir := r.resolveSidecarTargetPath()
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
-		log.Warn().Err(err).Msg("could not create sidecar target directory")
+		log.Warn("could not create sidecar target directory", "error", err)
 	}
 	r.SidecarTargetPath = targetDir
 
@@ -372,7 +378,7 @@ func (r *GithubRelease) handleSuspectedSidecars(suspected []string, extractDir s
 			if err == nil {
 				r.InstalledSidecars = append(r.InstalledSidecars, filepath.Join(targetDir, item))
 			} else {
-				log.Warn().Err(err).Str("asset", item).Msg("failed to download remote sidecar asset")
+				log.Warn("failed to download remote sidecar asset", "error", err, "asset", item)
 			}
 		}
 	}
@@ -408,7 +414,7 @@ func (r *GithubRelease) extractExplicitSidecars(extractDir string, fsObj fs.FS) 
 			return nil
 		})
 		if err != nil {
-			log.Warn().Err(err).Msg("error walking extraction directory for sidecars")
+			log.Warn("error walking extraction directory for sidecars", "error", err)
 		}
 	} else if fsObj != nil {
 		err := fs.WalkDir(fsObj, ".", func(path string, d fs.DirEntry, err error) error {
@@ -424,7 +430,7 @@ func (r *GithubRelease) extractExplicitSidecars(extractDir string, fsObj fs.FS) 
 			return nil
 		})
 		if err != nil {
-			log.Warn().Err(err).Msg("error walking fs.FS for sidecars")
+			log.Warn("error walking fs.FS for sidecars", "error", err)
 		}
 	}
 
@@ -433,14 +439,14 @@ func (r *GithubRelease) extractExplicitSidecars(extractDir string, fsObj fs.FS) 
 		if extractDir != "" {
 			f, err := os.Open(filepath.Join(extractDir, rel))
 			if err != nil {
-				log.Warn().Err(err).Str("sidecar", rel).Msg("failed to open sidecar file")
+				log.Warn("failed to open sidecar file", "error", err, "sidecar", rel)
 				continue
 			}
 			src = f
 		} else if fsObj != nil {
 			f, err := fsObj.Open(rel)
 			if err != nil {
-				log.Warn().Err(err).Str("sidecar", rel).Msg("failed to open sidecar from fs.FS")
+				log.Warn("failed to open sidecar from fs.FS", "error", err, "sidecar", rel)
 				continue
 			}
 			src = f
@@ -453,20 +459,20 @@ func (r *GithubRelease) extractExplicitSidecars(extractDir string, fsObj fs.FS) 
 		df, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
 		if err != nil {
 			_ = src.Close()
-			log.Warn().Err(err).Str("sidecar", rel).Msg("failed to create sidecar destination")
+			log.Warn("failed to create sidecar destination", "error", err, "sidecar", rel)
 			continue
 		}
 		_, _ = io.Copy(df, src)
 		_ = df.Close()
 		_ = src.Close()
 		r.InstalledSidecars = append(r.InstalledSidecars, dst)
-		log.Info().Str("sidecar", rel).Str("destination", dst).Msg("deployed sidecar asset")
+		log.Info("deployed sidecar asset", "sidecar", rel, "destination", dst)
 	}
 
 	if len(matched) == 0 {
-		log.Warn().Strs("patterns", r.CliParams.Sidecars).Msg("no sidecar assets matched the specified patterns")
+		log.Warn("no sidecar assets matched the specified patterns", "patterns", r.CliParams.Sidecars)
 	} else {
-		log.Info().Int("count", len(matched)).Msg("deployed sidecar assets")
+		log.Info("deployed sidecar assets", "count", len(matched))
 	}
 
 	// Create symlinks if requested
@@ -484,7 +490,7 @@ func (r *GithubRelease) createSidecarSymlinks() {
 
 	for _, targetDir := range r.CliParams.SidecarSymlinkTo {
 		if err := os.MkdirAll(targetDir, 0755); err != nil {
-			log.Warn().Err(err).Str("dir", targetDir).Msg("failed to create symlink target directory")
+			log.Warn("failed to create symlink target directory", "error", err, "dir", targetDir)
 			continue
 		}
 
@@ -495,15 +501,15 @@ func (r *GithubRelease) createSidecarSymlinks() {
 			// Remove existing symlink if it exists
 			if _, err := os.Lstat(linkPath); err == nil {
 				if err := os.Remove(linkPath); err != nil {
-					log.Warn().Err(err).Str("link", linkPath).Msg("failed to remove existing symlink")
+					log.Warn("failed to remove existing symlink", "error", err, "link", linkPath)
 					continue
 				}
 			}
 
 			if err := os.Symlink(sidecarPath, linkPath); err != nil {
-				log.Warn().Err(err).Str("sidecar", sidecarPath).Str("link", linkPath).Msg("failed to create symlink")
+				log.Warn("failed to create symlink", "error", err, "sidecar", sidecarPath, "link", linkPath)
 			} else {
-				log.Info().Str("sidecar", sidecarName).Str("link", linkPath).Msg("created symlink")
+				log.Info("created symlink", "sidecar", sidecarName, "link", linkPath)
 			}
 		}
 	}
@@ -537,8 +543,8 @@ Please provide:
 
 Format your response as actionable shell commands where possible.`, r.CliParams.Repository, sidecarList, r.SidecarTargetPath)
 
-	log.Info().Msg("Initiating AI sidecar setup analysis...")
-	
+	log.Info("Initiating AI sidecar setup analysis...")
+
 	// Execute AI agent
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
@@ -596,7 +602,7 @@ func (r *GithubRelease) resolveDestinationPath(binaryPath string) string {
 
 func (r *GithubRelease) installArchivedBinary(fileSystem fs.FS, binaryPath string) error {
 	if r.CliParams.DryRun {
-		log.Info().Msgf("[dry-run] Would extract and install: %s", binaryPath)
+		log.Infof("[dry-run] Would extract and install: %s", binaryPath)
 		return nil
 	}
 
@@ -628,14 +634,13 @@ func (r *GithubRelease) installArchivedBinary(fileSystem fs.FS, binaryPath strin
 	}
 
 	if err := r.resolveBinaryDependencies(extractedBinaryPath, tempExtractDir); err != nil {
-		log.Warn().Err(err).Msg("dependency resolution encountered an error")
+		log.Warn("dependency resolution encountered an error", "error", err)
 	}
 
 	destinationPath := r.resolveDestinationPath(binaryPath)
 	r.InstalledBinaries = append(r.InstalledBinaries, filepath.Base(destinationPath))
 
-	log.Info().
-		Msgf("will install %s to %s", binaryPath, destinationPath)
+	log.Infof("will install %s to %s", binaryPath, destinationPath)
 
 	_, err = os.Stat(destinationPath)
 	if err == nil {
@@ -801,7 +806,7 @@ func scanMissingDependencies(binaryPath string, extractDir string) ([]string, er
 
 	_, soDirs, err := findBundledSharedObjects(extractDir)
 	if err != nil {
-		log.Warn().Err(err).Str("extractDir", extractDir).Msg("failed to sweep for bundled .so files")
+		log.Warn("failed to sweep for bundled .so files", "error", err, "extractDir", extractDir)
 	}
 
 	ldPaths := []string{extractDir}
@@ -833,7 +838,7 @@ func scanMissingDependencies(binaryPath string, extractDir string) ([]string, er
 		if strings.Contains(outStr, "not a dynamic executable") || strings.Contains(outStr, "statically linked") {
 			return nil, nil
 		}
-		log.Debug().Err(err).Str("binary", binaryPath).Str("output", outStr).Msg("ldd scan returned non-zero")
+		log.Debug("ldd scan returned non-zero", "error", err, "binary", binaryPath, "output", outStr)
 	}
 
 	return parseMissingLibraries(string(out)), nil
@@ -848,7 +853,7 @@ func (r *GithubRelease) resolveBinaryDependencies(binaryPath string, extractDir 
 
 	missingLibs, err := scanMissingDependencies(binaryPath, extractDir)
 	if err != nil {
-		log.Warn().Err(err).Msg("failed to scan binary dependencies via ldd")
+		log.Warn("failed to scan binary dependencies via ldd", "error", err)
 		return nil
 	}
 
@@ -856,20 +861,16 @@ func (r *GithubRelease) resolveBinaryDependencies(binaryPath string, extractDir 
 		return nil
 	}
 
-	log.Info().
-		Strs("missing_libraries", missingLibs).
-		Msg("detected missing shared object dependencies")
+	log.Info("detected missing shared object dependencies", "missing_libraries", missingLibs)
 
 	if !r.CliParams.ResolveDeps {
-		log.Warn().
-			Strs("missing_libraries", missingLibs).
-			Msg("missing shared library dependencies detected; run with --resolve-deps to install them automatically")
+		log.Warn("missing shared library dependencies detected; run with --resolve-deps to install them automatically", "missing_libraries", missingLibs)
 		return nil
 	}
 
 	mgr, err := getNativeManager()
 	if err != nil {
-		log.Warn().Err(err).Msg("could not detect native package manager to resolve dependencies")
+		log.Warn("could not detect native package manager to resolve dependencies", "error", err)
 		return err
 	}
 
@@ -887,20 +888,17 @@ func (r *GithubRelease) resolveBinaryDependencies(binaryPath string, extractDir 
 		return nil
 	}
 
-	log.Info().
-		Str("manager", mgr.Name()).
-		Strs("packages", packagesToInstall).
-		Msg("installing missing dependencies via package manager")
+	log.Info("installing missing dependencies via package manager", "manager", mgr.Name(), "packages", packagesToInstall)
 
 	if r.CliParams.PromptDeps && !r.CliParams.DisablePrompts {
 		if !r.interactiveConfirm(fmt.Sprintf("Install missing dependencies: %s?", strings.Join(packagesToInstall, ", "))) {
-			log.Info().Msg("skipping dependency installation per user choice")
+			log.Info("skipping dependency installation per user choice")
 			return nil
 		}
 	}
 
 	if err := mgr.Install(packagesToInstall); err != nil {
-		log.Error().Err(err).Strs("packages", packagesToInstall).Msg("failed to install dependencies")
+		log.Error("failed to install dependencies", "error", err, "packages", packagesToInstall)
 		return err
 	}
 
@@ -912,7 +910,7 @@ func (r *GithubRelease) installBinary(binaryPath string) error {
 	if r.CliParams.DryRun {
 		destinationPath := r.resolveDestinationPath(binaryPath)
 		r.InstalledBinaries = append(r.InstalledBinaries, filepath.Base(destinationPath))
-		log.Info().Msgf("[dry-run] Would install binary: %s to %s", binaryPath, destinationPath)
+		log.Infof("[dry-run] Would install binary: %s to %s", binaryPath, destinationPath)
 		return nil
 	}
 	sourceStat, err := os.Stat(binaryPath)
@@ -925,7 +923,7 @@ func (r *GithubRelease) installBinary(binaryPath string) error {
 	}
 
 	if err := r.resolveBinaryDependencies(binaryPath, filepath.Dir(binaryPath)); err != nil {
-		log.Warn().Err(err).Msg("dependency resolution encountered an error")
+		log.Warn("dependency resolution encountered an error", "error", err)
 	}
 
 	source, err := os.Open(binaryPath)
@@ -940,8 +938,7 @@ func (r *GithubRelease) installBinary(binaryPath string) error {
 	destinationPath := r.resolveDestinationPath(binaryPath)
 	r.InstalledBinaries = append(r.InstalledBinaries, filepath.Base(destinationPath))
 
-	log.Info().
-		Msgf("will install %s to %s", binaryPath, destinationPath)
+	log.Infof("will install %s to %s", binaryPath, destinationPath)
 
 	_, err = os.Stat(destinationPath)
 	if err == nil {
@@ -961,7 +958,7 @@ func (r *GithubRelease) installBinary(binaryPath string) error {
 	destination, err := os.Create(destinationPath)
 	if err != nil {
 		if os.IsPermission(err) {
-			log.Info().Msg("permission denied, attempting to install with sudo")
+			log.Info("permission denied, attempting to install with sudo")
 			if err := r.ensureSudo(); err != nil {
 				return err
 			}
@@ -1005,7 +1002,7 @@ func (r *GithubRelease) ensureSudo() error {
 		if !r.CliParams.Interactive {
 			return fmt.Errorf("sudo session expired or unavailable; cannot prompt for password in headless mode (-D). Run 'sudo -v' beforehand or use an interactive session")
 		}
-		log.Warn().Msg("sudo session not cached; you may be prompted for your password")
+		log.Warn("sudo session not cached; you may be prompted for your password")
 	}
 	return nil
 }
@@ -1040,20 +1037,20 @@ func extractPackageName(binaryPath string, pkgType string) string {
 
 func (r *GithubRelease) installDeb(binaryPath string) error {
 	if r.CliParams.DryRun {
-		log.Info().Msgf("[dry-run] Would queue deb for batch install: %s", filepath.Base(binaryPath))
+		log.Infof("[dry-run] Would queue deb for batch install: %s", filepath.Base(binaryPath))
 		return nil
 	}
-	log.Info().Msgf("Queuing %s for batch installation...", filepath.Base(binaryPath))
+	log.Infof("Queuing %s for batch installation...", filepath.Base(binaryPath))
 	r.PendingDebs = append(r.PendingDebs, binaryPath)
 	return nil
 }
 
 func (r *GithubRelease) installRpm(binaryPath string) error {
 	if r.CliParams.DryRun {
-		log.Info().Msgf("[dry-run] Would queue rpm for batch install: %s", filepath.Base(binaryPath))
+		log.Infof("[dry-run] Would queue rpm for batch install: %s", filepath.Base(binaryPath))
 		return nil
 	}
-	log.Info().Msgf("Queuing %s for batch installation...", filepath.Base(binaryPath))
+	log.Infof("Queuing %s for batch installation...", filepath.Base(binaryPath))
 	r.PendingRpms = append(r.PendingRpms, binaryPath)
 	return nil
 }
@@ -1160,9 +1157,7 @@ func (r *GithubRelease) verifyChecksum(filePath, checksumFilePath string) error 
 	}
 
 	if expectedHash == "" {
-		log.Warn().
-			Str("filename", targetFilename).
-			Msg("no checksum entry found for file, skipping verification")
+		log.Warn("no checksum entry found for file, skipping verification", "filename", targetFilename)
 		return nil
 	}
 
@@ -1174,9 +1169,7 @@ func (r *GithubRelease) verifyChecksum(filePath, checksumFilePath string) error 
 	case 128: // SHA-512
 		hasher = sha512.New()
 	default:
-		log.Warn().
-			Int("hash_length", len(expectedHash)).
-			Msg("unknown hash algorithm, skipping verification")
+		log.Warn("unknown hash algorithm, skipping verification", "hash_length", len(expectedHash))
 		return nil
 	}
 
@@ -1197,17 +1190,14 @@ func (r *GithubRelease) verifyChecksum(filePath, checksumFilePath string) error 
 		return fmt.Errorf("checksum mismatch: expected %s, got %s", expectedHash, actualHash)
 	}
 
-	log.Info().
-		Str("filename", targetFilename).
-		Str("hash", actualHash).
-		Msg("checksum verified successfully")
+	log.Info("checksum verified successfully", "filename", targetFilename, "hash", actualHash)
 
 	return nil
 }
 
 func (r *GithubRelease) installWindows(binaryPath string) error {
 	if r.CliParams.DryRun {
-		log.Info().Msgf("[dry-run] Would install windows pkg: %s", binaryPath)
+		log.Infof("[dry-run] Would install windows pkg: %s", binaryPath)
 		return nil
 	}
 	var args []string
@@ -1234,20 +1224,20 @@ func (r *GithubRelease) installWindows(binaryPath string) error {
 	cmd.Stderr = os.Stderr
 	err := cmd.Run()
 	if err != nil {
-		log.Error().Err(err).Msgf("Failed to install Windows package")
+		log.Error("Failed to install Windows package", "error", err)
 		return err
 	}
-	log.Info().Msg("Successfully installed Windows package!")
+	log.Info("Successfully installed Windows package!")
 	return nil
 }
 
 func (r *GithubRelease) installMac(binaryPath string) error {
 	if r.CliParams.DryRun {
-		log.Info().Msgf("[dry-run] Would install mac pkg: %s", binaryPath)
+		log.Infof("[dry-run] Would install mac pkg: %s", binaryPath)
 		return nil
 	}
 	if strings.HasSuffix(strings.ToLower(binaryPath), ".dmg") {
-		log.Info().Msg("Mounting DMG...")
+		log.Info("Mounting DMG...")
 		cmd := execCommand("hdiutil", "attach", binaryPath, "-nobrowse", "-mountpoint", "/Volumes/gh-pt-dmg")
 		if err := cmd.Run(); err != nil {
 			return err
@@ -1258,7 +1248,7 @@ func (r *GithubRelease) installMac(binaryPath string) error {
 		if err := cpCmd.Run(); err != nil {
 			return err
 		}
-		log.Info().Msg("Successfully copied app from DMG!")
+		log.Info("Successfully copied app from DMG!")
 		return nil
 	} else if strings.HasSuffix(strings.ToLower(binaryPath), ".pkg") {
 		if err := r.ensureSudo(); err != nil {
@@ -1271,7 +1261,7 @@ func (r *GithubRelease) installMac(binaryPath string) error {
 		if err := cmd.Run(); err != nil {
 			return err
 		}
-		log.Info().Msg("Successfully installed macOS pkg!")
+		log.Info("Successfully installed macOS pkg!")
 		return nil
 	}
 	return fmt.Errorf("unsupported mac installer format: %s", binaryPath)
@@ -1295,12 +1285,34 @@ func (r *GithubRelease) GetLatestRelease() (*selector.SelectorItem, error) {
 }
 
 func (r *GithubRelease) Install() error {
-	pUI := ui.NewPacmanUI(r.CliParams.Repository)
-	if r.CliParams.DisableIcons {
-		pUI.DisableIcons = true
+	var pUI interface {
+		Start()
+		Stop()
+		Pause()
+		Resume()
+		Update(step int, a string, b string, c string, target string, e string)
+		UpdateSymlink(symlink string)
+		AddAsset(name string, fullName string, symlink string, installCmd string)
+		SetCurrentAsset(index int)
+		SetAssetInstallCmd(installCmd string)
+		WaitForAnimation()
 	}
-	r.UI = pUI
-	ui.GlobalPacman = pUI
+	if r.CliParams.ProgressBar == "conveyor" {
+		cUI := &ui.ConveyorUI{Repo: r.CliParams.Repository}
+		if r.CliParams.DisableIcons {
+			cUI.DisableIcons = true
+		}
+		r.UI = cUI
+		pUI = cUI
+	} else {
+		pacUI := ui.NewPacmanUI(r.CliParams.Repository)
+		if r.CliParams.DisableIcons {
+			pacUI.DisableIcons = true
+		}
+		r.UI = pacUI
+		ui.GlobalPacman = pacUI
+		pUI = pacUI
+	}
 	pUI.Update(0, "", "", "", r.CliParams.TargetPath, "")
 	pUI.Start()
 	defer func() {
@@ -1314,7 +1326,7 @@ func (r *GithubRelease) Install() error {
 		if len(r.CliParams.Sidecars) > 0 || r.CliParams.SidecarTargetPath != "" ||
 			len(r.CliParams.SidecarSymlinkTo) > 0 || r.CliParams.AISetupSidecars {
 			r.CliParams.IncludeSidecars = true
-			log.Debug().Msg("auto-enabled --include-sidecars due to --sidecar-* params")
+			log.Debug("auto-enabled --include-sidecars due to --sidecar-* params")
 		}
 	}
 
@@ -1325,20 +1337,12 @@ func (r *GithubRelease) Install() error {
 	}
 	releaseSelector, err := selector.ReleaseSelector(r.Client, r.CliParams.Repository, r.CliParams.ReleaseVersion, r.CliParams.Interactive, prerelease, stable)
 	if err != nil {
-		log.Error().
-			Str("repository", r.CliParams.Repository).
-			Str("release version", r.CliParams.ReleaseVersion).
-			Err(err).
-			Msg("could not create release selector")
+		log.Error("could not create release selector", "repository", r.CliParams.Repository, "release version", r.CliParams.ReleaseVersion, "error", err)
 		return err
 	}
 	releases, err := releaseSelector.Run()
 	if err != nil {
-		log.Error().
-			Str("repository", r.CliParams.Repository).
-			Str("release version", r.CliParams.ReleaseVersion).
-			Err(err).
-			Msg("could not select a release")
+		log.Error("could not select a release", "repository", r.CliParams.Repository, "release version", r.CliParams.ReleaseVersion, "error", err)
 		return err
 	}
 
@@ -1368,34 +1372,26 @@ func (r *GithubRelease) Install() error {
 			AllowForeignArch: r.CliParams.AllowForeignArch,
 		})
 		if err != nil {
-			log.Error().
-				Str("repository", r.CliParams.Repository).
-				Int("release id", release.Id).
-				Str("release name", release.Name).
-				Str("asset name matcher", r.CliParams.ReleaseAsset).
-				Err(err).
-				Msg("could not create release asset selector")
+			log.Error("could not create release asset selector", "repository", r.CliParams.Repository, "release id", release.Id, "release name", release.Name, "asset name matcher", r.CliParams.ReleaseAsset, "error", err)
 			return err
 		}
 		assets, err = assetSelector.Run()
 		if err == nil {
 			selectedRelease = release
 			if attempt > 0 {
-				log.Info().
-					Str("repository", r.CliParams.Repository).
-					Str("release", release.Name).
-					Int("attempt", attempt+1).
-					Msg("found assets in older release")
+				log.Info("found assets in older release", "repository", r.CliParams.Repository, "release", release.Name, "attempt", attempt+1)
 			}
 			break
 		}
 
 		if attempt < maxAttempts-1 {
-			log.Warn().
-				Str("repository", r.CliParams.Repository).
-				Str("release", release.Name).
-				Err(err).
-				Msg("no assets found, trying older release")
+			nextRelease := releases[attempt+1]
+			log.Warn("Unable to find release assets for platform to install in version => attempting to find platform assets in the prior version",
+				"repository", r.CliParams.Repository,
+				"platform", runtime.GOOS+"/"+runtime.GOARCH,
+				"failed_version", release.Name,
+				"next_version", nextRelease.Name,
+				"error", err)
 		}
 	}
 
@@ -1403,11 +1399,7 @@ func (r *GithubRelease) Install() error {
 		if r.CliParams.SearchForInstallInstructionsIfNoReleaseAssets {
 			r.fallbackToReadmeInstructions()
 		}
-		log.Error().
-			Str("repository", r.CliParams.Repository).
-			Str("release asset name matcher", r.CliParams.ReleaseAsset).
-			Int("releases_tried", maxAttempts).
-			Msg("could not select release asset after trying multiple releases")
+		log.Error("could not select release asset after trying multiple releases", "repository", r.CliParams.Repository, "release asset name matcher", r.CliParams.ReleaseAsset, "releases_tried", maxAttempts)
 		return fmt.Errorf("no matching assets found in %d releases for %s", maxAttempts, r.CliParams.Repository)
 	}
 
@@ -1525,9 +1517,7 @@ func (r *GithubRelease) Install() error {
 
 	downloadDir, err := os.MkdirTemp("", "*")
 	if err != nil {
-		log.Error().
-			Err(err).
-			Msg("could not create temporary download directory")
+		log.Error("could not create temporary download directory", "error", err)
 		return err
 	}
 	defer func() {
@@ -1547,16 +1537,12 @@ func (r *GithubRelease) Install() error {
 
 			checksumFileName := r.findChecksumFile(allAssets)
 			if checksumFileName != "" {
-				log.Info().
-					Str("checksum_file", checksumFileName).
-					Msg("found checksum file, downloading")
+				log.Info("found checksum file, downloading", "checksum_file", checksumFileName)
 
 				_, _, execErr := ghExec("release", "download", releases[0].Name,
 					"--repo", r.CliParams.Repository, "--pattern", checksumFileName, "--dir", downloadDir)
 				if execErr != nil {
-					log.Warn().
-						Err(execErr).
-						Msg("failed to download checksum file, skipping verification")
+					log.Warn("failed to download checksum file, skipping verification", "error", execErr)
 				} else {
 					checksumFilePath = filepath.Join(downloadDir, checksumFileName)
 				}
@@ -1575,14 +1561,7 @@ func (r *GithubRelease) Install() error {
 			"--repo", r.CliParams.Repository, "--pattern", asset.Name, "--dir", downloadDir)
 		if execErr != nil {
 			execErr = fmt.Errorf("failed to run gh command: %s", stdErr.String())
-			log.Error().
-				Str("repository", r.CliParams.Repository).
-				Int("release id", releases[0].Id).
-				Str("release name", releases[0].Name).
-				Str("release asset name", asset.Name).
-				Str("download directory", downloadDir).
-				Err(execErr).
-				Msg("could not download release asset")
+			log.Error("could not download release asset", "repository", r.CliParams.Repository, "release id", releases[0].Id, "release name", releases[0].Name, "release asset name", asset.Name, "download directory", downloadDir, "error", execErr)
 			if r.CliParams.Interactive {
 				if pUI != nil {
 					pUI.Stop()
@@ -1598,23 +1577,13 @@ func (r *GithubRelease) Install() error {
 			}
 		}
 
-		log.Info().
-			Str("repository", r.CliParams.Repository).
-			Int("release id", releases[0].Id).
-			Str("release name", releases[0].Name).
-			Str("release asset name", asset.Name).
-			Str("download directory", downloadDir).
-			Str("output", stdOut.String()).
-			Msg("downloaded release asset")
+		log.Info("downloaded release asset", "repository", r.CliParams.Repository, "release id", releases[0].Id, "release name", releases[0].Name, "release asset name", asset.Name, "download directory", downloadDir, "output", stdOut.String())
 
 		// Verify checksum if available
 		downloadedAssetPath := filepath.Join(downloadDir, asset.Name)
 		if checksumFilePath != "" && r.CliParams.VerifyChecksum {
 			if err := r.verifyChecksum(downloadedAssetPath, checksumFilePath); err != nil {
-				log.Error().
-					Err(err).
-					Str("asset", asset.Name).
-					Msg("checksum verification failed")
+				log.Error("checksum verification failed", "error", err, "asset", asset.Name)
 				return fmt.Errorf("checksum verification failed for %s: %w", asset.Name, err)
 			}
 		}
@@ -1639,30 +1608,12 @@ func (r *GithubRelease) Install() error {
 			Repository:   r.CliParams.Repository,
 		})
 		if execErr != nil {
-			log.Error().
-				Str("repository", r.CliParams.Repository).
-				Int("release id", releases[0].Id).
-				Str("release name", releases[0].Name).
-				Str("release asset name", asset.Name).
-				Str("downloaded asset", filepath.Join(downloadDir, asset.Name)).
-				Strs("asset binary name matchers", r.CliParams.AssetBinaries).
-				Str("asset binary regexp matcher", r.CliParams.AssetBinariesRegexp).
-				Err(execErr).
-				Msg("could not create release asset binary selector")
+			log.Error("could not create release asset binary selector", "repository", r.CliParams.Repository, "release id", releases[0].Id, "release name", releases[0].Name, "release asset name", asset.Name, "downloaded asset", filepath.Join(downloadDir, asset.Name), "asset binary name matchers", r.CliParams.AssetBinaries, "asset binary regexp matcher", r.CliParams.AssetBinariesRegexp, "error", execErr)
 			return execErr
 		}
 		binaries, execErr := binarySelector.Run()
 		if execErr != nil {
-			log.Error().
-				Str("repository", r.CliParams.Repository).
-				Int("release id", releases[0].Id).
-				Str("release name", releases[0].Name).
-				Str("release asset name", asset.Name).
-				Str("downloaded asset", filepath.Join(downloadDir, asset.Name)).
-				Strs("asset binary name matchers", r.CliParams.AssetBinaries).
-				Str("asset binary regexp matcher", r.CliParams.AssetBinariesRegexp).
-				Err(execErr).
-				Msg("could not select release asset binary")
+			log.Error("could not select release asset binary", "repository", r.CliParams.Repository, "release id", releases[0].Id, "release name", releases[0].Name, "release asset name", asset.Name, "downloaded asset", filepath.Join(downloadDir, asset.Name), "asset binary name matchers", r.CliParams.AssetBinaries, "asset binary regexp matcher", r.CliParams.AssetBinariesRegexp, "error", execErr)
 			return execErr
 		}
 
@@ -1753,12 +1704,12 @@ func (r *GithubRelease) Install() error {
 				// Wipe old sidecars on upgrade
 				if r.CliParams.IsUpgradeCmd && r.SidecarTargetPath != "" {
 					if err := os.RemoveAll(r.SidecarTargetPath); err != nil {
-						log.Warn().Err(err).Msg("failed to purge old sidecars")
+						log.Warn("failed to purge old sidecars", "error", err)
 					}
 				}
 				targetDir := r.resolveSidecarTargetPath()
 				if err := os.MkdirAll(targetDir, 0755); err != nil {
-					log.Warn().Err(err).Msg("could not create sidecar target directory")
+					log.Warn("could not create sidecar target directory", "error", err)
 				}
 				r.SidecarTargetPath = targetDir
 
@@ -1788,7 +1739,7 @@ func (r *GithubRelease) Install() error {
 						}
 					}
 				}
-				log.Info().Int("count", len(suspectedSidecars)).Msg("auto-included suspected sidecar assets")
+				log.Info("auto-included suspected sidecar assets", "count", len(suspectedSidecars))
 			} else {
 				// Otherwise, use the existing heuristic handling (warn or prompt)
 				_, _ = r.handleSuspectedSidecars(suspectedSidecars, extractDir, fsObj, releases[0].Id)
@@ -1800,15 +1751,15 @@ func (r *GithubRelease) Install() error {
 			// Wipe old sidecars on upgrade
 			if r.CliParams.IsUpgradeCmd && r.SidecarTargetPath != "" {
 				if err := os.RemoveAll(r.SidecarTargetPath); err != nil {
-					log.Warn().Err(err).Msg("failed to purge old sidecars")
+					log.Warn("failed to purge old sidecars", "error", err)
 				}
 			}
 			_ = r.extractExplicitSidecars(extractDir, fsObj)
-			
+
 			// Run AI setup if requested
 			if r.CliParams.AISetupSidecars {
 				if err := r.runAISidecarSetup(); err != nil {
-					log.Warn().Err(err).Msg("AI sidecar setup failed")
+					log.Warn("AI sidecar setup failed", "error", err)
 				}
 			}
 		}
@@ -1837,21 +1788,12 @@ func (r *GithubRelease) Install() error {
 		}
 
 		for binaryIdx, binary := range binaries {
-			log.Info().
-				Str("repository", r.CliParams.Repository).
-				Int("release id", releases[0].Id).
-				Str("release name", releases[0].Name).
-				Str("release asset name", asset.Name).
-				Str("downloaded asset", filepath.Join(downloadDir, asset.Name)).
-				Str("release asset binary", binary.Name).
-				Msg("processing selected release asset binary")
+			log.Info("processing selected release asset binary", "repository", r.CliParams.Repository, "release id", releases[0].Id, "release name", releases[0].Name, "release asset name", asset.Name, "downloaded asset", filepath.Join(downloadDir, asset.Name), "release asset binary", binary.Name)
 
 			actualDownloadPath := binary.DownloadPath
 
 			if binary.Compressed && binary.BinaryType != selector.BinaryExecutable {
-				log.Debug().
-					Str("release asset binary", binary.Name).
-					Msg("extracting archived installer to temporary directory")
+				log.Debug("extracting archived installer to temporary directory", "release asset binary", binary.Name)
 
 				actualDownloadPath = filepath.Join(downloadDir, binary.Name)
 				sourceFile, openErr := binary.Fs.Open(binary.FsPath)
@@ -1879,37 +1821,37 @@ func (r *GithubRelease) Install() error {
 			var installCmd string
 			switch binary.BinaryType {
 			case selector.BinaryDebInstaller:
-				log.Debug().Msg("binary is a deb installer")
+				log.Debug("binary is a deb installer")
 				binariesOutput[binary.Name] = "deb"
 				installCmd = fmt.Sprintf("sudo apt install %s", actualDownloadPath)
 				execErr = r.installDeb(actualDownloadPath)
 			case selector.BinaryRpmInstaller:
-				log.Debug().Msg("binary is a rpm installer")
+				log.Debug("binary is a rpm installer")
 				binariesOutput[binary.Name] = "rpm"
 				installCmd = fmt.Sprintf("sudo dnf install %s", actualDownloadPath)
 				execErr = r.installRpm(actualDownloadPath)
 			case selector.BinaryPacmanInstaller:
-				log.Debug().Msg("binary is a pacman installer")
+				log.Debug("binary is a pacman installer")
 				binariesOutput[binary.Name] = "pacman"
 				installCmd = fmt.Sprintf("sudo pacman -U %s", actualDownloadPath)
 				execErr = r.installPacman(actualDownloadPath)
 			case selector.BinaryPkgInstaller:
-				log.Debug().Msg("binary is a freebsd pkg/txz installer")
+				log.Debug("binary is a freebsd pkg/txz installer")
 				binariesOutput[binary.Name] = "pkg"
 				installCmd = fmt.Sprintf("sudo pkg install %s", actualDownloadPath)
 				execErr = r.installPkg(actualDownloadPath)
 			case selector.BinaryMacInstaller:
-				log.Debug().Msg("binary is a mac installer")
+				log.Debug("binary is a mac installer")
 				binariesOutput[binary.Name] = "mac"
 				installCmd = fmt.Sprintf("sudo installer -pkg %s -target /", actualDownloadPath)
 				execErr = r.installMac(actualDownloadPath)
 			case selector.BinaryWindowsInstaller:
-				log.Debug().Msg("binary is a windows installer")
+				log.Debug("binary is a windows installer")
 				binariesOutput[binary.Name] = "windows"
 				installCmd = fmt.Sprintf("msiexec /i %s", actualDownloadPath)
 				execErr = r.installWindows(actualDownloadPath)
 			default:
-				log.Debug().Msg("binary is a plain executable")
+				log.Debug("binary is a plain executable")
 				binariesOutput[binary.Name] = "binary"
 				if binary.Compressed {
 					execErr = r.installArchivedBinary(binary.Fs, binary.FsPath)
@@ -1924,15 +1866,7 @@ func (r *GithubRelease) Install() error {
 			}
 
 			if execErr != nil {
-				log.Error().
-					Str("repository", r.CliParams.Repository).
-					Int("release id", releases[0].Id).
-					Str("release name", releases[0].Name).
-					Str("release asset name", asset.Name).
-					Str("downloaded asset", filepath.Join(downloadDir, asset.Name)).
-					Str("release asset binary", binary.Name).
-					Err(execErr).
-					Msg("could not install release asset binary")
+				log.Error("could not install release asset binary", "repository", r.CliParams.Repository, "release id", releases[0].Id, "release name", releases[0].Name, "release asset name", asset.Name, "downloaded asset", filepath.Join(downloadDir, asset.Name), "release asset binary", binary.Name, "error", execErr)
 				return execErr
 			}
 
@@ -1983,7 +1917,7 @@ func (r *GithubRelease) Install() error {
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
-		log.Info().Msgf("Executing batched package install: sudo %s", strings.Join(args, " "))
+		log.Infof("Executing batched package install: sudo %s", strings.Join(args, " "))
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("batched .deb installation failed: %w", err)
 		}
@@ -2022,7 +1956,7 @@ func (r *GithubRelease) Install() error {
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
-		log.Info().Msgf("Executing batched package install: sudo %s", strings.Join(args, " "))
+		log.Infof("Executing batched package install: sudo %s", strings.Join(args, " "))
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("batched .rpm installation failed: %w", err)
 		}
@@ -2064,7 +1998,7 @@ func (r *GithubRelease) Install() error {
 				FallbackReleases:         r.CliParams.FallbackReleases,
 			})
 		} else {
-			log.Warn().Err(err).Msg("could not save installed app state")
+			log.Warn("could not save installed app state", "error", err)
 		}
 	}
 
@@ -2097,7 +2031,7 @@ func (r *GithubRelease) Install() error {
 func (r *GithubRelease) installPkg(binaryPath string) error {
 	basePath := "./" + filepath.Base(binaryPath)
 	if r.CliParams.DryRun {
-		log.Info().Msgf("[dry-run] Would install freebsd pkg: %s", filepath.Base(binaryPath))
+		log.Infof("[dry-run] Would install freebsd pkg: %s", filepath.Base(binaryPath))
 		return nil
 	}
 	if err := r.ensureSudo(); err != nil {
@@ -2125,18 +2059,13 @@ func (r *GithubRelease) installPkg(binaryPath string) error {
 	cmd.Stderr = os.Stderr
 	err := cmd.Run()
 	if err != nil {
-		log.Error().
-			Str("installer binary", binaryPath).
-			Err(err).
-			Msgf("'sudo %s' failed", strings.Join(args, " "))
+		log.Error(fmt.Sprintf("'sudo %s' failed", strings.Join(args, " ")), "installer binary", binaryPath, "error", err)
 		if r.CliParams.Interactive {
 			pterm.Error.Println("Failed to install FreeBSD package")
 		}
 		return err
 	}
-	log.Info().
-		Str("installer binary", binaryPath).
-		Msgf("ran 'sudo %s'", strings.Join(args, " "))
+	log.Info(fmt.Sprintf("ran 'sudo %s'", strings.Join(args, " ")), "installer binary", binaryPath)
 	if r.CliParams.Interactive {
 		pterm.Success.Println("Successfully installed FreeBSD package!")
 	}
@@ -2145,7 +2074,7 @@ func (r *GithubRelease) installPkg(binaryPath string) error {
 
 func (r *GithubRelease) installPacman(binaryPath string) error {
 	if r.CliParams.DryRun {
-		log.Info().Msgf("[dry-run] Would install pacman pkg: %s", filepath.Base(binaryPath))
+		log.Infof("[dry-run] Would install pacman pkg: %s", filepath.Base(binaryPath))
 		return nil
 	}
 	if err := r.ensureSudo(); err != nil {
@@ -2154,9 +2083,7 @@ func (r *GithubRelease) installPacman(binaryPath string) error {
 	if name := extractPackageName(binaryPath, "pacman"); name != "" {
 		r.InstalledPackageNames = append(r.InstalledPackageNames, name)
 	}
-	log.Debug().
-		Str("binaryPath", binaryPath).
-		Msg("installing pacman package")
+	log.Debug("installing pacman package", "binaryPath", binaryPath)
 
 	var cmd *exec.Cmd
 	basePath := "./" + filepath.Base(binaryPath)

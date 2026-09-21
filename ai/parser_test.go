@@ -1,0 +1,304 @@
+package ai_test
+
+import (
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/joshsukhdeo/gh-pt/ai"
+)
+
+func TestParseAIOutput_ValidDirectives(t *testing.T) {
+	raw := `Here is the build plan:
+
+` + "```ghpt-manifest" + `
+toolchain gcc
+dep libfoo-dev apt
+dep cmake mise
+` + "```" + `
+
+And here is the compilation script:
+
+` + "```bash" + `
+#!/bin/bash
+set -euo pipefail
+
+cmake -B build
+cmake --build build -j$(nproc)
+` + "```" + `
+
+Good luck building!
+`
+
+	payload, err := ai.ParseAIOutput(raw)
+	require.NoError(t, err)
+	require.NotNil(t, payload)
+
+	assert.Equal(t, "gcc", payload.Toolchain)
+	require.Len(t, payload.Dependencies, 2)
+	assert.Equal(t, "libfoo-dev", payload.Dependencies[0].Name)
+	assert.Equal(t, "apt", payload.Dependencies[0].Resolver)
+	assert.Equal(t, "cmake", payload.Dependencies[1].Name)
+	assert.Equal(t, "mise", payload.Dependencies[1].Resolver)
+
+	expectedScript := `#!/bin/bash
+set -euo pipefail
+
+cmake -B build
+cmake --build build -j$(nproc)`
+	assert.Equal(t, expectedScript, payload.Script)
+}
+
+func TestParseAIOutput_ValidShBlock(t *testing.T) {
+	raw := `
+` + "```ghpt-manifest" + `
+toolchain cargo
+dep openssl cargo
+` + "```" + `
+
+` + "```sh" + `
+cargo build --release
+` + "```"
+
+	payload, err := ai.ParseAIOutput(raw)
+	require.NoError(t, err)
+	require.NotNil(t, payload)
+
+	assert.Equal(t, "cargo", payload.Toolchain)
+	require.Len(t, payload.Dependencies, 1)
+	assert.Equal(t, "openssl", payload.Dependencies[0].Name)
+	assert.Equal(t, "cargo", payload.Dependencies[0].Resolver)
+	assert.Equal(t, "cargo build --release", payload.Script)
+}
+
+func TestParseAIOutput_MissingManifest(t *testing.T) {
+	raw := `Here is the compilation script:
+
+` + "```bash" + `
+cargo build --release
+` + "```"
+
+	payload, err := ai.ParseAIOutput(raw)
+	require.Error(t, err)
+	assert.Nil(t, payload)
+	assert.True(t, errors.Is(err, ai.ErrMissingManifest))
+}
+
+func TestParseAIOutput_MissingScript(t *testing.T) {
+	raw := `
+` + "```ghpt-manifest" + `
+toolchain gcc
+` + "```"
+
+	payload, err := ai.ParseAIOutput(raw)
+	require.Error(t, err)
+	assert.Nil(t, payload)
+	assert.True(t, errors.Is(err, ai.ErrMissingScript))
+}
+
+func TestParseAIOutput_MalformedDirective_MissingDepResolver(t *testing.T) {
+	raw := `
+` + "```ghpt-manifest" + `
+toolchain gcc
+dep libfoo-dev
+` + "```" + `
+
+` + "```bash" + `
+make -j4
+` + "```"
+
+	payload, err := ai.ParseAIOutput(raw)
+	require.Error(t, err)
+	assert.Nil(t, payload)
+	assert.True(t, errors.Is(err, ai.ErrMalformedDirective))
+}
+
+func TestParseAIOutput_MalformedDirective_MissingToolchainArg(t *testing.T) {
+	raw := `
+` + "```ghpt-manifest" + `
+toolchain
+` + "```" + `
+
+` + "```bash" + `
+make
+` + "```"
+
+	payload, err := ai.ParseAIOutput(raw)
+	require.Error(t, err)
+	assert.Nil(t, payload)
+	assert.True(t, errors.Is(err, ai.ErrMalformedDirective))
+}
+
+func TestParseAIOutput_MalformedDirective_UnknownDirective(t *testing.T) {
+	raw := `
+` + "```ghpt-manifest" + `
+toolchain gcc
+install libfoo-dev apt
+` + "```" + `
+
+` + "```bash" + `
+make
+` + "```"
+
+	payload, err := ai.ParseAIOutput(raw)
+	require.Error(t, err)
+	assert.Nil(t, payload)
+	assert.True(t, errors.Is(err, ai.ErrMalformedDirective))
+}
+
+func TestParseAIOutput_ExtraCodeBlocks_PicksFirst(t *testing.T) {
+	raw := `
+Some YAML:
+` + "```yaml" + `
+version: 2
+` + "```" + `
+
+First manifest (the real one):
+` + "```ghpt-manifest" + `
+toolchain gcc
+dep libfirst-dev apt
+` + "```" + `
+
+Some python:
+` + "```python" + `
+print("Hello world")
+` + "```" + `
+
+First Bash (the real one):
+` + "```bash" + `
+./configure
+make
+` + "```" + `
+
+Second manifest (ignored):
+` + "```ghpt-manifest" + `
+toolchain clang
+dep libsecond-dev dnf
+` + "```" + `
+
+Second bash (ignored):
+` + "```bash" + `
+echo "ignore me"
+` + "```"
+
+	payload, err := ai.ParseAIOutput(raw)
+	require.NoError(t, err)
+	require.NotNil(t, payload)
+
+	assert.Equal(t, "gcc", payload.Toolchain)
+	require.Len(t, payload.Dependencies, 1)
+	assert.Equal(t, "libfirst-dev", payload.Dependencies[0].Name)
+	assert.Equal(t, "./configure\nmake", payload.Script)
+}
+
+func TestParseAIOutput_EmptyInput(t *testing.T) {
+	testCases := []struct {
+		name  string
+		input string
+	}{
+		{"completely empty", ""},
+		{"whitespace only", "   \n\t  \r\n  "},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			payload, err := ai.ParseAIOutput(tc.input)
+			require.Error(t, err)
+			assert.Nil(t, payload)
+			assert.True(t, errors.Is(err, ai.ErrMissingManifest))
+		})
+	}
+}
+
+func TestParseAIOutput_ReversedBlockOrder(t *testing.T) {
+	raw := `
+Bash first:
+` + "```bash" + `
+make -j4
+` + "```" + `
+
+Manifest second:
+` + "```ghpt-manifest" + `
+toolchain make
+` + "```"
+
+	payload, err := ai.ParseAIOutput(raw)
+	require.NoError(t, err)
+	require.NotNil(t, payload)
+
+	assert.Equal(t, "make", payload.Toolchain)
+	assert.Empty(t, payload.Dependencies)
+	assert.Equal(t, "make -j4", payload.Script)
+}
+
+func TestParseAIOutput_NoDeps(t *testing.T) {
+	raw := `
+` + "```ghpt-manifest" + `
+toolchain go
+` + "```" + `
+
+` + "```bash" + `
+go build -v -o gh-pt .
+` + "```"
+
+	payload, err := ai.ParseAIOutput(raw)
+	require.NoError(t, err)
+	require.NotNil(t, payload)
+
+	assert.Equal(t, "go", payload.Toolchain)
+	assert.NotNil(t, payload.Dependencies)
+	assert.Empty(t, payload.Dependencies)
+	assert.Equal(t, "go build -v -o gh-pt .", payload.Script)
+}
+
+func TestParseAIOutput_EmptyBashBlock(t *testing.T) {
+	raw := `
+` + "```ghpt-manifest" + `
+toolchain gcc
+` + "```" + `
+
+` + "```bash" + `
+   
+` + "```"
+
+	payload, err := ai.ParseAIOutput(raw)
+	require.Error(t, err)
+	assert.Nil(t, payload)
+	assert.True(t, errors.Is(err, ai.ErrMissingScript))
+}
+
+func TestManifestTemplate(t *testing.T) {
+	assert.NotEmpty(t, ai.ManifestTemplate)
+	assert.True(t, strings.Contains(ai.ManifestTemplate, "DEPENDENCY MANIFEST"))
+	assert.True(t, strings.Contains(ai.ManifestTemplate, "COMPILATION SCRIPT"))
+	assert.True(t, strings.Contains(ai.ManifestTemplate, "toolchain"))
+	assert.True(t, strings.Contains(ai.ManifestTemplate, "ghpt-manifest"))
+	assert.True(t, strings.Contains(ai.ManifestTemplate, "dep"))
+	// Must NOT contain JSON instructions
+	assert.False(t, strings.Contains(ai.ManifestTemplate, "output as a single JSON"))
+}
+
+func TestParseAIOutput_AIOutputsJSON_FailsCleanly(t *testing.T) {
+	// If the AI ignores instructions and outputs JSON instead of directives,
+	// the parser must reject it with a clear error — not silently accept garbage.
+	raw := `
+` + "```ghpt-manifest" + `
+{
+  "toolchain": "gcc",
+  "dependencies": [{"name": "libfoo-dev", "resolver": "apt"}]
+}
+` + "```" + `
+
+` + "```bash" + `
+make
+` + "```"
+
+	payload, err := ai.ParseAIOutput(raw)
+	require.Error(t, err)
+	assert.Nil(t, payload)
+	assert.True(t, errors.Is(err, ai.ErrMalformedDirective),
+		"JSON inside ghpt-manifest block should fail as unknown directive, got: %v", err)
+}

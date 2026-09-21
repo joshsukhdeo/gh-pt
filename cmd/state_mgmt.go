@@ -9,10 +9,10 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/charmbracelet/log"
 	"github.com/joshsukhdeo/gh-pt/state"
 	"github.com/mattn/go-runewidth"
 	"github.com/pterm/pterm"
-	"github.com/rs/zerolog/log"
 )
 
 var execCommand = exec.Command
@@ -212,7 +212,7 @@ func ListState(rList ...*RootCLI) error {
 	tableData = fixEmojiPadding(tableData)
 
 	if err := pterm.DefaultTable.WithHasHeader().WithBoxed().WithData(tableData).Render(); err != nil {
-		log.Warn().Err(err).Msg("failed to render table")
+		log.Warn("failed to render table", "error", err)
 	}
 	return nil
 }
@@ -281,13 +281,13 @@ func RmStateOnly(target string) error {
 
 	toRemove := findTargetApps(st, target)
 	if len(toRemove) == 0 {
-		log.Warn().Msgf("No application found matching '%s'", target)
+		log.Warnf("No application found matching '%s'", target)
 		return nil
 	}
 
 	for _, r := range toRemove {
 		delete(st.Apps, r)
-		log.Info().Msgf("Removed %s from state tracking only.", r)
+		log.Infof("Removed %s from state tracking only.", r)
 		state.LogHistory("remove", r, "")
 	}
 	return st.Save()
@@ -300,16 +300,24 @@ func RemoveApp(target string, purge bool) error {
 
 	toRemove := findTargetApps(st, target)
 	if len(toRemove) == 0 {
-		log.Warn().Msgf("No application found matching '%s'", target)
+		log.Warnf("No application found matching '%s'", target)
 		return nil
 	}
 
 	for _, r := range toRemove {
 		app := st.Apps[r]
 
+		if app != nil && app.Hooks != nil {
+			if script, ok := app.Hooks["pre-uninstall"]; ok && strings.TrimSpace(script) != "" {
+				if err := executeHookScript("pre-uninstall", r, script); err != nil {
+					return fmt.Errorf("pre-uninstall hook failed for %s: %w", r, err)
+				}
+			}
+		}
+
 		if len(app.PackageNames) > 0 {
 			for _, pkgName := range app.PackageNames {
-				log.Info().Msgf("Uninstalling package %s...", pkgName)
+				log.Infof("Uninstalling package %s...", pkgName)
 				var cmd *exec.Cmd
 				if _, err := exec.LookPath("dpkg"); err == nil {
 					cmd = execCommand("sudo", "dpkg", "-r", pkgName)
@@ -323,9 +331,9 @@ func RemoveApp(target string, purge bool) error {
 
 				if cmd != nil {
 					if err := cmd.Run(); err != nil {
-						log.Warn().Err(err).Msgf("Failed to uninstall package %s", pkgName)
+						log.Warn(fmt.Sprintf("Failed to uninstall package %s", pkgName), "error", err)
 					} else {
-						log.Info().Msgf("Successfully uninstalled %s", pkgName)
+						log.Infof("Successfully uninstalled %s", pkgName)
 					}
 				}
 			}
@@ -337,24 +345,24 @@ func RemoveApp(target string, purge bool) error {
 				for _, renamed := range app.Rename {
 					binPath, err := safeDeletePath(app.TargetPath, renamed)
 					if err != nil {
-						log.Warn().Err(err).Msgf("Skipping unsafe binary name %q", renamed)
+						log.Warn(fmt.Sprintf("Skipping unsafe binary name %q", renamed), "error", err)
 						continue
 					}
 					if err := os.Remove(binPath); err != nil && !os.IsNotExist(err) {
-						log.Warn().Err(err).Msgf("Failed to remove binary %s", binPath)
+						log.Warn(fmt.Sprintf("Failed to remove binary %s", binPath), "error", err)
 					} else if err == nil {
-						log.Info().Msgf("Deleted %s", binPath)
+						log.Infof("Deleted %s", binPath)
 					}
 				}
 			} else {
 				binPath, err := safeDeletePath(app.TargetPath, repoName)
 				if err != nil {
-					log.Warn().Err(err).Msgf("Skipping unsafe binary name %q", repoName)
+					log.Warn(fmt.Sprintf("Skipping unsafe binary name %q", repoName), "error", err)
 				} else {
 					if err := os.Remove(binPath); err != nil && !os.IsNotExist(err) {
-						log.Warn().Err(err).Msgf("Failed to remove binary %s", binPath)
+						log.Warn(fmt.Sprintf("Failed to remove binary %s", binPath), "error", err)
 					} else if err == nil {
-						log.Info().Msgf("Deleted %s", binPath)
+						log.Infof("Deleted %s", binPath)
 					}
 				}
 			}
@@ -362,45 +370,45 @@ func RemoveApp(target string, purge bool) error {
 			for _, binName := range app.AssetBinaries {
 				binPath, err := safeDeletePath(app.TargetPath, binName)
 				if err != nil {
-					log.Warn().Err(err).Msgf("Skipping unsafe binary name %q", binName)
+					log.Warn(fmt.Sprintf("Skipping unsafe binary name %q", binName), "error", err)
 					continue
 				}
 				if err := os.Remove(binPath); err != nil && !os.IsNotExist(err) {
-					log.Warn().Err(err).Msgf("Failed to delete %s", binPath)
+					log.Warn(fmt.Sprintf("Failed to delete %s", binPath), "error", err)
 				} else if err == nil {
-					log.Info().Msgf("Deleted %s", binPath)
+					log.Infof("Deleted %s", binPath)
 				}
 			}
 		}
 
 		if app.SidecarTargetPath != "" {
 			if err := os.RemoveAll(app.SidecarTargetPath); err != nil {
-				log.Warn().Err(err).Msgf("Failed to purge sidecar directory %s", app.SidecarTargetPath)
+				log.Warn(fmt.Sprintf("Failed to purge sidecar directory %s", app.SidecarTargetPath), "error", err)
 			} else {
-				log.Info().Msgf("Deleted sidecar assets at %s", app.SidecarTargetPath)
+				log.Infof("Deleted sidecar assets at %s", app.SidecarTargetPath)
 			}
 		}
 
 		if app.Clone || app.Fork {
 			if purge && app.TargetPath != "" {
 				if err := os.RemoveAll(app.TargetPath); err != nil {
-					log.Warn().Err(err).Msgf("Failed to purge repository directory %s", app.TargetPath)
+					log.Warn(fmt.Sprintf("Failed to purge repository directory %s", app.TargetPath), "error", err)
 				} else {
-					log.Info().Msgf("Purged cloned/forked repository at %s", app.TargetPath)
+					log.Infof("Purged cloned/forked repository at %s", app.TargetPath)
 				}
 			} else {
-				log.Info().Msgf("Kept repository directory at %s (use --purge to delete)", app.TargetPath)
+				log.Infof("Kept repository directory at %s (use --purge to delete)", app.TargetPath)
 			}
 		}
 
 		if app.CompileScript != "" {
 			if err := os.Remove(app.CompileScript); err != nil && !os.IsNotExist(err) {
-				log.Warn().Err(err).Msgf("Failed to remove compile script %s", app.CompileScript)
+				log.Warn(fmt.Sprintf("Failed to remove compile script %s", app.CompileScript), "error", err)
 			} else if err == nil {
 				if purge {
-					log.Info().Msgf("Purged compile script %s", app.CompileScript)
+					log.Infof("Purged compile script %s", app.CompileScript)
 				} else {
-					log.Info().Msgf("Removed compile script %s", app.CompileScript)
+					log.Infof("Removed compile script %s", app.CompileScript)
 				}
 			}
 
@@ -412,7 +420,7 @@ func RemoveApp(target string, purge bool) error {
 		}
 
 		delete(st.Apps, r)
-		log.Info().Msgf("Removed %s from state tracking.", r)
+		log.Infof("Removed %s from state tracking.", r)
 		state.LogHistory("remove", r, "")
 	}
 	return st.Save()
@@ -426,14 +434,14 @@ func PinAppState(target string) error {
 
 	toPin := findTargetApps(st, target)
 	if len(toPin) == 0 {
-		log.Warn().Msgf("No application found matching '%s'", target)
+		log.Warnf("No application found matching '%s'", target)
 		return nil
 	}
 
 	for _, r := range toPin {
 		app := st.Apps[r]
 		app.Pinned = true
-		log.Info().Msgf("Pinned %s in state.", r)
+		log.Infof("Pinned %s in state.", r)
 	}
 	return st.Save()
 }
@@ -544,7 +552,7 @@ func editStateRemoveApps(st *state.State) {
 			if len(parts) == 2 {
 				repo := parts[1]
 				delete(st.Apps, repo)
-				log.Info().Msgf("Removed %s from state.", repo)
+				log.Infof("Removed %s from state.", repo)
 				state.LogHistory("remove", repo, "")
 			}
 		}

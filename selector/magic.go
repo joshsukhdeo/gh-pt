@@ -4,7 +4,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/rs/zerolog/log"
+	"github.com/charmbracelet/log"
 )
 
 func IsActuallyExecutable(item *SelectorItem) bool {
@@ -22,7 +22,7 @@ func IsActuallyExecutable(item *SelectorItem) bool {
 	}
 	defer func() {
 		if err := f.Close(); err != nil {
-			log.Warn().Err(err).Str("path", item.DownloadPath).Msg("failed to close file")
+			log.Warn("failed to close file", "error", err, "path", item.DownloadPath)
 		}
 	}()
 

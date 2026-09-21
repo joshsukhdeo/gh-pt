@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/joshsukhdeo/gh-pt/config"
 	"github.com/pterm/pterm"
-	"github.com/rs/zerolog/log"
 )
 
 var vtBaseURL = "https://www.virustotal.com/api/v3"
@@ -30,7 +30,7 @@ func doVTRequestWithRetry(client *http.Client, req *http.Request) (*http.Respons
 		}
 		if resp.StatusCode == http.StatusTooManyRequests {
 			_ = resp.Body.Close()
-			log.Warn().Msg("VirusTotal rate limit (429) reached. Throttling for 15s...")
+			log.Warn("VirusTotal rate limit (429) reached. Throttling for 15s...")
 			time.Sleep(15 * time.Second)
 			continue
 		}
@@ -98,7 +98,7 @@ RetryVT:
 
 	if resp.StatusCode == http.StatusNotFound {
 		if skipSandbox {
-			log.Warn().Str("hash", hash).Msg("VirusTotal has no record of this hash. Bypassing sandbox (--skip-vt-sandbox).")
+			log.Warn("VirusTotal has no record of this hash. Bypassing sandbox (--skip-vt-sandbox).", "hash", hash)
 			return nil
 		}
 		if interactive {
@@ -107,11 +107,11 @@ RetryVT:
 			fmt.Printf("\nVirusTotal has no record of %s. Upload to sandbox and wait for analysis? [y/N]: ", filepath.Base(filePath))
 			_, _ = fmt.Scanln(&confirm)
 			if strings.ToLower(strings.TrimSpace(confirm)) != "y" {
-				log.Warn().Str("hash", hash).Msg("User declined VT sandbox upload. Bypassing check.")
+				log.Warn("User declined VT sandbox upload. Bypassing check.", "hash", hash)
 				return nil
 			}
 		}
-		log.Info().Str("file", filepath.Base(filePath)).Msg("Uploading file to VirusTotal sandbox...")
+		log.Info("Uploading file to VirusTotal sandbox...", "file", filepath.Base(filePath))
 		return uploadToVirusTotal(filePath, apiKey)
 	}
 
@@ -138,7 +138,7 @@ RetryVT:
 		return fmt.Errorf("virustotal blocked installation: %d engines detected hash %s as malicious", maliciousCount, hash)
 	}
 
-	log.Info().Str("hash", hash).Msg("VirusTotal confirms file is clean.")
+	log.Info("VirusTotal confirms file is clean.", "hash", hash)
 	return nil
 }
 
@@ -225,7 +225,7 @@ func uploadToVirusTotal(filePath string, apiKey string) error {
 	}
 	_ = json.NewDecoder(resp.Body).Decode(&result)
 
-	log.Info().Str("analysis_id", result.Data.ID).Msg("Upload complete. Waiting for sandbox analysis...")
+	log.Info("Upload complete. Waiting for sandbox analysis...", "analysis_id", result.Data.ID)
 	return pollVirusTotalAnalysis(result.Data.ID, apiKey)
 }
 
@@ -260,9 +260,9 @@ func pollVirusTotalAnalysis(analysisID string, apiKey string) error {
 			if malicious > 0 {
 				return fmt.Errorf("virustotal sandbox blocked installation: %d engines detected file as malicious", malicious)
 			}
-			log.Info().Msg("VirusTotal sandbox analysis confirms file is clean.")
+			log.Info("VirusTotal sandbox analysis confirms file is clean.")
 			return nil
 		}
-		log.Info().Msg("Sandbox analysis still in progress...")
+		log.Info("Sandbox analysis still in progress...")
 	}
 }

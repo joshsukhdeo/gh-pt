@@ -1,0 +1,92 @@
+rules:
+  - id: add-conveyor-const
+    language: go
+    rule:
+      pattern: |
+        const (
+          $$$PRE
+          ProgressBarNone ProgressBarMode = "none"
+          $$$POST
+        )
+    fix: |
+      const (
+        $$$PRE
+        ProgressBarNone ProgressBarMode = "none"
+        ProgressBarConveyor ProgressBarMode = "conveyor"
+        $$$POST
+      )
+
+  - id: add-conveyor-isvalid-case
+    language: go
+    rule:
+      pattern: |
+        case ProgressBarPacman, ProgressBarStandard, ProgressBarGauge, ProgressBarNone:
+          $$$BODY
+    fix: |
+      case ProgressBarPacman, ProgressBarStandard, ProgressBarGauge, ProgressBarNone, ProgressBarConveyor:
+        $$$BODY
+
+  - id: decouple-ui-struct-interface
+    language: go
+    rule:
+      pattern: |
+        type GithubRelease struct {
+          $$$PRE
+          UI *ui.PacmanUI
+          $$$POST
+        }
+    fix: |
+      type GithubRelease struct {
+        $$$PRE
+        UI interface {
+          Start()
+          Stop()
+          Pause()
+          Resume()
+          Update(step int, a string, b string, c string, target string, e string)
+        }
+        $$$POST
+      }
+
+  - id: route-ui-instantiation
+    language: go
+    rule:
+      pattern: |
+        func (r *GithubRelease) Install() error {
+          $$$PRE
+          pUI := ui.NewPacmanUI(r.CliParams.Repository)
+          if r.CliParams.DisableIcons {
+            pUI.DisableIcons = true
+          }
+          r.UI = pUI
+          ui.GlobalPacman = pUI
+          $$$POST
+        }
+    fix: |
+        func (r *GithubRelease) Install() error {
+          $$$PRE
+          var pUI interface {
+            Start()
+            Stop()
+            Pause()
+            Resume()
+            Update(step int, a string, b string, c string, target string, e string)
+          }
+          if r.CliParams.ProgressBar == "conveyor" {
+            cUI := ui.NewConveyorUI(r.CliParams.Repository)
+            if r.CliParams.DisableIcons {
+              cUI.DisableIcons = true
+            }
+            r.UI = cUI
+            pUI = cUI
+          } else {
+            pacUI := ui.NewPacmanUI(r.CliParams.Repository)
+            if r.CliParams.DisableIcons {
+              pacUI.DisableIcons = true
+            }
+            r.UI = pacUI
+            ui.GlobalPacman = pacUI
+            pUI = pacUI
+          }
+          $$$POST
+        }

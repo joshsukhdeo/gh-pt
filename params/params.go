@@ -3,9 +3,48 @@ package params
 import (
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/alecthomas/kong"
 )
+
+// ProgressBarMode represents the progress bar display mode.
+type ProgressBarMode string
+
+const (
+	ProgressBarPacman   ProgressBarMode = "pacman"
+	ProgressBarStandard ProgressBarMode = "standard"
+	ProgressBarNone     ProgressBarMode = "none"
+	ProgressBarConveyor ProgressBarMode = "conveyor"
+)
+
+// Valid spinner styles
+var validSpinnerStyles = map[string]bool{
+	"dots":    true,
+	"line":    true,
+	"jump":    true,
+	"pulse":   true,
+	"points":  true,
+	"miniDot": true,
+	"step":    true,
+}
+
+// IsValid checks if the progress bar mode is valid.
+func (m ProgressBarMode) IsValid() bool {
+	// Check base modes
+	switch m {
+	case ProgressBarPacman, ProgressBarStandard, ProgressBarNone, ProgressBarConveyor:
+		return true
+	}
+
+	// Check spinner variants
+	if strings.HasPrefix(string(m), "spinner:") {
+		style := strings.TrimPrefix(string(m), "spinner:")
+		return validSpinnerStyles[style]
+	}
+
+	return false
+}
 
 type CLI struct {
 	// Subcommands
@@ -19,7 +58,8 @@ type CLI struct {
 	Repo        RepoCmd        `cmd:"" help:"Manage source repositories."`
 	Scan        ScanCmd        `cmd:"" help:"Security and AI scanning."`
 	Vt          VtCmd          `cmd:"" help:"VirusTotal integration."`
-	Show        ShowCmd        `cmd:"" help:"Show release information."`
+	Show        Show           `cmd:"" help:"Show release information."`
+	Hook        Hook           `cmd:"" help:"Configure repository lifecycle hooks."`
 	Source      SourceCmd      `cmd:"" help:"Compile repository from source."`
 	Completions CompletionsCmd `cmd:"" help:"Generate shell completions."`
 	Search      SearchCmd      `cmd:"" help:"Search for repositories on GitHub."`
@@ -32,6 +72,9 @@ type CLI struct {
 	Verbose             bool             `short:"V" help:"Enable verbose output (sets log level to debug)."`
 	Version             kong.VersionFlag `help:"Show version." env:""`
 }
+
+// CliParams is an alias for CLI.
+type CliParams = CLI
 
 // Shared flags across commands
 type CommonInstallFlags struct {
@@ -82,6 +125,7 @@ type CommonInstallFlags struct {
 	EnvInject                                     []string          `optional:"" help:"Environment variables pointing to sidecar directory (KEY=VALUE)."`
 	WarnUnmappedAssets                            bool              `default:"true" negatable:"" help:"Warn about suspected unmapped sidecar assets."`
 	AISetupSidecars                               bool              `help:"Use AI to analyze sidecars and generate post-install setup commands."`
+	ProgressBar                                   string            `name:"progress-bar" env:"GH_PT_PROGRESS_BAR" help:"Progress bar style: pacman, standard, spinner:<style>, or none. Spinner styles: dots, line, jump, pulse, points, miniDot, step"`
 }
 
 type InstallCmd struct {
@@ -206,7 +250,7 @@ type VtSetKeyCmd struct {
 	Key string `arg:"" help:"VirusTotal API key."`
 }
 
-type ShowCmd struct {
+type Show struct {
 	Repository       string `arg:"" env:"GH_PT_REPOSITORY" predictor:"github_repos" predict:"github_repos" help:"Github repository."`
 	Assets           int    `default:"-1" optional:"" help:"Show available assets (max number)."`
 	Versions         int    `default:"-1" optional:"" help:"Show release versions (max number)."`
@@ -216,6 +260,25 @@ type ShowCmd struct {
 	Stable           bool   `help:"Include only stable releases."`
 	Version          string `short:"v" default:"latest" help:"Version to show."`
 	DiscoverSidecars bool   `help:"Discover potential sidecar assets in the repository."`
+}
+
+type ShowCmd = Show
+
+type Hook struct {
+	Event      string `arg:"" enum:"post-install,pre-uninstall" help:"Hook event type (post-install, pre-uninstall)."`
+	Repository string `arg:"" predictor:"github_repos" predict:"github_repos" help:"Github repository in OWNER/REPOSITORY_NAME format."`
+	ScriptPath string `arg:"" type:"path" help:"Path to the hook script."`
+}
+
+type HookCmd = Hook
+
+var HookRunner func(h *Hook) error
+
+func (h *Hook) Run() error {
+	if HookRunner != nil {
+		return HookRunner(h)
+	}
+	return nil
 }
 
 type SourceCmd struct {
@@ -298,4 +361,6 @@ type ExecContext struct {
 	EnvInject           []string
 	AISetupSidecars     bool
 	FallbackReleases    int
+	HookEvent           string
+	HookScriptPath      string
 }

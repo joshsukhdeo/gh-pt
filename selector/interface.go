@@ -13,8 +13,8 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/charmbracelet/log"
 	"github.com/mholt/archiver/v4"
-	"github.com/rs/zerolog/log"
 )
 
 type SelectorKind int
@@ -49,9 +49,7 @@ type ISelector interface {
 }
 
 func ReleaseSelector(ghClient GithubClient, repo string, version string, interactive bool, opts ...bool) (ISelector, error) {
-	log.Info().
-		Str("repository", repo).
-		Msg("getting Github repository releases")
+	log.Info("getting Github repository releases", "repository", repo)
 
 	var prerelease, stable bool
 	if len(opts) > 0 {
@@ -74,12 +72,7 @@ func ReleaseSelector(ghClient GithubClient, repo string, version string, interac
 	var items []*SelectorItem
 
 	for _, val := range response {
-		log.Debug().
-			Str("repository", repo).
-			Str("release tag", val.Tag_name).
-			Int("release id", val.Id).
-			Bool("prerelease", val.Prerelease).
-			Msg("got release...")
+		log.Debug("got release...", "repository", repo, "release tag", val.Tag_name, "release id", val.Id, "prerelease", val.Prerelease)
 
 		items = append(items, &SelectorItem{Name: val.Tag_name, Id: val.Id, Prerelease: val.Prerelease})
 	}
@@ -101,9 +94,7 @@ func ReleaseSelector(ghClient GithubClient, repo string, version string, interac
 				versionMatcher = response[0].Tag_name
 			}
 		} else {
-			log.Debug().
-				Str("repository", repo).
-				Msg("needed release version is 'latest', getting actual version")
+			log.Debug("needed release version is 'latest', getting actual version", "repository", repo)
 			latestResp := struct {
 				Tag_name   string
 				Prerelease bool
@@ -128,16 +119,11 @@ func ReleaseSelector(ghClient GithubClient, repo string, version string, interac
 					}
 				}
 			}
-			log.Debug().
-				Str("repository", repo).
-				Str("release tag", versionMatcher).
-				Msg("got 'latest' release")
+			log.Debug("got 'latest' release", "repository", repo, "release tag", versionMatcher)
 		}
 	}
 
-	log.Info().
-		Str("repository", repo).
-		Msgf("using release %s", versionMatcher)
+	log.Info(fmt.Sprintf("using release %s", versionMatcher), "repository", repo)
 
 	return &Selector{
 		Kind:  Release,
@@ -172,11 +158,7 @@ func AssetSelector(ghClient GithubClient, repo string, criteria AssetMatchCriter
 	page := 1
 	requestPath := fmt.Sprintf("repos/%s/releases/%d/assets", repo, criteria.ReleaseId)
 
-	log.Debug().
-		Str("repository", repo).
-		Int("release id", criteria.ReleaseId).
-		Str("asset matching name", criteria.Name).
-		Msg("getting release assets")
+	log.Debug("getting release assets", "repository", repo, "release id", criteria.ReleaseId, "asset matching name", criteria.Name)
 
 	findNextPage := func(response *http.Response) (string, bool) {
 		for _, m := range linkRE.FindAllStringSubmatch(response.Header.Get("Link"), -1) {
@@ -206,26 +188,15 @@ func AssetSelector(ghClient GithubClient, repo string, criteria AssetMatchCriter
 		for index, val := range responseData {
 
 			items = append(items, &SelectorItem{Name: val.Name, Id: index})
-			log.Debug().
-				Str("repository", repo).
-				Int("release id", criteria.ReleaseId).
-				Str("asset name", val.Name).
-				Int("asset index (id)", index).
-				Msg("got release asset")
+			log.Debug("got release asset", "repository", repo, "release id", criteria.ReleaseId, "asset name", val.Name, "asset index (id)", index)
 		}
 
 		var hasNextPage bool
 		if requestPath, hasNextPage = findNextPage(response); !hasNextPage {
-			log.Debug().
-				Str("repository", repo).
-				Int("release id", criteria.ReleaseId).
-				Msg("end of asset list")
+			log.Debug("end of asset list", "repository", repo, "release id", criteria.ReleaseId)
 			break
 		}
-		log.Debug().
-			Str("repository", repo).
-			Int("release id", criteria.ReleaseId).
-			Msg("getting next page of release assets")
+		log.Debug("getting next page of release assets", "repository", repo, "release id", criteria.ReleaseId)
 		page++
 	}
 
@@ -257,11 +228,7 @@ func AssetSelector(ghClient GithubClient, repo string, criteria AssetMatchCriter
 }
 
 func BinarySelector(criteria BinaryMatchCriteria) (ISelector, error) {
-	log.Info().
-		Str("asset download path", criteria.DownloadPath).
-		Strs("asset matching binary names", criteria.Names).
-		Str("asset matching binary regexp", criteria.Matcher).
-		Msg("getting release asset binaries")
+	log.Info("getting release asset binaries", "asset download path", criteria.DownloadPath, "asset matching binary names", criteria.Names, "asset matching binary regexp", criteria.Matcher)
 
 	inputStream, err := os.Open(criteria.DownloadPath)
 	if err != nil {
@@ -296,7 +263,7 @@ func BinarySelector(criteria BinaryMatchCriteria) (ISelector, error) {
 			if method == "ouch" {
 				if _, err := exec.LookPath("ouch"); err == nil {
 					if err := exec.Command("ouch", "d", criteria.DownloadPath, "-y", "-q", "--dir", extractDir).Run(); err == nil {
-						log.Info().Msg("delegated archive extraction to ouch")
+						log.Info("delegated archive extraction to ouch")
 						extracted = true
 					}
 					break
@@ -320,7 +287,7 @@ func BinarySelector(criteria BinaryMatchCriteria) (ISelector, error) {
 					}
 				}
 				if extracted {
-					log.Info().Msg("delegated archive extraction to native OS utilities")
+					log.Info("delegated archive extraction to native OS utilities")
 					break
 				}
 			} else if method == "internal" {
@@ -359,7 +326,7 @@ func BinarySelector(criteria BinaryMatchCriteria) (ISelector, error) {
 				Repository:     criteria.Repository,
 			}, nil
 		}
-		log.Warn().Msg("native extraction failed, falling back to pure Go archiver")
+		log.Warn("native extraction failed, falling back to pure Go archiver")
 		_, _, err = archiver.Identify(criteria.DownloadPath, inputStream)
 	} else {
 		_, _, err = archiver.Identify(criteria.DownloadPath, inputStream)

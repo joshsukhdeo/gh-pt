@@ -62,3 +62,39 @@ These scenarios are essential for validating asset selection behavior:
 
 5. **Success Message**: Ensure a green success message is printed on successful installation completion.
 7. **Explicit Success/Failure Feedback**: Every command must yield a clear success message upon completion, or a clear failure message including the reason for failure. Silently failing is forbidden, as clear output is necessary for users and integration testing.
+
+## User Functions
+
+### Skill Bundles
+
+**`load go-core`** (12 skills) - Core Go patterns, always load for Go work:
+- golang-code-style, golang-concurrency, golang-context, golang-data-structures
+- golang-design-patterns, golang-error-handling, golang-naming, golang-patterns
+- golang-safety, golang-structs-interfaces, golang-testing, golang-troubleshooting
+
+**`load go-cli-arch`** (3 skills) - CLI and project structure:
+- golang-cli, golang-project-layout, golang-lint
+
+**`load go-quality`** (5 skills) - Code quality, CI, and maintenance:
+- golang-modernize, golang-refactoring, golang-security, golang-continuous-integration
+- golang-dependency-management
+
+**`load go-utilities`** (5 skills) - Useful libraries and tools:
+- golang-samber-lo, golang-observability, golang-documentation
+- golang-gopls, golang-pkg-go-dev
+
+**`load go-on-demand`** (2 skills) - Performance analysis (load only when needed):
+- golang-benchmark, golang-performance
+
+**`load go-full`** (27 skills) - All relevant skills for gh-pt:
+- Combines: go-core + go-cli-arch + go-quality + go-utilities
+
+**`load go-all`** (29 skills) - Everything including on-demand:
+- Combines: go-full + go-on-demand
+
+### Bundle Usage
+
+- **Default workflow**: `load go-core` + `load go-cli-arch` (15 skills)
+- **Feature development**: `load go-full` (27 skills)
+- **Performance investigation**: `load go-on-demand` (2 skills)
+- **Never load**: golang-grpc, golang-graphql, golang-database, golang-google-wire, golang-uber-*, golang-spf13-*, golang-samber-{hot,mo,oops,ro,slog}, golang-swagger, golang-pro, golang-popular-libraries, golang-stay-updated (not relevant to gh-pt)

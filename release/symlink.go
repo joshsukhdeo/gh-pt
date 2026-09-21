@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/log"
 	"github.com/joshsukhdeo/gh-pt/selector"
-	"github.com/rs/zerolog/log"
 )
 
 func copyDir(src, dst string) error {
@@ -43,7 +43,7 @@ func copyFile(src, dst string, mode os.FileMode) error {
 	}
 	defer func() {
 		if err := in.Close(); err != nil {
-			log.Warn().Err(err).Str("file", src).Msg("failed to close source file")
+			log.Warn("failed to close source file", "error", err, "file", src)
 		}
 	}()
 	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
@@ -52,7 +52,7 @@ func copyFile(src, dst string, mode os.FileMode) error {
 	}
 	defer func() {
 		if err := out.Close(); err != nil {
-			log.Warn().Err(err).Str("file", dst).Msg("failed to close destination file")
+			log.Warn("failed to close destination file", "error", err, "file", dst)
 		}
 	}()
 	_, err = io.Copy(out, in)
@@ -78,7 +78,7 @@ func copyFS(fileSystem fs.FS, dst string) error {
 		}
 		defer func() {
 			if err := in.Close(); err != nil {
-				log.Warn().Err(err).Str("file", path).Msg("failed to close source file")
+				log.Warn("failed to close source file", "error", err, "file", path)
 			}
 		}()
 		out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode())
@@ -87,7 +87,7 @@ func copyFS(fileSystem fs.FS, dst string) error {
 		}
 		defer func() {
 			if err := out.Close(); err != nil {
-				log.Warn().Err(err).Str("file", target).Msg("failed to close destination file")
+				log.Warn("failed to close destination file", "error", err, "file", target)
 			}
 		}()
 		_, err = io.Copy(out, in)
@@ -161,7 +161,7 @@ func (r *GithubRelease) executeSymlinkInstall(binaries []*selector.SelectorItem,
 		if _, err := os.Stat(destPath); err == nil {
 			if r.CliParams.Overwrite {
 				if err := os.Remove(destPath); err != nil {
-					log.Warn().Err(err).Str("path", destPath).Msg("failed to remove existing file before overwrite")
+					log.Warn("failed to remove existing file before overwrite", "error", err, "path", destPath)
 				}
 			} else {
 				return "", fmt.Errorf("%s already exists; use force to overwrite", destPath)
@@ -175,14 +175,13 @@ func (r *GithubRelease) executeSymlinkInstall(binaries []*selector.SelectorItem,
 		if r.UI != nil {
 			r.UI.Update(6, r.ResolvedVersion, filepath.Base(assetPath), binary.Name, destPath, "")
 		} else {
-			log.Info().
-				Str("repository", r.CliParams.Repository).
-				Str("release name", r.ResolvedVersion).
-				Str("release asset name", filepath.Base(assetPath)).
-				Str("release asset binary", binary.Name).
-				Msg("processing selected release asset binary for symlink")
+			log.Info("processing selected release asset binary for symlink",
+				"repository", r.CliParams.Repository,
+				"release name", r.ResolvedVersion,
+				"release asset name", filepath.Base(assetPath),
+				"release asset binary", binary.Name)
 
-			log.Info().Msgf("will install symlink %s -> %s", destPath, srcPath)
+			log.Infof("will install symlink %s -> %s", destPath, srcPath)
 		}
 
 		r.InstalledBinaries = append(r.InstalledBinaries, filepath.Base(destPath))

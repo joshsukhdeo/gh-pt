@@ -84,11 +84,11 @@ func TestPacmanUI_PhaseTransitions(t *testing.T) {
 
 func TestPacmanUI_AssetCompletion(t *testing.T) {
 	p := &PacmanUI{
-		Repo:         "test/repo",
-		Version:      "v1.0.0",
-		Archive:      "test.tar.gz",
-		phase:        2,
-		headerEaten:  4,
+		Repo:        "test/repo",
+		Version:     "v1.0.0",
+		Archive:     "test.tar.gz",
+		phase:       2,
+		headerEaten: 4,
 		Assets: []AssetInfo{
 			{Name: "asset1", Completed: false},
 			{Name: "asset2", Completed: false},
