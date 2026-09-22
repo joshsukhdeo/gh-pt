@@ -218,12 +218,14 @@ type RepoCmd struct {
 
 type RepoCloneCmd struct {
 	Repository string `arg:"" env:"GH_PT_REPOSITORY" optional:"" help:"Github repository in OWNER/REPOSITORY_NAME format."`
+	TargetPath string `short:"p" optional:"" type:"path" help:"Target installation directory."`
 	Force      bool   `short:"f" help:"Overwrite existing."`
 	MaxDepth   int    `help:"Max clone depth."`
 }
 
 type RepoForkCmd struct {
 	Repository string `arg:"" env:"GH_PT_REPOSITORY" optional:"" help:"Github repository in OWNER/REPOSITORY_NAME format."`
+	TargetPath string `short:"p" optional:"" type:"path" help:"Target installation directory."`
 	Force      bool   `short:"f" help:"Overwrite existing."`
 	MaxDepth   int    `help:"Max clone depth."`
 }

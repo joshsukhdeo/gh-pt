@@ -358,6 +358,8 @@ func (r *GithubRelease) handleSuspectedSidecars(suspected []string, extractDir s
 		if fsObj != nil {
 			if sf, err := fsObj.Open(item); err == nil {
 				dst := filepath.Join(targetDir, filepath.Base(item))
+				_ = os.Chmod(filepath.Dir(dst), 0755)
+				_ = os.Remove(dst)
 				if df, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755); err == nil {
 					_, _ = io.Copy(df, sf)
 					_ = df.Close()
@@ -456,6 +458,8 @@ func (r *GithubRelease) extractExplicitSidecars(extractDir string, fsObj fs.FS) 
 		}
 
 		dst := filepath.Join(targetDir, filepath.Base(rel))
+		_ = os.Chmod(filepath.Dir(dst), 0755)
+		_ = os.Remove(dst)
 		df, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
 		if err != nil {
 			_ = src.Close()
@@ -1729,6 +1733,8 @@ func (r *GithubRelease) Install() error {
 					if fsObj != nil {
 						if sf, err := fsObj.Open(item); err == nil {
 							dst := filepath.Join(targetDir, filepath.Base(item))
+							_ = os.Chmod(filepath.Dir(dst), 0755)
+							_ = os.Remove(dst)
 							if df, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755); err == nil {
 								_, _ = io.Copy(df, sf)
 								_ = df.Close()

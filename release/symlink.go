@@ -23,7 +23,7 @@ func copyDir(src, dst string) error {
 		}
 		target := filepath.Join(dst, rel)
 		if info.IsDir() {
-			return os.MkdirAll(target, info.Mode())
+			return os.MkdirAll(target, 0755)
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
 			link, err := os.Readlink(path)
@@ -34,6 +34,8 @@ func copyDir(src, dst string) error {
 			return os.Symlink(link, target)
 		}
 		_ = os.Remove(target) // Remove existing file before overwrite
+		// Ensure parent directory is writable before we attempt to write
+		_ = os.Chmod(filepath.Dir(target), 0755)
 		return copyFile(path, target, info.Mode())
 	})
 }
@@ -49,6 +51,7 @@ func copyFile(src, dst string, mode os.FileMode) error {
 		}
 	}()
 	_ = os.Remove(dst) // Prevent permission denied if existing file is read-only
+	_ = os.Chmod(filepath.Dir(dst), 0755)
 	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
 	if err != nil {
 		return err
@@ -85,6 +88,7 @@ func copyFS(fileSystem fs.FS, dst string) error {
 			}
 		}()
 		_ = os.Remove(target) // Prevent permission denied if existing file is read-only
+		_ = os.Chmod(filepath.Dir(target), 0755)
 		out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode())
 		if err != nil {
 			return err

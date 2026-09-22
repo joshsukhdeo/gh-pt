@@ -81,6 +81,9 @@ func RunCommand(cmdStr string, cli *params.CLI) error {
 			r.Clone = true
 			r.Overwrite = cli.Repo.Clone.Force
 			r.MaxDepth = cli.Repo.Clone.MaxDepth
+			if cli.Repo.Clone.TargetPath != "" {
+				r.TargetPath = cli.Repo.Clone.TargetPath
+			}
 			return r.RunInstall()
 		}
 		if cli.Repo.Fork.Repository != "" {
@@ -89,6 +92,9 @@ func RunCommand(cmdStr string, cli *params.CLI) error {
 			r.Fork = true
 			r.Overwrite = cli.Repo.Fork.Force
 			r.MaxDepth = cli.Repo.Fork.MaxDepth
+			if cli.Repo.Fork.TargetPath != "" {
+				r.TargetPath = cli.Repo.Fork.TargetPath
+			}
 			return r.RunInstall()
 		}
 		// If no repository specified, check if it was passed via env var
