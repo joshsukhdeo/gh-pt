@@ -176,7 +176,7 @@ func (m *UvManager) Install(pkgs []string) error {
 	if len(pkgs) == 0 {
 		return nil
 	}
-	args := append([]string{"pip", "install"}, pkgs...)
+	args := append([]string{"pip", "install", "--system"}, pkgs...)
 	cmd := execCommand("uv", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

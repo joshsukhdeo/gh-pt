@@ -191,7 +191,7 @@ func TestInstallCommands(t *testing.T) {
 			name:        "uv install packages",
 			mgr:         NewUvManager(),
 			pkgs:        []string{"requests", "numpy"},
-			expectedCmd: "uv pip install requests numpy",
+			expectedCmd: "uv pip install --system requests numpy",
 		},
 		{
 			name:        "cargo install crates",

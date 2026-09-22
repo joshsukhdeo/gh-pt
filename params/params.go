@@ -354,13 +354,6 @@ type ExecContext struct {
 	ShowReadme          int
 	DiscoverSidecars    bool
 	DisableIcons        bool
-	Sidecars            []string
-	SidecarTargetPath   string
-	SidecarSymlinkTo    []string
-	IncludeSidecars     bool
-	EnvInject           []string
-	AISetupSidecars     bool
-	FallbackReleases    int
 	HookEvent           string
 	HookScriptPath      string
 }

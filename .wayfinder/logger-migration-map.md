@@ -40,10 +40,10 @@ Complete library modernization (bubbletea v2, charmbracelet/log, testing libs) t
 - [x] Ensure progress completes before final messages — `WaitForAnimation()` called before final output
 
 ### 2. Bubble Tea v2 Pacman Rewrite
-- [ ] Rewrite pacman.go using bubbletea v2 Model
-- [ ] Add harmonica physics for smooth animation
-- [ ] Add comprehensive tests
-- [ ] Verify in TTY and non-TTY modes
+- [x] Rewrite pacman.go using bubbletea v2 Model
+- [x] Add harmonica physics for smooth animation
+- [x] Add comprehensive tests
+- [x] Verify in TTY and non-TTY modes
 
 ### 3. Fallback-Release Version Regression Logging
 - [x] Add warning log on version fallback: "Unable to find release assets for {platform} to install in version {version} => attempting to find {platform} assets in the prior version {lower-version}" — implemented in `release/release.go:1387-1393`

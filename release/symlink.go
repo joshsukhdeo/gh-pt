@@ -30,8 +30,10 @@ func copyDir(src, dst string) error {
 			if err != nil {
 				return err
 			}
+			_ = os.Remove(target) // Ignore error, will fail if it's a directory but that's fine
 			return os.Symlink(link, target)
 		}
+		_ = os.Remove(target) // Remove existing file before overwrite
 		return copyFile(path, target, info.Mode())
 	})
 }
@@ -46,6 +48,7 @@ func copyFile(src, dst string, mode os.FileMode) error {
 			log.Warn("failed to close source file", "error", err, "file", src)
 		}
 	}()
+	_ = os.Remove(dst) // Prevent permission denied if existing file is read-only
 	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
 	if err != nil {
 		return err
@@ -81,6 +84,7 @@ func copyFS(fileSystem fs.FS, dst string) error {
 				log.Warn("failed to close source file", "error", err, "file", path)
 			}
 		}()
+		_ = os.Remove(target) // Prevent permission denied if existing file is read-only
 		out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode())
 		if err != nil {
 			return err
@@ -158,8 +162,8 @@ func (r *GithubRelease) executeSymlinkInstall(binaries []*selector.SelectorItem,
 
 		destPath := r.resolveDestinationPath(binary.Name)
 
-		if _, err := os.Stat(destPath); err == nil {
-			if r.CliParams.Overwrite {
+		if _, err := os.Lstat(destPath); err == nil {
+			if r.CliParams.Overwrite || r.CliParams.IsUpgradeCmd {
 				if err := os.Remove(destPath); err != nil {
 					log.Warn("failed to remove existing file before overwrite", "error", err, "path", destPath)
 				}
