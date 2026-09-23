@@ -39,10 +39,9 @@ type InstalledApp struct {
 	SymlinkDir               string            `json:"symlink_dir,omitempty"`
 	Hooks                    map[string]string `json:"hooks,omitempty"`
 	SystemPackages           []string          `json:"system_packages,omitempty"`
-	Sidecars                 []string          `json:"sidecars,omitempty"`
-	SidecarTargetPath        string            `json:"sidecar_target_path,omitempty"`
+	Sidecars                 string            `json:"sidecars,omitempty"`
 	SidecarSymlinkTo         []string          `json:"sidecar_symlink_to,omitempty"`
-	IncludeSidecars          bool              `json:"include_sidecars,omitempty"`
+	IncludeSidecars          string            `json:"include_sidecars,omitempty"`
 	InstalledSidecars        []string          `json:"installed_sidecars,omitempty"`
 	EnvInject                []string          `json:"env_inject,omitempty"`
 	FallbackReleases         int               `json:"fallback_releases,omitempty"`

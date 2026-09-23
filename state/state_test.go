@@ -331,8 +331,7 @@ func TestStateManagement(t *testing.T) {
 			Version:           "1.0.0",
 			Hooks:             map[string]string{"post-install": "echo hello"},
 			SystemPackages:    []string{"libssl3"},
-			Sidecars:          []string{"plugins/*", "assets/**"},
-			SidecarTargetPath: "/tmp/sidecars/owner/sidecar-app",
+			Sidecars:          `plugins/.*|assets/.*`,
 			InstalledSidecars: []string{"/tmp/sidecars/owner/sidecar-app/plugin.so"},
 		}
 
@@ -346,8 +345,8 @@ func TestStateManagement(t *testing.T) {
 		require.True(t, exists)
 		assert.Equal(t, map[string]string{"post-install": "echo hello"}, loaded.Hooks)
 		assert.Equal(t, []string{"libssl3"}, loaded.SystemPackages)
-		assert.Equal(t, []string{"plugins/*", "assets/**"}, loaded.Sidecars)
-		assert.Equal(t, "/tmp/sidecars/owner/sidecar-app", loaded.SidecarTargetPath)
+		assert.Equal(t, `plugins/.*|assets/.*`, loaded.Sidecars)
+		// SidecarTargetPath removed
 		assert.Equal(t, []string{"/tmp/sidecars/owner/sidecar-app/plugin.so"}, loaded.InstalledSidecars)
 	})
 }

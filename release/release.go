@@ -60,8 +60,7 @@ type GithubRelease struct {
 		Resume()
 		Update(step int, a string, b string, c string, target string, e string)
 	}
-	Sidecars           []string
-	SidecarTargetPath  string
+	Sidecars           string
 	SidecarSymlinkTo   []string
 	InstalledSidecars  []string
 	IsTTYFunc          func() bool
@@ -176,23 +175,35 @@ func (r *GithubRelease) shouldWarnUnmappedAssets() bool {
 }
 
 func (r *GithubRelease) resolveSidecarTargetPath() string {
-	if r.CliParams != nil && r.CliParams.SidecarTargetPath != "" {
-		return r.CliParams.SidecarTargetPath
+	if r.CliParams == nil {
+		return ""
 	}
-	if r.SidecarTargetPath != "" {
-		return r.SidecarTargetPath
-	}
-	cfg, _ := config.LoadConfig()
-	if cfg != nil && cfg.Paths.SidecarPath != "" {
-		if r.CliParams != nil {
-			return filepath.Join(cfg.Paths.SidecarPath, r.CliParams.Repository)
-		}
-		return cfg.Paths.SidecarPath
-	}
-	if r.CliParams != nil {
+	
+	mode := r.CliParams.IncludeSidecars
+	if mode == "" {
+		// Default to xdg_data_home for backward compatibility
 		return filepath.Join(xdg.DataHome, "gh-pt", "sidecars", r.CliParams.Repository)
 	}
-	return filepath.Join(xdg.DataHome, "gh-pt", "sidecars")
+	
+	// Parse the mode
+	switch {
+	case mode == "same_dest":
+		// Sidecars go to the same destination as the main binary
+		return r.CliParams.TargetPath
+	case mode == "xdg_data_home":
+		// Sidecars go to XDG data home
+		return filepath.Join(xdg.DataHome, "gh-pt", "sidecars", r.CliParams.Repository)
+	case mode == "bin":
+		// Sidecars go to the bin directory
+		homeDir, _ := os.UserHomeDir()
+		return filepath.Join(homeDir, ".local", "bin")
+	case strings.HasPrefix(mode, "custom-path:"):
+		// Extract custom path
+		return strings.TrimPrefix(mode, "custom-path:")
+	default:
+		log.Warn("unknown include-sidecars mode, defaulting to xdg_data_home", "mode", mode)
+		return filepath.Join(xdg.DataHome, "gh-pt", "sidecars", r.CliParams.Repository)
+	}
 }
 
 func isSuspectedRemoteSidecar(name string) bool {
@@ -337,11 +348,8 @@ func (r *GithubRelease) handleSuspectedSidecars(suspected []string, extractDir s
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		log.Warn("could not create sidecar target directory", "error", err)
 	}
-	r.SidecarTargetPath = targetDir
 
 	for _, item := range selected {
-		r.Sidecars = append(r.Sidecars, item)
-
 		// Check if local file in extractDir
 		if extractDir != "" {
 			src := filepath.Join(extractDir, item)
@@ -397,7 +405,16 @@ func (r *GithubRelease) extractExplicitSidecars(extractDir string, fsObj fs.FS) 
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		return fmt.Errorf("failed to create sidecar target directory: %w", err)
 	}
-	r.SidecarTargetPath = targetDir
+
+	sidecarRegex := r.CliParams.Sidecars
+	if sidecarRegex == "" {
+		sidecarRegex = `\.so.*|\.h.*|\.pak|\.bin|\.red`
+	}
+	regex, err := regexp.Compile(sidecarRegex)
+	if err != nil {
+		log.Warn("invalid sidecar regex, using default", "error", err)
+		regex = regexp.MustCompile(`\.so.*|\.h.*|\.pak|\.bin|\.red`)
+	}
 
 	var matched []string
 
@@ -407,11 +424,8 @@ func (r *GithubRelease) extractExplicitSidecars(extractDir string, fsObj fs.FS) 
 				return nil
 			}
 			rel, _ := filepath.Rel(extractDir, path)
-			for _, pattern := range r.CliParams.Sidecars {
-				if ok, _ := filepath.Match(pattern, rel); ok {
-					matched = append(matched, rel)
-					break
-				}
+			if regex.MatchString(rel) {
+				matched = append(matched, rel)
 			}
 			return nil
 		})
@@ -423,11 +437,8 @@ func (r *GithubRelease) extractExplicitSidecars(extractDir string, fsObj fs.FS) 
 			if err != nil || d.IsDir() {
 				return nil
 			}
-			for _, pattern := range r.CliParams.Sidecars {
-				if ok, _ := filepath.Match(pattern, path); ok {
-					matched = append(matched, path)
-					break
-				}
+			if regex.MatchString(path) {
+				matched = append(matched, path)
 			}
 			return nil
 		})
@@ -488,7 +499,7 @@ func (r *GithubRelease) extractExplicitSidecars(extractDir string, fsObj fs.FS) 
 }
 
 func (r *GithubRelease) createSidecarSymlinks() {
-	if r.SidecarTargetPath == "" || len(r.InstalledSidecars) == 0 {
+	if len(r.InstalledSidecars) == 0 {
 		return
 	}
 
@@ -545,7 +556,7 @@ Please provide:
 3. Suggested symlinks or configuration file modifications needed
 4. Any additional setup steps required for the application to find these files
 
-Format your response as actionable shell commands where possible.`, r.CliParams.Repository, sidecarList, r.SidecarTargetPath)
+Format your response as actionable shell commands where possible.`, r.CliParams.Repository, sidecarList, r.resolveSidecarTargetPath())
 
 	log.Info("Initiating AI sidecar setup analysis...")
 
@@ -1326,12 +1337,17 @@ func (r *GithubRelease) Install() error {
 	}()
 
 	// Auto-enable IncludeSidecars when any sidecar param is specified
-	if !r.CliParams.IncludeSidecars {
-		if len(r.CliParams.Sidecars) > 0 || r.CliParams.SidecarTargetPath != "" ||
-			len(r.CliParams.SidecarSymlinkTo) > 0 || r.CliParams.AISetupSidecars {
-			r.CliParams.IncludeSidecars = true
+	includeSidecarsMode := r.CliParams.IncludeSidecars
+	if includeSidecarsMode == "" {
+		if r.CliParams.Sidecars != "" || len(r.CliParams.SidecarSymlinkTo) > 0 || r.CliParams.AISetupSidecars {
+			includeSidecarsMode = "xdg_data_home"
 			log.Debug("auto-enabled --include-sidecars due to --sidecar-* params")
 		}
+	}
+
+	// Validate --include-sidecars requires --symlink
+	if includeSidecarsMode != "" && !r.CliParams.Symlink {
+		return fmt.Errorf("--include-sidecars requires --symlink")
 	}
 
 	var prerelease, stable bool
@@ -1704,21 +1720,13 @@ func (r *GithubRelease) Install() error {
 
 		if len(suspectedSidecars) > 0 {
 			// If IncludeSidecars is enabled, auto-include all suspected sidecars
-			if r.CliParams.IncludeSidecars {
-				// Wipe old sidecars on upgrade
-				if r.CliParams.IsUpgradeCmd && r.SidecarTargetPath != "" {
-					if err := os.RemoveAll(r.SidecarTargetPath); err != nil {
-						log.Warn("failed to purge old sidecars", "error", err)
-					}
-				}
+			if r.CliParams.IncludeSidecars != "" {
 				targetDir := r.resolveSidecarTargetPath()
 				if err := os.MkdirAll(targetDir, 0755); err != nil {
 					log.Warn("could not create sidecar target directory", "error", err)
 				}
-				r.SidecarTargetPath = targetDir
 
 				for _, item := range suspectedSidecars {
-					r.Sidecars = append(r.Sidecars, item)
 					// Deploy the sidecar
 					if extractDir != "" {
 						src := filepath.Join(extractDir, item)
@@ -1753,13 +1761,7 @@ func (r *GithubRelease) Install() error {
 		}
 
 		// Explicit --sidecars pattern matching
-		if len(r.CliParams.Sidecars) > 0 {
-			// Wipe old sidecars on upgrade
-			if r.CliParams.IsUpgradeCmd && r.SidecarTargetPath != "" {
-				if err := os.RemoveAll(r.SidecarTargetPath); err != nil {
-					log.Warn("failed to purge old sidecars", "error", err)
-				}
-			}
+		if r.CliParams.Sidecars != "" {
 			_ = r.extractExplicitSidecars(extractDir, fsObj)
 
 			// Run AI setup if requested
@@ -1772,16 +1774,33 @@ func (r *GithubRelease) Install() error {
 
 		binariesOutput := make(map[string]string)
 
+		// Separate system installers from regular binaries
+		var regularBinaries []*selector.SelectorItem
+		var systemInstallers []*selector.SelectorItem
+		for _, binary := range binaries {
+			switch binary.BinaryType {
+			case selector.BinaryDebInstaller, selector.BinaryRpmInstaller, selector.BinaryPacmanInstaller, selector.BinaryPkgInstaller, selector.BinaryMacInstaller:
+				systemInstallers = append(systemInstallers, binary)
+			default:
+				regularBinaries = append(regularBinaries, binary)
+			}
+		}
+
 		if r.CliParams.Symlink {
-			symlinkDir, err := r.executeSymlinkInstall(binaries, filepath.Join(downloadDir, asset.Name))
-			if err != nil {
-				return err
+			if len(regularBinaries) > 0 {
+				symlinkDir, err := r.executeSymlinkInstall(regularBinaries, filepath.Join(downloadDir, asset.Name))
+				if err != nil {
+					return err
+				}
+				if pUI != nil {
+					pUI.UpdateSymlink(symlinkDir)
+					pUI.Update(6, "", "", "", "", "")
+				}
 			}
-			if pUI != nil {
-				pUI.UpdateSymlink(symlinkDir)
-				pUI.Update(6, "", "", "", "", "")
+			if len(systemInstallers) == 0 {
+				continue
 			}
-			continue
+			binaries = systemInstallers
 		}
 
 		// Add all binaries to UI for animation
@@ -1996,8 +2015,7 @@ func (r *GithubRelease) Install() error {
 				Pinned:                   r.CliParams.PinInstall,
 				Extractor:                r.CliParams.Extractor,
 				IsPrerelease:             releases[0].Prerelease,
-				Sidecars:                 r.Sidecars,
-				SidecarTargetPath:        r.SidecarTargetPath,
+				Sidecars:                 r.CliParams.Sidecars,
 				SidecarSymlinkTo:         r.SidecarSymlinkTo,
 				IncludeSidecars:          r.CliParams.IncludeSidecars,
 				InstalledSidecars:        r.InstalledSidecars,

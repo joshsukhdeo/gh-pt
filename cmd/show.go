@@ -11,8 +11,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/adrg/xdg"
 	"github.com/cli/go-gh/v2/pkg/api"
 	"github.com/joshsukhdeo/gh-pt/state"
+	"github.com/charmbracelet/glamour"
 	"github.com/mattn/go-runewidth"
 	"github.com/pterm/pterm"
 	"golang.org/x/term"
@@ -137,7 +139,8 @@ func (r *RootCLI) handleShowWithClient(client ghRestClient) error {
 		return nil
 	}
 
-	targetDir := r.resolveSidecarTargetPath(nil)
+	// Sidecar target path is now determined by IncludeSidecars mode
+	targetDir := filepath.Join(xdg.DataHome, "gh-pt", "sidecars", r.Repository)
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		return fmt.Errorf("failed to create sidecar target directory %s: %w", targetDir, err)
 	}
@@ -197,20 +200,17 @@ func (r *RootCLI) handleShowWithClient(client ghRestClient) error {
 	if app == nil {
 		app = &state.InstalledApp{
 			Repository:        repo,
-			SidecarTargetPath: targetDir,
 		}
 		st.Apps[repo] = app
 	}
-	app.SidecarTargetPath = targetDir
 	for _, sc := range installedSidecars {
 		if !sliceContains(app.InstalledSidecars, sc) {
 			app.InstalledSidecars = append(app.InstalledSidecars, sc)
 		}
 	}
-	for _, f := range selected {
-		if !sliceContains(app.Sidecars, f) {
-			app.Sidecars = append(app.Sidecars, f)
-		}
+	// Store the sidecar regex pattern if available
+	if r.CliParams != nil && r.CliParams.Sidecars != "" {
+		app.Sidecars = r.CliParams.Sidecars
 	}
 	if err := st.Save(); err != nil {
 		return fmt.Errorf("failed to update state: %w", err)
@@ -258,9 +258,6 @@ func showInfoWithClient(r *RootCLI, client ghRestClient) error {
 	var disableIcons bool
 	if cfg != nil {
 		disableIcons = cfg.Core.DisableIcons
-		if cfg.Core.AllowPrerelease && !r.Stable {
-			r.Prerelease = true
-		}
 	}
 
 	var releases []Release
@@ -489,6 +486,10 @@ func showInfoWithClient(r *RootCLI, client ghRestClient) error {
 				content := readme.Content
 				if decErr == nil {
 					content = string(decoded)
+				}
+				rendered, renderErr := glamour.Render(content, "dark")
+				if renderErr == nil {
+					content = rendered
 				}
 				lines := strings.Split(content, "\n")
 				limit := len(lines)

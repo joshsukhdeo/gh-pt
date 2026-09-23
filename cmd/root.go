@@ -760,30 +760,6 @@ func (r *RootCLI) shouldWarnUnmappedAssets(cfg *config.Config) bool {
 	return true
 }
 
-func (r *RootCLI) resolveSidecarTargetPath(cfg *config.Config) string {
-	if r != nil {
-		if r.SidecarTargetPath != "" {
-			return r.SidecarTargetPath
-		}
-		if r.CliParams != nil && r.CliParams.SidecarTargetPath != "" {
-			return r.CliParams.SidecarTargetPath
-		}
-	}
-	if cfg == nil {
-		cfg, _ = config.LoadConfig()
-	}
-	if cfg != nil && cfg.Paths.SidecarPath != "" {
-		if r != nil && r.Repository != "" {
-			return filepath.Join(cfg.Paths.SidecarPath, r.Repository)
-		}
-		return cfg.Paths.SidecarPath
-	}
-	if r != nil && r.Repository != "" {
-		return filepath.Join(xdg.DataHome, "gh-pt", "sidecars", r.Repository)
-	}
-	return filepath.Join(xdg.DataHome, "gh-pt", "sidecars")
-}
-
 func sliceContains(slice []string, val string) bool {
 	for _, item := range slice {
 		if item == val {
@@ -844,7 +820,7 @@ func (r *RootCLI) moveDistWithSidecarDetection(srcDir, dstDir string) ([]string,
 	// Route suspected sidecars
 	var selected []string
 	if len(suspectedSidecars) > 0 {
-		if r != nil && (r.IncludeSidecars || (r.CliParams != nil && r.CliParams.IncludeSidecars)) {
+		if r != nil && (r.IncludeSidecars != "" || (r.CliParams != nil && r.CliParams.IncludeSidecars != "")) {
 			selected = suspectedSidecars
 		} else if r != nil && r.isInteractive() {
 			sel, err := r.interactiveMultiselect("Suspected sidecar assets detected. Select items to deploy:", suspectedSidecars)
@@ -861,21 +837,11 @@ func (r *RootCLI) moveDistWithSidecarDetection(srcDir, dstDir string) ([]string,
 
 	var installedSidecars []string
 	if len(selected) > 0 {
-		sidecarTarget := ""
-		if r != nil {
-			sidecarTarget = r.resolveSidecarTargetPath(nil)
-		}
-		if sidecarTarget == "" {
-			sidecarTarget = filepath.Join(xdg.DataHome, "gh-pt", "sidecars")
-		}
+		// Sidecar target path is now determined by IncludeSidecars mode in release.go
+		// This code path is for suspected sidecars handling in compile flow
+		sidecarTarget := filepath.Join(xdg.DataHome, "gh-pt", "sidecars")
 		if err := os.MkdirAll(sidecarTarget, 0755); err != nil {
 			log.Warn("could not create sidecar target directory", "error", err)
-		}
-		if r != nil {
-			r.SidecarTargetPath = sidecarTarget
-			if r.CliParams != nil {
-				r.CliParams.SidecarTargetPath = sidecarTarget
-			}
 		}
 
 		for _, item := range selected {
@@ -896,10 +862,6 @@ func (r *RootCLI) moveDistWithSidecarDetection(srcDir, dstDir string) ([]string,
 			installedSidecars = append(installedSidecars, dstPath)
 			if r != nil {
 				r.InstalledSidecars = append(r.InstalledSidecars, dstPath)
-				r.Sidecars = append(r.Sidecars, item)
-				if r.CliParams != nil {
-					r.CliParams.Sidecars = append(r.CliParams.Sidecars, item)
-				}
 			}
 		}
 
@@ -919,16 +881,13 @@ func (r *RootCLI) moveDistWithSidecarDetection(srcDir, dstDir string) ([]string,
 					app = &state.InstalledApp{
 						Repository:        r.Repository,
 						TargetPath:        dstDir,
-						SidecarTargetPath: sidecarTarget,
 					}
 					st.Apps[r.Repository] = app
 				}
-				for _, s := range r.Sidecars {
-					if !sliceContains(app.Sidecars, s) {
-						app.Sidecars = append(app.Sidecars, s)
-					}
+				// Store the sidecar regex pattern in state
+				if r.CliParams != nil && r.CliParams.Sidecars != "" {
+					app.Sidecars = r.CliParams.Sidecars
 				}
-				app.SidecarTargetPath = sidecarTarget
 				for _, sc := range installedSidecars {
 					if !sliceContains(app.InstalledSidecars, sc) {
 						app.InstalledSidecars = append(app.InstalledSidecars, sc)
@@ -1214,8 +1173,7 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 						CompileScript:     scriptPath,
 						Pinned:            r.PinInstall,
 						MaxDepth:          r.MaxDepth,
-						Sidecars:          r.Sidecars,
-						SidecarTargetPath: r.SidecarTargetPath,
+						Sidecars:          r.CliParams.Sidecars,
 						InstalledSidecars: sidecarList,
 					})
 					if err != nil {
@@ -1395,8 +1353,7 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 				Pinned:            r.PinInstall,
 				MaxDepth:          r.MaxDepth,
 				SymlinkDir:        symlinkDir,
-				Sidecars:          r.Sidecars,
-				SidecarTargetPath: r.SidecarTargetPath,
+				Sidecars:          r.CliParams.Sidecars,
 				InstalledSidecars: sidecarList,
 				Hooks:             existingHooks,
 			})

@@ -419,7 +419,6 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 			appParams.AssetBinariesRegexp = app.AssetBinariesRegexp
 			appParams.Extractor = app.Extractor
 			appParams.Sidecars = app.Sidecars
-			appParams.SidecarTargetPath = app.SidecarTargetPath
 			appParams.SidecarSymlinkTo = app.SidecarSymlinkTo
 			appParams.IncludeSidecars = app.IncludeSidecars
 			appParams.EnvInject = app.EnvInject

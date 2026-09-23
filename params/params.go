@@ -95,7 +95,7 @@ type CommonInstallFlags struct {
 	Rename                                        map[string]string `optional:"" short:"t" help:"Rename binaries installed at target path."`
 	KeepSuffixes                                  bool              `short:"k" help:"Keep OS/hardware suffixes on extracted binaries."`
 	DisablePrompts                                bool              `short:"D" env:"GH_PT_DISABLE_PROMPTS" help:"Disable all interactive prompts."`
-	NoSaveState                                   bool              `short:"S" env:"GH_PT_NO_SAVE_STATE" help:"Do not save installation to state."`
+	NoSaveState                                   bool              `env:"GH_PT_NO_SAVE_STATE" help:"Do not save installation to state."`
 	Wine                                          string            `default:"off" enum:"force,priority,allow,off" env:"GH_PT_WINE" help:"Wine mode."`
 	AllowForeignArch                              bool              `env:"GH_PT_ALLOW_FOREIGN_ARCH" help:"Allow installing assets with foreign architectures."`
 	AllowRootUserInstall                          bool              `help:"Allow installation to user-local paths when running as root."`
@@ -118,10 +118,9 @@ type CommonInstallFlags struct {
 	IsUpgradeCmd                                  bool              `kong:"-"`
 	SearchForInstallInstructionsIfNoReleaseAssets bool              `env:"GH_PT_README_FALLBACK" help:"Extract alternative installation instructions from README if release asset matching fails."`
 	FallbackReleases                              int               `default:"0" help:"Try this many older releases if no assets found in latest (0=disabled)."`
-	Sidecars                                      []string          `optional:"" short:"s" help:"Glob patterns for sidecar assets to capture."`
-	SidecarTargetPath                             string            `optional:"" type:"path" help:"Target directory for sidecar assets (default: XDG data home)."`
+	Sidecars                                      string            `optional:"" name:"sidecars" short:"S" help:"Regex pattern for sidecar assets to capture (default: \\\\.so.*|\\\\.h.*|\\\\.pak|\\\\.bin|\\\\.red)."`
 	SidecarSymlinkTo                              []string          `optional:"" help:"Create symlinks from sidecars to these directories (can be specified multiple times)."`
-	IncludeSidecars                               bool              `optional:"" help:"Auto-detect and include suspected sidecar assets (implied by --sidecar-* params)."`
+	IncludeSidecars                               string            `optional:"" name:"include-sidecars" short:"s" help:"Include sidecars mode: same_dest, xdg_data_home, bin, or custom-path:/path/to/. Requires --symlink."`
 	EnvInject                                     []string          `optional:"" help:"Environment variables pointing to sidecar directory (KEY=VALUE)."`
 	WarnUnmappedAssets                            bool              `default:"true" negatable:"" help:"Warn about suspected unmapped sidecar assets."`
 	AISetupSidecars                               bool              `help:"Use AI to analyze sidecars and generate post-install setup commands."`

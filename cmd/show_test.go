@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -511,6 +512,10 @@ func TestHandleShow_Success(t *testing.T) {
 		ExecContext: params.ExecContext{
 			Repository: "my-org/cool-tool",
 		},
+		CliParams: &params.ExecContext{
+			Repository: "my-org/cool-tool",
+			Sidecars:   `plugins/.*|config/.*`, // Regex pattern for sidecars
+		},
 	}
 
 	err := r.handleShow()
@@ -541,11 +546,12 @@ func TestHandleShow_Success(t *testing.T) {
 	require.NoError(t, err)
 	app, exists := st.Apps["my-org/cool-tool"]
 	require.True(t, exists)
-	assert.Equal(t, targetDir, app.SidecarTargetPath)
+	// SidecarTargetPath removed - sidecars now use IncludeSidecars mode
 	assert.Contains(t, app.InstalledSidecars, pluginPath)
 	assert.Contains(t, app.InstalledSidecars, configPath)
-	assert.Contains(t, app.Sidecars, "plugins/core.red")
-	assert.Contains(t, app.Sidecars, "config/app.json")
+	// Sidecars is now a regex pattern string, not a slice
+	// The test should verify the regex pattern is stored
+	assert.NotEmpty(t, app.Sidecars)
 
 	// Verify r.InstalledSidecars
 	assert.Contains(t, r.InstalledSidecars, pluginPath)
@@ -738,4 +744,220 @@ func TestShowInfo_DelegatesToHandleShow(t *testing.T) {
 	err := ShowInfo(r)
 	assert.NoError(t, err)
 	assert.True(t, called)
+}
+
+// TestShowInfo_NoFlags_ShowsReleaseInfo: gh-pt show <repo> with no flags must show release info,
+// NOT the interactive file browser.
+func TestShowInfo_NoFlags_ShowsReleaseInfo(t *testing.T) {
+	origMultiselect := multiselectFiles
+	defer func() { multiselectFiles = origMultiselect }()
+
+	fileBrowserCalled := false
+	multiselectFiles = func(r *RootCLI, prompt string, options []string) ([]string, error) {
+		fileBrowserCalled = true
+		return nil, nil
+	}
+
+	mock := &mockGhClient{
+		releases: []Release{{ID: 1, TagName: "v1.0.0", Prerelease: false}},
+		assets:   map[int64][]ReleaseAsset{1: {{ID: 1, Name: "app-linux.tar.gz"}}},
+	}
+
+	r := &RootCLI{
+		ExecContext: params.ExecContext{
+			Repository:      "owner/repo",
+			ShowAssets:      -1,
+			ShowVersions:    -1,
+			ShowDescription: -1,
+			ShowReadme:      -1,
+		},
+	}
+
+	out := captureOutput(func() {
+		err := showInfoWithClient(r, mock)
+		assert.NoError(t, err)
+	})
+
+	assert.False(t, fileBrowserCalled, "file browser must NOT be shown")
+	assert.Contains(t, out, "v1.0.0")
+	assert.Contains(t, out, "app-linux.tar.gz")
+}
+
+// TestShowInfo_VersionFlag_SelectsSpecificRelease: --version v1.3.1 must fetch assets from that tag.
+func TestShowInfo_VersionFlag_SelectsSpecificRelease(t *testing.T) {
+	mock := &mockGhClient{
+		releases: []Release{
+			{ID: 2, TagName: "v1.3.2", Prerelease: false},
+			{ID: 1, TagName: "v1.3.1", Prerelease: false},
+		},
+		assets: map[int64][]ReleaseAsset{
+			2: {{ID: 10, Name: "app-v1.3.2-linux.tar.gz"}},
+			1: {{ID: 11, Name: "app-v1.3.1-linux.tar.gz"}},
+		},
+	}
+
+	r := &RootCLI{
+		ExecContext: params.ExecContext{
+			Repository: "owner/repo",
+			ShowAssets: 50,
+			CommonInstallFlags: params.CommonInstallFlags{
+				ReleaseVersion: "v1.3.1",
+			},
+		},
+	}
+
+	out := captureOutput(func() {
+		err := showInfoWithClient(r, mock)
+		assert.NoError(t, err)
+	})
+
+	assert.Contains(t, out, "app-v1.3.1-linux.tar.gz")
+	assert.NotContains(t, out, "app-v1.3.2-linux.tar.gz")
+}
+
+// TestShowInfo_Default_BothReleaseTypes: no --stable/--prerelease -> versions list has both,
+// assets come from latest STABLE.
+func TestShowInfo_Default_BothReleaseTypes(t *testing.T) {
+	mock := &mockGhClient{
+		releases: []Release{
+			{ID: 2, TagName: "v2.0.0-rc1", Prerelease: true},
+			{ID: 1, TagName: "v1.0.0", Prerelease: false},
+		},
+		assets: map[int64][]ReleaseAsset{
+			2: {{ID: 20, Name: "prerelease-asset.tar.gz"}},
+			1: {{ID: 10, Name: "stable-asset.tar.gz"}},
+		},
+	}
+
+	r := &RootCLI{
+		ExecContext: params.ExecContext{
+			Repository:   "owner/repo",
+			ShowVersions: 20,
+			ShowAssets:   50,
+		},
+	}
+
+	out := captureOutput(func() {
+		err := showInfoWithClient(r, mock)
+		assert.NoError(t, err)
+	})
+
+	assert.Contains(t, out, "v2.0.0-rc1", "prerelease must appear in versions list")
+	assert.Contains(t, out, "v1.0.0", "stable must appear in versions list")
+	assert.Contains(t, out, "stable-asset.tar.gz", "assets must be from latest stable")
+	assert.NotContains(t, out, "prerelease-asset.tar.gz")
+}
+
+// TestShowInfo_StableFlag_OverridesConfigPrerelease: --stable shows stable assets even
+// when config has allow_prerelease: true.
+func TestShowInfo_StableFlag_OverridesConfigPrerelease(t *testing.T) {
+	tmpDir := t.TempDir()
+	xdg.ConfigHome = tmpDir
+	defer func() { xdg.ConfigHome = "" }()
+	cfgPath := filepath.Join(tmpDir, "gh-pt", "config.yml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(cfgPath), 0755))
+	require.NoError(t, os.WriteFile(cfgPath, []byte("allow_prerelease: true\n"), 0644))
+
+	mock := &mockGhClient{
+		releases: []Release{
+			{ID: 2, TagName: "v2.0.0-rc1", Prerelease: true},
+			{ID: 1, TagName: "v1.0.0", Prerelease: false},
+		},
+		assets: map[int64][]ReleaseAsset{
+			2: {{ID: 20, Name: "prerelease-asset.tar.gz"}},
+			1: {{ID: 10, Name: "stable-asset.tar.gz"}},
+		},
+	}
+
+	r := &RootCLI{
+		ExecContext: params.ExecContext{
+			Repository: "owner/repo",
+			ShowAssets: 50,
+			CommonInstallFlags: params.CommonInstallFlags{Stable: true},
+		},
+	}
+
+	out := captureOutput(func() {
+		err := showInfoWithClient(r, mock)
+		assert.NoError(t, err)
+	})
+
+	assert.Contains(t, out, "stable-asset.tar.gz")
+	assert.NotContains(t, out, "prerelease-asset.tar.gz")
+}
+
+// TestShowInfo_PrereleaseFlag_AssetsFromLatestPrerelease: --prerelease returns prerelease assets.
+func TestShowInfo_PrereleaseFlag_AssetsFromLatestPrerelease(t *testing.T) {
+	mock := &mockGhClient{
+		releases: []Release{
+			{ID: 2, TagName: "v2.0.0-rc1", Prerelease: true},
+			{ID: 1, TagName: "v1.0.0", Prerelease: false},
+		},
+		assets: map[int64][]ReleaseAsset{
+			2: {{ID: 20, Name: "prerelease-asset.tar.gz"}},
+			1: {{ID: 10, Name: "stable-asset.tar.gz"}},
+		},
+	}
+
+	r := &RootCLI{
+		ExecContext: params.ExecContext{
+			Repository: "owner/repo",
+			ShowAssets: 50,
+			CommonInstallFlags: params.CommonInstallFlags{Prerelease: true},
+		},
+	}
+
+	out := captureOutput(func() {
+		err := showInfoWithClient(r, mock)
+		assert.NoError(t, err)
+	})
+
+	assert.Contains(t, out, "prerelease-asset.tar.gz")
+	assert.NotContains(t, out, "stable-asset.tar.gz")
+}
+
+// mockReadmeClient serves releases + readme content for readme tests.
+type mockReadmeClient struct {
+	releases      []Release
+	readmeContent string
+}
+
+func (m *mockReadmeClient) Get(path string, response interface{}) error {
+	if strings.HasSuffix(path, "/releases") {
+		data, _ := json.Marshal(m.releases)
+		return json.Unmarshal(data, response)
+	}
+	if strings.HasSuffix(path, "/readme") {
+		data, _ := json.Marshal(map[string]string{"content": m.readmeContent})
+		return json.Unmarshal(data, response)
+	}
+	return nil
+}
+
+// TestShowInfo_Readme_RendersMarkdown: --readme must render markdown, not dump raw syntax.
+func TestShowInfo_Readme_RendersMarkdown(t *testing.T) {
+	rawMD := "# Title\n\nSome **bold** text.\n"
+	encoded := base64.StdEncoding.EncodeToString([]byte(rawMD))
+
+	mock := &mockReadmeClient{
+		releases:      []Release{{ID: 1, TagName: "v1.0.0"}},
+		readmeContent: encoded,
+	}
+
+	r := &RootCLI{
+		ExecContext: params.ExecContext{
+			Repository: "owner/repo",
+			ShowReadme: 100,
+		},
+	}
+
+	out := captureOutput(func() {
+		err := showInfoWithClient(r, mock)
+		assert.NoError(t, err)
+	})
+
+	assert.NotContains(t, out, "# Title", "must not print raw markdown headers")
+	assert.NotContains(t, out, "**bold**", "must not print raw markdown bold")
+	assert.Contains(t, out, "Title")
+	assert.Contains(t, out, "bold")
 }

@@ -115,17 +115,16 @@ func TestCLI_SpecialtyFlagCascades(t *testing.T) {
 func TestCLI_SidecarFlags(t *testing.T) {
 	cli, _ := parseWithTestVars(t, []string{
 		"install", "test/app",
-		"-s", "plugins/*.so",
-		"-s", "data/**",
-		"--sidecar-target-path", "/opt/sidecars",
+		"-S", `plugins/.*\.so|data/.*`,
 		"--sidecar-symlink-to", "/etc/plugins",
 		"--sidecar-symlink-to", "/var/lib/plugins",
 		"--env-inject", "PLUGIN_DIR=/opt/sidecars",
 		"--ai-setup-sidecars",
 	})
 
-	assert.Equal(t, []string{"plugins/*.so", "data/**"}, cli.Install.Sidecars)
-	assert.Equal(t, "/opt/sidecars", cli.Install.SidecarTargetPath)
+	// Sidecars is now a regex pattern string
+	assert.Equal(t, `plugins/.*\.so|data/.*`, cli.Install.Sidecars)
+	// SidecarTargetPath removed - use IncludeSidecars mode instead
 	assert.Equal(t, []string{"/etc/plugins", "/var/lib/plugins"}, cli.Install.SidecarSymlinkTo)
 	assert.Equal(t, []string{"PLUGIN_DIR=/opt/sidecars"}, cli.Install.EnvInject)
 	assert.True(t, cli.Install.AISetupSidecars)

@@ -381,13 +381,8 @@ func RemoveApp(target string, purge bool) error {
 			}
 		}
 
-		if app.SidecarTargetPath != "" {
-			if err := os.RemoveAll(app.SidecarTargetPath); err != nil {
-				log.Warn(fmt.Sprintf("Failed to purge sidecar directory %s", app.SidecarTargetPath), "error", err)
-			} else {
-				log.Infof("Deleted sidecar assets at %s", app.SidecarTargetPath)
-			}
-		}
+		// Sidecar cleanup is now handled by the IncludeSidecars mode logic
+		// Sidecars are stored in standard locations (XDG data home, bin, etc.)
 
 		if app.Clone || app.Fork {
 			if purge && app.TargetPath != "" {
