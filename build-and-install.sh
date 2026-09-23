@@ -58,17 +58,12 @@ active_is_new() {
 
     # Determine expected location based on install mode
     local expected
-    if [ "$GLOBAL" -eq 1 ]; then
-        if [ "$DIRECT" -eq 1 ]; then
-            # Direct copy: installed at BIN_TARGET
-            expected="$(realpath "$BIN_TARGET" 2>/dev/null || echo "$BIN_TARGET")"
-        else
-            # Symlink: installed points to BUILT_BIN
-            expected="$(realpath "$BUILT_BIN" 2>/dev/null || echo "$BUILT_BIN")"
-        fi
+    if [ "$DIRECT" -eq 1 ]; then
+        # Direct copy: installed at BIN_TARGET
+        expected="$(realpath "$BIN_TARGET" 2>/dev/null || echo "$BIN_TARGET")"
     else
-        # Non-global: user bin dir
-        expected="$(realpath "${HOME}/.local/bin/gh-pt" 2>/dev/null || echo "${HOME}/.local/bin/gh-pt")"
+        # Symlink: installed points to BUILT_BIN
+        expected="$(realpath "$BUILT_BIN" 2>/dev/null || echo "$BUILT_BIN")"
     fi
     [ "$resolved" = "$expected" ]
 }
@@ -85,6 +80,13 @@ system_binary_exists() {
     [ -n "$active" ] && [[ "$active" == /usr/* ]]
 }
 
+# --- Set BIN_TARGET based on --global flag ---
+if [ "$GLOBAL" -eq 1 ]; then
+    BIN_TARGET="/usr/local/bin/gh-pt"
+else
+    BIN_TARGET="${HOME}/.local/bin/gh-pt"
+fi
+
 # --- If no --global, build status only ---
 if [ "$GLOBAL" -eq 0 ]; then
     if active_is_new; then
@@ -95,18 +97,26 @@ if [ "$GLOBAL" -eq 0 ]; then
     exit 0
 fi
 
-BIN_TARGET="${HOME}/.local/bin/gh-pt"
-
 # Determine if we have an existing binary at target
 target_exists=0
 target_is_symlink=0
 target_is_real=0
-if [ -L "$BIN_TARGET" ]; then
-    target_exists=1
-    target_is_symlink=1
-elif [ -e "$BIN_TARGET" ]; then
-    target_exists=1
-    target_is_real=1
+if [ "$GLOBAL" -eq 1 ]; then
+    if sudo test -L "$BIN_TARGET" 2>/dev/null; then
+        target_exists=1
+        target_is_symlink=1
+    elif sudo test -e "$BIN_TARGET" 2>/dev/null; then
+        target_exists=1
+        target_is_real=1
+    fi
+else
+    if [ -L "$BIN_TARGET" ]; then
+        target_exists=1
+        target_is_symlink=1
+    elif [ -e "$BIN_TARGET" ]; then
+        target_exists=1
+        target_is_real=1
+    fi
 fi
 
 # Check precedence override
@@ -121,7 +131,14 @@ if [ "$DIRECT" -eq 1 ]; then
     if [ "$target_exists" -eq 1 ] && [ "$FORCE" -eq 0 ]; then
         if active_is_new; then
             # Active is already the installed version (copy or symlink)
-            if [ -L "$BIN_TARGET" ]; then
+            is_symlink=0
+            if [ "$GLOBAL" -eq 1 ]; then
+                sudo test -L "$BIN_TARGET" 2>/dev/null && is_symlink=1
+            else
+                [ -L "$BIN_TARGET" ] && is_symlink=1
+            fi
+            
+            if [ "$is_symlink" -eq 1 ]; then
                 echo -e "${GREEN_DOT} ${GREEN_TXT}BUILD SUCCESSFUL${NC} ${YELLOW_DOT} ${YELLOW_TXT}INSTALL WARNING: --direct requested but no copy made. Active binary is a symlink to the new build.${NC}"
             else
                 echo -e "${GREEN_DOT} ${GREEN_TXT}BUILD SUCCESSFUL${NC} ${YELLOW_DOT} ${YELLOW_TXT}INSTALL WARNING: --direct requested but no copy made. Active binary is already the new build.${NC}"
@@ -135,8 +152,13 @@ if [ "$DIRECT" -eq 1 ]; then
     fi
 
     # Force or no existing target - proceed with copy
-    [ -e "$BIN_TARGET" ] || [ -L "$BIN_TARGET" ] && rm -f "$BIN_TARGET"
-    cp "$BUILT_BIN" "$BIN_TARGET"
+    if [ "$GLOBAL" -eq 1 ]; then
+        sudo rm -f "$BIN_TARGET"
+        sudo cp "$BUILT_BIN" "$BIN_TARGET"
+    else
+        [ -e "$BIN_TARGET" ] || [ -L "$BIN_TARGET" ] && rm -f "$BIN_TARGET"
+        cp "$BUILT_BIN" "$BIN_TARGET"
+    fi
 
     if active_is_new; then
         echo -e "${GREEN_DOT} ${GREEN_TXT}BUILD SUCCESSFUL — INSTALLED SUCCESSFULLY (direct copy)${NC}"
@@ -157,8 +179,13 @@ else
         fi
     fi
 
-    [ -e "$BIN_TARGET" ] || [ -L "$BIN_TARGET" ] && rm -f "$BIN_TARGET"
-    ln -s "$BUILT_BIN" "$BIN_TARGET"
+    if [ "$GLOBAL" -eq 1 ]; then
+        sudo rm -f "$BIN_TARGET"
+        sudo ln -s "$BUILT_BIN" "$BIN_TARGET"
+    else
+        [ -e "$BIN_TARGET" ] || [ -L "$BIN_TARGET" ] && rm -f "$BIN_TARGET"
+        ln -s "$BUILT_BIN" "$BIN_TARGET"
+    fi
 
     if active_is_new; then
         echo -e "${GREEN_DOT} ${GREEN_TXT}BUILD SUCCESSFUL — INSTALLED SUCCESSFULLY${NC}"
