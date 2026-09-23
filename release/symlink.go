@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/charmbracelet/log"
@@ -148,7 +149,7 @@ func (r *GithubRelease) executeSymlinkInstall(binaries []*selector.SelectorItem,
 		}
 	}
 
-	// Symlink appropriate exes
+	// Symlink binaries to bin directory
 	for _, binary := range binaries {
 		var srcPath string
 		if binary.ExtractDir != "" {
@@ -195,5 +196,126 @@ func (r *GithubRelease) executeSymlinkInstall(binaries []*selector.SelectorItem,
 		r.InstalledBinaries = append(r.InstalledBinaries, filepath.Base(destPath))
 	}
 
+	// Handle sidecar symlinking if --include-sidecars is set
+	if r.CliParams.IncludeSidecars != "" {
+		if err := r.symlinkSidecars(symlinkDir); err != nil {
+			log.Warn("failed to symlink sidecars", "error", err)
+		}
+	}
+
 	return symlinkDir, nil
+}
+
+// symlinkSidecars symlinks sidecar files to the appropriate destination based on --include-sidecars mode
+func (r *GithubRelease) symlinkSidecars(symlinkDir string) error {
+	// Determine sidecar destination based on mode
+	sidecarDest, err := r.resolveSidecarSymlinkDest()
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(sidecarDest, 0755); err != nil {
+		return err
+	}
+
+	// Get the sidecar regex pattern
+	sidecarRegex := r.CliParams.Sidecars
+	if sidecarRegex == "" {
+		// Use default pattern based on destination
+		sidecarRegex = r.getDefaultSidecarRegex(sidecarDest)
+	}
+
+	regex, err := regexp.Compile(sidecarRegex)
+	if err != nil {
+		return fmt.Errorf("invalid sidecar regex: %w", err)
+	}
+
+	// Walk through symlinkDir and find sidecar files
+	err = filepath.WalkDir(symlinkDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+
+		relPath, err := filepath.Rel(symlinkDir, path)
+		if err != nil {
+			return nil
+		}
+
+		// Check if this file matches the sidecar regex
+		if regex.MatchString(relPath) || regex.MatchString(d.Name()) {
+			// This is a sidecar, symlink it to the destination
+			destPath := filepath.Join(sidecarDest, d.Name())
+
+			// Remove existing symlink if it exists
+			if _, err := os.Lstat(destPath); err == nil {
+				if r.CliParams.Overwrite || r.CliParams.IsUpgradeCmd {
+					if err := os.Remove(destPath); err != nil {
+						log.Warn("failed to remove existing sidecar symlink", "error", err, "path", destPath)
+						return nil
+					}
+				} else {
+					log.Warn("sidecar symlink already exists, skipping", "path", destPath)
+					return nil
+				}
+			}
+
+			if err := os.Symlink(path, destPath); err != nil {
+				log.Warn("failed to create sidecar symlink", "error", err, "src", path, "dest", destPath)
+				return nil
+			}
+
+			log.Info("created sidecar symlink", "src", path, "dest", destPath)
+			r.InstalledSidecars = append(r.InstalledSidecars, destPath)
+		}
+
+		return nil
+	})
+
+	return err
+}
+
+// resolveSidecarSymlinkDest determines where sidecars should be symlinked based on --include-sidecars mode
+func (r *GithubRelease) resolveSidecarSymlinkDest() (string, error) {
+	mode := r.CliParams.IncludeSidecars
+
+	switch {
+	case mode == "same_dest":
+		// Symlink sidecars to the same directory as binaries (TargetPath)
+		return r.CliParams.TargetPath, nil
+	case mode == "xdg_data_home":
+		// Symlink sidecars to XDG data home
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		return filepath.Join(homeDir, ".local", "share", r.CliParams.Repository), nil
+	case mode == "bin":
+		// Symlink sidecars to bin directory
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		return filepath.Join(homeDir, ".local", "bin"), nil
+	case strings.HasPrefix(mode, "custom-path:"):
+		// Extract custom path
+		return strings.TrimPrefix(mode, "custom-path:"), nil
+	default:
+		return "", fmt.Errorf("unknown include-sidecars mode: %s", mode)
+	}
+}
+
+// getDefaultSidecarRegex returns a default regex pattern based on the destination
+func (r *GithubRelease) getDefaultSidecarRegex(destPath string) string {
+	// Determine appropriate regex based on destination
+	switch {
+	case strings.Contains(destPath, ".local/bin") || strings.Contains(destPath, "/usr/bin"):
+		// For bin directories, match executables and libraries
+		return `\.so.*|\.dll|\.dylib|\.exe$`
+	case strings.Contains(destPath, ".local/share") || strings.Contains(destPath, "xdg"):
+		// For XDG data home, match libraries, headers, configs, docs
+		return `\.so.*|\.h$|\.hpp$|\.c$|\.cpp$|\.txt$|README.*|LICENSE.*|\.md$|\.json$|\.yaml$|\.yml$|\.toml$|\.conf$`
+	default:
+		// Default pattern for custom paths
+		return `\.so.*|\.h$|\.dll|\.dylib|\.txt$|README.*|LICENSE.*`
+	}
 }
