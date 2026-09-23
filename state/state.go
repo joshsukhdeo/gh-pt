@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/adrg/xdg"
 	"github.com/gofrs/flock"
@@ -45,6 +46,60 @@ type InstalledApp struct {
 	InstalledSidecars        []string          `json:"installed_sidecars,omitempty"`
 	EnvInject                []string          `json:"env_inject,omitempty"`
 	FallbackReleases         int               `json:"fallback_releases,omitempty"`
+}
+
+// UnmarshalJSON implements custom unmarshaling for backward compatibility.
+// Handles the migration from bool to string for IncludeSidecars field.
+// Handles the migration from []string to string for Sidecars field.
+func (app *InstalledApp) UnmarshalJSON(data []byte) error {
+	type Alias InstalledApp
+	aux := &struct {
+		IncludeSidecars interface{} `json:"include_sidecars,omitempty"`
+		Sidecars        interface{} `json:"sidecars,omitempty"`
+		*Alias
+	}{
+		Alias: (*Alias)(app),
+	}
+
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	// Handle IncludeSidecars migration from bool to string
+	switch v := aux.IncludeSidecars.(type) {
+	case bool:
+		if v {
+			app.IncludeSidecars = "xdg_data_home"
+		} else {
+			app.IncludeSidecars = ""
+		}
+	case string:
+		app.IncludeSidecars = v
+	case nil:
+		app.IncludeSidecars = ""
+	}
+
+	// Handle Sidecars migration from []string to string
+	switch v := aux.Sidecars.(type) {
+	case []interface{}:
+		// Convert array of patterns to a regex pattern
+		if len(v) > 0 {
+			// Join patterns with | (OR)
+			patterns := make([]string, len(v))
+			for i, p := range v {
+				if s, ok := p.(string); ok {
+					patterns[i] = s
+				}
+			}
+			app.Sidecars = strings.Join(patterns, "|")
+		}
+	case string:
+		app.Sidecars = v
+	case nil:
+		app.Sidecars = ""
+	}
+
+	return nil
 }
 
 type StateManager interface {
