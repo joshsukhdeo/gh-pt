@@ -197,6 +197,19 @@ func (r *GithubRelease) resolveSidecarTargetPath() string {
 		// Sidecars go to the bin directory
 		homeDir, _ := os.UserHomeDir()
 		return filepath.Join(homeDir, ".local", "bin")
+	case mode == "local-map":
+		// Sidecars stay in symlinkDir and get mapped to /usr/local/
+		homeDir, _ := os.UserHomeDir()
+		parts := strings.Split(r.CliParams.Repository, "/")
+		var ownerID, repoID string
+		if len(parts) >= 2 {
+			ownerID = parts[0]
+			repoID = parts[1]
+		} else {
+			ownerID = ""
+			repoID = parts[0]
+		}
+		return filepath.Join(homeDir, "src", "apps", ownerID, repoID)
 	case strings.HasPrefix(mode, "custom-path:"):
 		// Extract custom path
 		return strings.TrimPrefix(mode, "custom-path:")
