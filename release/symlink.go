@@ -208,6 +208,13 @@ func (r *GithubRelease) executeSymlinkInstall(binaries []*selector.SelectorItem,
 
 // symlinkSidecars symlinks sidecar files to the appropriate destination based on --include-sidecars mode
 func (r *GithubRelease) symlinkSidecars(symlinkDir string) error {
+	mode := r.CliParams.IncludeSidecars
+
+	// Handle local-map mode separately
+	if mode == "local-map" {
+		return r.symlinkLocalMap(symlinkDir)
+	}
+
 	// Determine sidecar destination based on mode
 	sidecarDest, err := r.resolveSidecarSymlinkDest()
 	if err != nil {
@@ -272,6 +279,73 @@ func (r *GithubRelease) symlinkSidecars(symlinkDir string) error {
 	})
 
 	return err
+}
+
+// symlinkLocalMap maps standard Unix directories to /usr/local/ equivalents
+// For example: ~/src/apps/owner/repo/bin/* -> /usr/local/bin/*
+func (r *GithubRelease) symlinkLocalMap(symlinkDir string) error {
+	// Standard Unix directories to map
+	standardDirs := []string{"bin", "include", "lib", "lib64", "libs", "share", "etc", "var"}
+
+	for _, dir := range standardDirs {
+		srcDir := filepath.Join(symlinkDir, dir)
+
+		// Check if this directory exists in the symlinkDir
+		if _, err := os.Stat(srcDir); os.IsNotExist(err) {
+			continue
+		}
+
+		// Determine the target directory in /usr/local/
+		// Map "libs" to "lib" for consistency
+		targetDirName := dir
+		if dir == "libs" {
+			targetDirName = "lib"
+		}
+		targetDir := filepath.Join("/usr/local", targetDirName)
+
+		// Create target directory if it doesn't exist
+		if err := os.MkdirAll(targetDir, 0755); err != nil {
+			log.Warn("failed to create target directory", "path", targetDir, "error", err)
+			continue
+		}
+
+		// Read all items directly in the source directory
+		entries, err := os.ReadDir(srcDir)
+		if err != nil {
+			log.Warn("failed to read directory", "path", srcDir, "error", err)
+			continue
+		}
+
+		// Symlink each item directly in the directory
+		for _, entry := range entries {
+			srcPath := filepath.Join(srcDir, entry.Name())
+			destPath := filepath.Join(targetDir, entry.Name())
+
+			// Remove existing symlink/file if it exists
+			if _, err := os.Lstat(destPath); err == nil {
+				if r.CliParams.Overwrite || r.CliParams.IsUpgradeCmd {
+					if err := os.Remove(destPath); err != nil {
+						log.Warn("failed to remove existing file/symlink", "path", destPath, "error", err)
+						continue
+					}
+				} else {
+					log.Warn("file/symlink already exists, skipping", "path", destPath)
+					continue
+				}
+			}
+
+			// Create symlink
+			if err := os.Symlink(srcPath, destPath); err != nil {
+				log.Warn("failed to create symlink", "src", srcPath, "dest", destPath, "error", err)
+				continue
+			}
+
+			log.Info("created local-map symlink", "src", srcPath, "dest", destPath)
+			r.InstalledSidecars = append(r.InstalledSidecars, destPath)
+		}
+	}
+
+	return nil
 }
 
 // resolveSidecarSymlinkDest determines where sidecars should be symlinked based on --include-sidecars mode

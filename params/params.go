@@ -120,7 +120,7 @@ type CommonInstallFlags struct {
 	FallbackReleases                              int               `default:"0" help:"Try this many older releases if no assets found in latest (0=disabled)."`
 	Sidecars                                      string            `optional:"" name:"sidecars" short:"S" help:"Regex pattern for sidecar assets to capture (default: \\\\.so.*|\\\\.h.*|\\\\.pak|\\\\.bin|\\\\.red)."`
 	SidecarSymlinkTo                              []string          `optional:"" help:"Create symlinks from sidecars to these directories (can be specified multiple times)."`
-	IncludeSidecars                               string            `optional:"" name:"include-sidecars" short:"s" help:"Include sidecars mode: same_dest, xdg_data_home, bin, or custom-path:/path/to/. Requires --symlink."`
+	IncludeSidecars                               string            `optional:"" name:"include-sidecars" short:"s" help:"Include sidecars mode: same_dest, xdg_data_home, bin, local-map, or custom-path:/path/to/. Requires --symlink."`
 	EnvInject                                     []string          `optional:"" help:"Environment variables pointing to sidecar directory (KEY=VALUE)."`
 	WarnUnmappedAssets                            bool              `default:"true" negatable:"" help:"Warn about suspected unmapped sidecar assets."`
 	AISetupSidecars                               bool              `help:"Use AI to analyze sidecars and generate post-install setup commands."`
