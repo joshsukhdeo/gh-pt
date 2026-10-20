@@ -6,10 +6,10 @@ gh-pt v2 Architecture (AI 2-stage source compilation, LDD static dependency reso
 - skills: subagent-orchestrator, tdd
 
 ## Decisions so far
-- [Spec: v2 Architecture](docs/SPEC-v2.md): Defined the Dependency Resolution & Routing Blueprint
-- [Spec: Heuristics](docs/SPEC-HEURISTICS.md): Defined the Toolchain Contextual Mapping
-- [Spec: Sidecars](docs/SPEC-SIDECARS.md): Defined Companion Asset & Plugin Tracking
-- [Spec: Optimizations](docs/SPEC-OPTIMIZATIONS.md): Defined Atomic Swaps, GraphQL Batching, Concurrent Updates, and Sudo Refresh
+- [Spec: v2 Architecture](../SPECS/SPEC-v2.md): Defined the Dependency Resolution & Routing Blueprint
+- [Spec: Heuristics](../SPECS/SPEC-HEURISTICS.md): Defined the Toolchain Contextual Mapping
+- [Spec: Sidecars](../SPECS/SPEC-SIDECARS.md): Defined Companion Asset & Plugin Tracking
+- [Spec: Optimizations](../SPECS/SPEC-OPTIMIZATIONS.md): Defined Atomic Swaps, GraphQL Batching, Concurrent Updates, and Sudo Refresh
 - Foundation & Reliability (Code): Implemented V2 State schemas, CLI flags, Sudo Keepalive, and Atomic Swaps.
 - Ecosystem & Resolver (Code): Built `resolver` native OS/UV/Mise clients and `heuristics` directory scanner.
 - Install Pipeline (Code): Implemented Sidecar Interactive Prompting, LDD `.so` sweeps, and `LD_LIBRARY_PATH` injection.

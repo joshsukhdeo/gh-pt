@@ -16,6 +16,7 @@ type Selector struct {
 	NamesMatcher     []string
 	RegexpMatchers   []string
 	Single           bool
+	AllMode          string // "assets", "extracted", "archives"
 	AllowForeignArch bool
 	Repository       string
 	OnlyFirstMatch   bool
@@ -78,7 +79,7 @@ func (s *Selector) Run() ([]*SelectorItem, error) {
 			}
 		}
 		if len(binMatches) > 0 {
-			if (s.OnlyFirstMatch || s.Single) && len(binMatches) > 1 {
+			if (s.OnlyFirstMatch || s.Single || s.AllMode == "assets") && len(binMatches) > 1 {
 				binMatches = binMatches[:1]
 			}
 			if s.MaxExeInstalls > 0 && len(binMatches) > s.MaxExeInstalls {
@@ -88,7 +89,7 @@ func (s *Selector) Run() ([]*SelectorItem, error) {
 		}
 	}
 
-	if s.Kind == Asset && len(s.NamesMatcher) == 0 {
+	if s.Kind == Asset && len(s.NamesMatcher) == 0 && (s.AllMode == "assets" || s.AllMode == "") {
 		classifier := DefaultClassifier()
 		if s.AvxLevel != "" && s.AvxLevel != "auto" {
 			classifier.HostAVXLevel = s.AvxLevel
@@ -111,9 +112,32 @@ func (s *Selector) Run() ([]*SelectorItem, error) {
 				}
 			}
 			if len(matchedItems) > 0 {
-				if s.OnlyFirstMatch && len(matchedItems) > 1 {
-					matchedItems = matchedItems[:1]
+				return matchedItems, nil
+			}
+		}
+	} else if s.Kind == Asset && len(s.NamesMatcher) == 0 && s.AllMode == "extracted" && len(s.RegexpMatchers) == 0 {
+		// --all extracted mode without explicit regex: pick best package type, then return all packages of that type
+		classifier := DefaultClassifier()
+		if s.AvxLevel != "" && s.AvxLevel != "auto" {
+			classifier.HostAVXLevel = s.AvxLevel
+		}
+		var assetNames []string
+		for _, it := range s.Items {
+			assetNames = append(assetNames, it.Name)
+		}
+		defaultAssets := classifier.PickDefaultAssetsWithContext(s.Repository, assetNames, s.RegexpMatchers)
+		if len(defaultAssets) > 0 {
+			// Get the extension of the best package
+			bestPackage := defaultAssets[0]
+			bestExt := strings.ToLower(filepath.Ext(bestPackage))
+			var matchedItems []*SelectorItem
+			for _, it := range s.Items {
+				if strings.EqualFold(filepath.Ext(it.Name), bestExt) {
+					it.Selected = true
+					matchedItems = append(matchedItems, it)
 				}
+			}
+			if len(matchedItems) > 0 {
 				return matchedItems, nil
 			}
 		}
@@ -318,7 +342,7 @@ func (s *Selector) Run() ([]*SelectorItem, error) {
 		if matches, err := executePass(strictRegexps); err != nil {
 			return nil, err
 		} else if len(matches) > 0 {
-			if s.OnlyFirstMatch && len(matches) > 1 {
+			if (s.OnlyFirstMatch || s.AllMode == "assets") && len(matches) > 1 {
 				matches = matches[:1]
 			}
 			if s.MaxExeInstalls > 0 && len(matches) > s.MaxExeInstalls {
@@ -333,7 +357,7 @@ func (s *Selector) Run() ([]*SelectorItem, error) {
 			for _, m := range matches {
 				log.Warn("low confidence (<80%) asset selection; asset matched via weak fallback patterns, verify asset contents", "asset", m.Name)
 			}
-			if s.OnlyFirstMatch && len(matches) > 1 {
+			if (s.OnlyFirstMatch || s.AllMode == "assets") && len(matches) > 1 {
 				matches = matches[:1]
 			}
 			if s.MaxExeInstalls > 0 && len(matches) > s.MaxExeInstalls {

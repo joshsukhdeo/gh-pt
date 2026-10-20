@@ -17,17 +17,23 @@ import (
 
 // Config holds the configuration for a compile operation.
 type Config struct {
-	Repository       string
-	RepoDir          string
-	BuildDir         string
-	ScriptPath       string
-	ManifestPath     string
-	TargetPath       string
-	SymlinkDir       string
-	InstallDirTarget string
-	Track            string // "stable", "prerelease", "latest-commit"
-	Version          string
-	CompileScript    string
+	Repository        string
+	RepoDir           string
+	BuildDir          string
+	ScriptPath        string
+	ManifestPath      string
+	TargetPath        string
+	SymlinkDir        string
+	InstallDirTarget  string
+	Track             string // "stable", "prerelease", "latest-commit"
+	Version           string
+	CompileScript     string
+	Driver            string
+	Plugin            string
+	DriverMap         string
+	IncludeSidecars   bool
+	SidecarMode       string
+	InstalledSidecars []string
 }
 
 // CompileResult contains the results of a compile operation.
@@ -294,6 +300,16 @@ func SaveCompileState(cfg *Config, result *CompileResult) error {
 	app.CompileScript = cfg.ScriptPath
 	app.SymlinkDir = cfg.SymlinkDir
 	app.Sidecars = strings.Join(result.Sidecars, ",")
+	app.Driver = cfg.Driver
+	app.Plugin = cfg.Plugin
+	app.DriverMap = cfg.DriverMap
+	app.IncludeSidecars = cfg.IncludeSidecars
+	app.SidecarMode = cfg.SidecarMode
+	if len(result.Sidecars) > 0 {
+		app.InstalledSidecars = result.Sidecars
+	} else if len(cfg.InstalledSidecars) > 0 {
+		app.InstalledSidecars = cfg.InstalledSidecars
+	}
 
 	st.Apps[cfg.Repository] = app
 

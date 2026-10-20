@@ -164,9 +164,9 @@ func StateUpdate(target string, updates map[string]interface{}) error {
 			if v, ok := value.(string); ok {
 				foundApp.CompileScript = v
 			}
-		case "asset_binaries_regexp":
+		case "extract_regexp":
 			if v, ok := value.(string); ok {
-				foundApp.AssetBinariesRegexp = v
+				foundApp.ExtractRegex = v
 			}
 		case "containing_archive":
 			if v, ok := value.(string); ok {
@@ -176,9 +176,9 @@ func StateUpdate(target string, updates map[string]interface{}) error {
 			if v, ok := value.([]string); ok {
 				foundApp.Type = v
 			}
-		case "asset_binaries":
+		case "extract":
 			if v, ok := value.([]string); ok {
-				foundApp.AssetBinaries = v
+				foundApp.Extract = v
 			}
 		case "installed_asset_names":
 			if v, ok := value.([]string); ok {
@@ -274,9 +274,9 @@ func StateEdit() error {
 	var version = app.Version
 	var extractor = app.Extractor
 	var compileScript = app.CompileScript
-	var assetBinariesRegexp = app.AssetBinariesRegexp
+	var extractRegex = app.ExtractRegex
 	var typeStr = strings.Join(app.Type, ",")
-	var assetBinariesStr = strings.Join(app.AssetBinaries, ",")
+	var extractStr = strings.Join(app.Extract, ",")
 	var renameStr = mapToString(app.Rename)
 	var maxDepthStr = strconv.Itoa(app.MaxDepth)
 	var installedAssetNamesStr = strings.Join(app.InstalledAssetNames, ",")
@@ -312,14 +312,14 @@ func StateEdit() error {
 				Title("Compile Script").
 				Value(&compileScript),
 			huh.NewInput().
-				Title("Asset Binaries Regexp").
-				Value(&assetBinariesRegexp),
+				Title("Extract Regexp").
+				Value(&extractRegex),
 			huh.NewInput().
 				Title("Types (comma-separated)").
 				Value(&typeStr),
 			huh.NewInput().
-				Title("Asset Binaries (comma-separated)").
-				Value(&assetBinariesStr),
+				Title("Extract (comma-separated)").
+				Value(&extractStr),
 			huh.NewInput().
 				Title("Rename Map (key1=val1,key2=val2)").
 				Value(&renameStr),
@@ -372,9 +372,9 @@ func StateEdit() error {
 	app.Version = version
 	app.Extractor = extractor
 	app.CompileScript = compileScript
-	app.AssetBinariesRegexp = assetBinariesRegexp
+	app.ExtractRegex = extractRegex
 	app.Type = parseCommaSeparated(typeStr)
-	app.AssetBinaries = parseCommaSeparated(assetBinariesStr)
+	app.Extract = parseCommaSeparated(extractStr)
 	app.Rename = parseMap(renameStr)
 	if depth, err := strconv.Atoi(maxDepthStr); err == nil {
 		app.MaxDepth = depth

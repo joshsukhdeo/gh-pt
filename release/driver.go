@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 
@@ -488,9 +489,63 @@ func detectAudioTargets(owner, repo, pkgDir string, pluginMode string, global bo
 	return targets, nil
 }
 
-func DetectDriverTargets(owner, repo, pkgDir, driverMode string, global bool) ([]DriverManifestTarget, error) {
+type DriverMapEntry struct {
+	Pattern *regexp.Regexp
+	Driver  DriverSubsystem
+}
+
+func parseDriverMap(driverMap string) ([]DriverMapEntry, error) {
+	if driverMap == "" {
+		return nil, nil
+	}
+	var entries []DriverMapEntry
+	pairs := strings.Split(driverMap, ",")
+	for _, pair := range pairs {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+		parts := strings.SplitN(pair, ":", 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid driver-map entry %q: expected format 'regex:driver'", pair)
+		}
+		patternStr := strings.TrimSpace(parts[0])
+		driverStr := strings.TrimSpace(strings.ToLower(parts[1]))
+		pattern, err := regexp.Compile(patternStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid regex %q in driver-map: %w", patternStr, err)
+		}
+		var driver DriverSubsystem
+		switch driverStr {
+		case "vulkan":
+			driver = DriverVulkan
+		case "opencl":
+			driver = DriverOpenCL
+		case "ldso":
+			driver = DriverLdSo
+		case "udev":
+			driver = DriverUdev
+		case "vaapi":
+			driver = DriverVAAPI
+		default:
+			return nil, fmt.Errorf("unknown driver %q in driver-map (valid: vulkan, opencl, ldso, udev, vaapi)", driverStr)
+		}
+		entries = append(entries, DriverMapEntry{Pattern: pattern, Driver: driver})
+	}
+	return entries, nil
+}
+func DetectDriverTargets(owner, repo, pkgDir, driverMode, driverMap string, global bool) ([]DriverManifestTarget, error) {
+	entries, err := parseDriverMap(driverMap)
+	if err != nil {
+		return nil, err
+	}
+
 	mode := strings.ToLower(strings.TrimSpace(driverMode))
 	if mode == "" || mode == "none" {
+		// If no mode but we have a driver map, use it for all files
+		if len(entries) > 0 {
+			return detectMappedDriverTargets(owner, repo, pkgDir, entries, global)
+		}
 		return nil, nil
 	}
 
@@ -521,7 +576,94 @@ func DetectDriverTargets(owner, repo, pkgDir, driverMode string, global bool) ([
 		}
 	}
 
+	// Also apply driver map for additional mappings
+	if len(entries) > 0 {
+		mapped, _ := detectMappedDriverTargets(owner, repo, pkgDir, entries, global)
+		targets = append(targets, mapped...)
+	}
+
 	return targets, nil
+}
+
+func detectMappedDriverTargets(owner, repo, pkgDir string, entries []DriverMapEntry, global bool) ([]DriverManifestTarget, error) {
+	var targets []DriverManifestTarget
+
+	// Walk all files in pkgDir and match against patterns
+	err := filepath.Walk(pkgDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		relPath, _ := filepath.Rel(pkgDir, path)
+		for _, entry := range entries {
+			if entry.Pattern.MatchString(relPath) || entry.Pattern.MatchString(info.Name()) {
+				target := createMappedTarget(owner, repo, path, relPath, entry.Driver, global)
+				if target != nil {
+					targets = append(targets, *target)
+				}
+				break // First match wins
+			}
+		}
+		return nil
+	})
+	return targets, err
+}
+
+func createMappedTarget(owner, repo, fullPath, relPath string, driver DriverSubsystem, global bool) *DriverManifestTarget {
+	var destPath string
+	var content []byte
+	var requiresSudo bool
+	var postHook string
+
+	switch driver {
+	case DriverVulkan:
+		vulkanDir := getVulkanDir(global)
+		destName := fmt.Sprintf("gh-pt-%s-%s-%s", owner, repo, filepath.Base(fullPath))
+		destPath = filepath.Join(vulkanDir, destName)
+		data, _ := os.ReadFile(fullPath)
+		var raw map[string]interface{}
+		if json.Unmarshal(data, &raw) == nil {
+			rewritten := rewriteVulkanLibraryPath(raw, fullPath, filepath.Dir(fullPath))
+			content, _ = json.MarshalIndent(rewritten, "", "  ")
+		}
+		requiresSudo = global
+	case DriverOpenCL:
+		openclDir := getOpenCLDir(global)
+		destName := fmt.Sprintf("gh-pt-%s-%s.icd", owner, repo)
+		destPath = filepath.Join(openclDir, destName)
+		content = []byte(fullPath + "\n")
+		requiresSudo = global
+	case DriverLdSo:
+		ldsoDir := getLdsoConfDir()
+		destName := fmt.Sprintf("gh-pt-%s-%s.conf", owner, repo)
+		destPath = filepath.Join(ldsoDir, destName)
+		content = []byte(filepath.Dir(fullPath) + "\n")
+		requiresSudo = true
+		postHook = "ldconfig"
+	case DriverUdev:
+		udevDir := getUdevRulesDir()
+		destName := fmt.Sprintf("99-gh-pt-%s-%s-%s", owner, repo, filepath.Base(fullPath))
+		destPath = filepath.Join(udevDir, destName)
+		content, _ = os.ReadFile(fullPath)
+		requiresSudo = true
+		postHook = "udevadm"
+	case DriverVAAPI:
+		// VAAPI typically uses /usr/lib/dri or similar
+		vaapiDir := sysPath("usr", "lib", "dri")
+		destName := filepath.Base(fullPath)
+		destPath = filepath.Join(vaapiDir, destName)
+		requiresSudo = global
+	default:
+		return nil
+	}
+
+	return &DriverManifestTarget{
+		Subsystem:    driver,
+		SourceFile:   fullPath,
+		DestPath:     destPath,
+		Content:      content,
+		RequiresSudo: requiresSudo,
+		PostHook:     postHook,
+	}
 }
 
 func DetectPluginTargets(owner, repo, pkgDir, pluginMode string, global bool) ([]DriverManifestTarget, error) {
@@ -609,8 +751,9 @@ func (r *GithubRelease) DeployDriverAndPluginManifests(pkgDir string) ([]string,
 
 	driverMode := strings.ToLower(strings.TrimSpace(r.CliParams.Driver))
 	pluginMode := strings.ToLower(strings.TrimSpace(r.CliParams.Plugin))
+	driverMap := strings.TrimSpace(r.CliParams.DriverMap)
 
-	if (driverMode == "" || driverMode == "none") && (pluginMode == "" || pluginMode == "none") {
+	if (driverMode == "" || driverMode == "none") && driverMap == "" && (pluginMode == "" || pluginMode == "none") {
 		return nil, nil
 	}
 
@@ -630,7 +773,7 @@ func (r *GithubRelease) DeployDriverAndPluginManifests(pkgDir string) ([]string,
 
 	var targets []DriverManifestTarget
 	if driverMode != "" && driverMode != "none" {
-		dTargets, err := DetectDriverTargets(owner, repo, pkgDir, driverMode, r.CliParams.Global)
+		dTargets, err := DetectDriverTargets(owner, repo, pkgDir, driverMode, r.CliParams.DriverMap, r.CliParams.Global)
 		if err != nil {
 			log.Warn("failed detecting driver targets", "error", err)
 		} else {

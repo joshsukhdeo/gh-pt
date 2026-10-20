@@ -22,8 +22,8 @@ type InstalledApp struct {
 	Disabled                 bool              `json:"disabled"`
 	Type                     []string          `json:"type"`
 	All                      bool              `json:"all"`
-	AssetBinaries            []string          `json:"asset_binaries"`
-	AssetBinariesRegexp      string            `json:"asset_binaries_regexp"`
+	Extract                  []string          `json:"extract"`
+	ExtractRegex             string            `json:"extract_regexp"`
 	InstalledBinaries        []string          `json:"installed_binaries,omitempty"`
 	InstalledAssetNames      []string          `json:"installed_asset_names,omitempty"`
 	InstalledAssetsFullNames []string          `json:"installed_assets_full_names,omitempty"`
@@ -46,6 +46,7 @@ type InstalledApp struct {
 	IncludeSidecars          bool              `json:"include_sidecars,omitempty"`
 	SidecarMode              string            `json:"sidecar_mode,omitempty"`
 	Driver                   string            `json:"driver,omitempty"`
+	DriverMap                string            `json:"driver_map,omitempty"`
 	Plugin                   string            `json:"plugin,omitempty"`
 	InstalledSidecars        []string          `json:"installed_sidecars,omitempty"`
 	EnvInject                []string          `json:"env_inject,omitempty"`

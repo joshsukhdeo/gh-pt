@@ -133,7 +133,7 @@ func ReleaseSelector(ghClient GithubClient, repo string, version string, interac
 		Items: items,
 
 		RegexpMatchers: []string{versionMatcher},
-		Single:         true,
+		AllMode:        "assets",
 	}, nil
 }
 
@@ -143,7 +143,8 @@ type AssetMatchCriteria struct {
 	Regexps          []string
 	Interactive      bool
 	AllowForeignArch bool
-	Single           bool
+	Single           bool   // Deprecated: use AllMode instead
+	AllMode          string // "assets", "extracted", "archives"
 	AvxLevel         string
 }
 
@@ -174,6 +175,7 @@ type BinaryMatchCriteria struct {
 	Repository     string
 	OnlyFirstMatch bool
 	MaxExeInstalls int
+	AllMode        string
 }
 
 func AssetSelector(ghClient GithubClient, repo string, criteria AssetMatchCriteria) (ISelector, error) {
@@ -266,7 +268,7 @@ func AssetSelector(ghClient GithubClient, repo string, criteria AssetMatchCriter
 
 		NamesMatcher:     namesMatcher,
 		RegexpMatchers:   criteria.Regexps,
-		Single:           true,
+		AllMode:          criteria.AllMode,
 		AllowForeignArch: criteria.AllowForeignArch,
 		Repository:       repo,
 		AvxLevel:         criteria.AvxLevel,
@@ -384,6 +386,7 @@ func BinarySelector(criteria BinaryMatchCriteria) (ISelector, error) {
 				NamesMatcher:   criteria.Names,
 				RegexpMatchers: []string{criteria.Matcher},
 				Single:         criteria.OnlyFirstMatch,
+				AllMode:        criteria.AllMode,
 				Repository:     criteria.Repository,
 				OnlyFirstMatch: criteria.OnlyFirstMatch,
 				MaxExeInstalls: criteria.MaxExeInstalls,
@@ -409,7 +412,7 @@ func BinarySelector(criteria BinaryMatchCriteria) (ISelector, error) {
 					Kind:       Binary,
 					Items:      items,
 					Prompt:     "Confirm release binary to be installed",
-					Single:     true,
+					AllMode:    "assets",
 					Repository: criteria.Repository,
 				}, nil
 			}
@@ -419,7 +422,7 @@ func BinarySelector(criteria BinaryMatchCriteria) (ISelector, error) {
 				Items:          items,
 				NamesMatcher:   criteria.Names,
 				RegexpMatchers: []string{regexp.QuoteMeta(filepath.Base(criteria.DownloadPath))},
-				Single:         true,
+				AllMode:        "assets",
 				Repository:     criteria.Repository,
 			}, nil
 		}
@@ -458,7 +461,7 @@ func BinarySelector(criteria BinaryMatchCriteria) (ISelector, error) {
 			Kind:       Binary,
 			Items:      items,
 			Prompt:     "Select binaries to be installed",
-			Single:     criteria.OnlyFirstMatch,
+			AllMode:    criteria.AllMode,
 			Repository: criteria.Repository,
 		}, nil
 	}
@@ -469,6 +472,7 @@ func BinarySelector(criteria BinaryMatchCriteria) (ISelector, error) {
 		NamesMatcher:   criteria.Names,
 		RegexpMatchers: []string{criteria.Matcher},
 		Single:         criteria.OnlyFirstMatch,
+		AllMode:        criteria.AllMode,
 		Repository:     criteria.Repository,
 		OnlyFirstMatch: criteria.OnlyFirstMatch,
 		MaxExeInstalls: criteria.MaxExeInstalls,

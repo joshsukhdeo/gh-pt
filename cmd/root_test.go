@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/adrg/xdg"
+	"github.com/joshsukhdeo/gh-pt/compile"
 	"github.com/joshsukhdeo/gh-pt/params"
 	"github.com/joshsukhdeo/gh-pt/state"
 	"github.com/joshsukhdeo/gh-pt/ui"
@@ -345,4 +347,66 @@ func TestRootCLI_VirusTotal_AutoEnable(t *testing.T) {
 
 		assert.True(t, r.SkipVtSandbox, "Barbarous flag should keep SkipVtSandbox true")
 	})
+}
+
+func TestCompileFromSource_DeploysDriversAndPersistsState(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tmpDir)
+	xdg.Reload()
+
+	symlinkDir := filepath.Join(tmpDir, "symlink")
+	targetPath := filepath.Join(tmpDir, "bin")
+	require.NoError(t, os.MkdirAll(symlinkDir, 0755))
+	require.NoError(t, os.MkdirAll(targetPath, 0755))
+
+	// 1. Test compile.SaveCompileState persists driver/plugin and sidecar fields
+	cfg := &compile.Config{
+		Repository:        "owner/testapp",
+		TargetPath:        targetPath,
+		SymlinkDir:        symlinkDir,
+		ScriptPath:        filepath.Join(tmpDir, "build.sh"),
+		Driver:            "vulkan",
+		Plugin:            "vst",
+		DriverMap:         `libvulkan_test\.so$:vulkan`,
+		IncludeSidecars:   true,
+		SidecarMode:       "symlink",
+		InstalledSidecars: []string{filepath.Join(symlinkDir, "initial_sidecar.json")},
+	}
+	res := &compile.CompileResult{
+		Version:  "v1.0.0",
+		Sidecars: []string{filepath.Join(symlinkDir, "manifest.json")},
+	}
+	require.NoError(t, compile.SaveCompileState(cfg, res))
+
+	st, err := state.LoadState()
+	require.NoError(t, err)
+	app, ok := st.Apps["owner/testapp"]
+	require.True(t, ok)
+	assert.Equal(t, "vulkan", app.Driver)
+	assert.Equal(t, "vst", app.Plugin)
+	assert.Equal(t, `libvulkan_test\.so$:vulkan`, app.DriverMap)
+	assert.True(t, app.IncludeSidecars)
+	assert.Equal(t, "symlink", app.SidecarMode)
+	assert.Equal(t, symlinkDir, app.SymlinkDir)
+	assert.Equal(t, []string{filepath.Join(symlinkDir, "manifest.json")}, app.InstalledSidecars)
+
+	// 2. Test RootCLI.deploySourceDriversAndPlugins
+	dummyDriver := filepath.Join(symlinkDir, "libvulkan_test.so")
+	require.NoError(t, os.WriteFile(dummyDriver, []byte("fake binary"), 0755))
+	dummyManifest := filepath.Join(symlinkDir, "libvulkan_test_icd.json")
+	require.NoError(t, os.WriteFile(dummyManifest, []byte(`{"ICD": {"library_path": "libvulkan_test.so"}}`), 0644))
+
+	r := &RootCLI{}
+	r.Repository = "owner/driverapp"
+	r.TargetPath = targetPath
+	r.Driver = "vulkan"
+	r.DriverMap = `.*icd.*\.json$:vulkan`
+	r.ensureCliParams()
+
+	manifests := r.deploySourceDriversAndPlugins(symlinkDir)
+	require.NotEmpty(t, manifests)
+	assert.ElementsMatch(t, manifests, r.InstalledSidecars)
+	for _, m := range manifests {
+		assert.FileExists(t, m)
+	}
 }

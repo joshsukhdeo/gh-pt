@@ -120,7 +120,7 @@ func ListState(rList ...*RootCLI) error {
 
 		// Apply filters
 		if filterVal != "" && filterVal != "true" && filterVal != "false" && filterVal != "*" {
-			if !strings.Contains(repo, filterVal) && !strings.Contains(strings.Join(app.AssetBinaries, " "), filterVal) {
+			if !strings.Contains(repo, filterVal) && !strings.Contains(strings.Join(app.Extract, " "), filterVal) {
 				continue
 			}
 		}
@@ -190,7 +190,7 @@ func ListState(rList ...*RootCLI) error {
 			binaries = app.PackageNames
 		}
 		if len(binaries) == 0 {
-			binaries = app.AssetBinaries
+			binaries = app.Extract
 		}
 		asset := app.ReleaseAsset
 		if asset == "" {
@@ -397,7 +397,7 @@ func RemoveApp(target string, purge bool, unsafeSkipDirFlagCheck bool) error {
 				}
 			}
 
-			for _, binName := range app.AssetBinaries {
+			for _, binName := range app.Extract {
 				binPath, err := safeDeletePath(app.TargetPath, binName)
 				if err != nil {
 					log.Warn(fmt.Sprintf("Skipping unsafe binary name %q", binName), "error", err)

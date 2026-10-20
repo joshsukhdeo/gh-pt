@@ -1,6 +1,7 @@
 package params
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -80,6 +81,47 @@ type SourceCleanCmd struct {
 	All        bool   `help:"Clean all build artifacts."`
 }
 
+// AllFlag represents the --all flag mode with backwards-compatible boolean behavior.
+// When passed without a value (--all), it defaults to "extracted".
+// Valid modes: "assets", "extracted", "archives".
+type AllFlag string
+
+func (a *AllFlag) Decode(ctx *kong.DecodeContext) error {
+	peek := ctx.Scan.Peek()
+	if peek.Type == kong.FlagValueToken {
+		token := ctx.Scan.Pop()
+		val := strings.ToLower(fmt.Sprintf("%v", token.Value))
+		switch val {
+		case "assets", "extracted", "archives":
+			*a = AllFlag(val)
+			return nil
+		case "true", "1", "yes":
+			*a = "extracted"
+			return nil
+		case "false", "0", "no":
+			*a = ""
+			return nil
+		default:
+			return fmt.Errorf("--all must be one of \"assets\",\"extracted\",\"archives\" but got %q", val)
+		}
+	} else if peek.Type == kong.UntypedToken || peek.Type == kong.PositionalArgumentToken {
+		val := strings.ToLower(fmt.Sprintf("%v", peek.Value))
+		if val == "assets" || val == "extracted" || val == "archives" {
+			ctx.Scan.Pop()
+			*a = AllFlag(val)
+			return nil
+		}
+	}
+	*a = "extracted"
+	return nil
+}
+
+func (AllFlag) IsBool() bool { return true }
+
+func (a AllFlag) String() string {
+	return string(a)
+}
+
 // CliParams is an alias for CLI.
 type CliParams = CLI
 
@@ -90,7 +132,7 @@ type ResolutionFlags struct {
 	ReleaseAssetRegexp                            string   `optional:"" short:"A" help:"Regular expression matching release asset to download."`
 	ReleaseAssetRegexps                           []string `kong:"-"`
 	Type                                          []string `default:"${install_types}" short:"T" name:"format" env:"GH_PT_TYPE" help:"Comma-separated list of types to match and prioritize."`
-	All                                           bool     `default:"false" help:"Install all matched assets instead of just the first one."`
+	All                                           AllFlag  `optional:"" help:"Install all matched assets/archives/extracted binaries. Modes: assets (all assets of matched type), extracted (default, all binaries from archive), archives (all archives of matched type)."`
 	OnlyFirstMatch                                bool     `name:"only-first-match" help:"Only install the first matched binary instead of all unique binaries."`
 	MaxExeInstalls                                int      `name:"max-exe-installs" default:"0" help:"Maximum number of executables to install (0 = all unique)."`
 	Prerelease                                    bool     `short:"P" help:"Include prereleases."`
@@ -133,6 +175,7 @@ type SidecarFlags struct {
 	IncludeSidecars    bool     `name:"include-sidecars" short:"s" negatable:"" env:"GH_PT_INCLUDE_SIDECARS" help:"Include companion sidecar assets (auto-detects placement)."`
 	SidecarMode        string   `optional:"" name:"sidecar-mode" env:"GH_PT_SIDECAR_MODE" predictor:"sidecar_modes" predict:"sidecar_modes" help:"Sidecar placement mode: auto (maps standard Unix layout to prefix, else xdg_data_home), local-map, xdg_data_home, or custom-path:/path/to/ (default: auto)."`
 	Driver             string   `optional:"" name:"driver" enum:"auto,vulkan,opencl,vaapi,udev,ldso,none" default:"none" help:"Register hardware/userspace driver manifests: auto, vulkan, opencl, vaapi, udev, ldso (Linux only)."`
+	DriverMap          string   `optional:"" name:"driver-map" help:"Map asset/file regex patterns to driver subsystems. Format: 'regex1:driver1,regex2:driver2,...'. Example: '.*\\.icd:opencl,.*\\.json:vulkan,.*\\.conf:ldso'."`
 	Plugin             string   `optional:"" name:"plugin" aliases:"plugins" enum:"auto,obs,gimp,vst,lv2,clap,audio,none" default:"none" help:"Register host application plugin manifests or symlinks: auto, obs, gimp, vst, lv2, clap, audio (Linux only)."`
 	EnvInject          []string `optional:"" help:"Environment variables pointing to sidecar directory (KEY=VALUE)."`
 	WarnUnmappedAssets bool     `default:"true" negatable:"" help:"Warn about suspected unmapped sidecar assets."`
@@ -195,8 +238,8 @@ type ExecutionFlags struct {
 	PinInstall           bool     `name:"pin-install" default:"false" help:"Pin this installation to the current version."`
 	DryRun               bool     `default:"false" help:"Show what would be downloaded."`
 	NoCompletionSetup    bool     `name:"no-completion-setup" help:"Do not automatically install shell autocompletion scripts for extracted binaries."`
-	AssetBinaries        []string `optional:"" short:"b" help:"If release asset is an archive - names of a binaries in the archive to install."`
-	AssetBinariesRegexp  string   `optional:"" short:"B" help:"If release asset is an archive - regular expression matching binaries in the archive to install."`
+	Extract              []string `optional:"" short:"b" help:"If release asset is an archive - names of binaries to extract and install (comma-separated or multiple flags)."`
+	ExtractRegex         string   `optional:"" short:"B" help:"If release asset is an archive - regular expression matching binaries in the archive to extract and install."`
 	IsUpgradeCmd         bool     `kong:"-"`
 	SpecificallyTargeted bool     `kong:"-"`
 }
@@ -504,6 +547,9 @@ type ExecContext struct {
 	DisableIcons        bool
 	HookEvent           string
 	HookScriptPath      string
+	InstalledSidecars   []string `kong:"-"`
+	InstalledBinaries   []string `kong:"-"`
+	ResolvedSymlinkDir  string   `kong:"-"`
 }
 
 type HelperCmd struct {

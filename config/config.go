@@ -59,6 +59,7 @@ type CoreConfig struct {
 	NoColor                                       bool   `yaml:"no_color"`
 	NoEmojis                                      bool   `yaml:"no_emojis"`
 	AvxLevel                                      string `yaml:"avx_level"`
+	VTSandboxMessage                              string `yaml:"vt_sandbox_message"`
 }
 
 type DependencyResolutionConfig struct {
@@ -155,6 +156,9 @@ func applyConfigDefaults(cfg *Config) {
 	}
 	if cfg.Paths.RepoDir == "" {
 		cfg.Paths.RepoDir = filepath.Join(xdg.DataHome, "gh-pt", "repos")
+	}
+	if cfg.Core.VTSandboxMessage == "" {
+		cfg.Core.VTSandboxMessage = "o o o VirusTotal_SANDBOX_UPLOAD o o o"
 	}
 }
 

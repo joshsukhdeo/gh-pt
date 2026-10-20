@@ -15,6 +15,7 @@ import (
 
 	"github.com/charmbracelet/log"
 	"github.com/joshsukhdeo/gh-pt/config"
+	"github.com/joshsukhdeo/gh-pt/ui"
 	"github.com/pterm/pterm"
 )
 
@@ -38,7 +39,7 @@ func doVTRequestWithRetry(client *http.Client, req *http.Request) (*http.Respons
 	}
 }
 
-func VerifyHashWithVirusTotal(hash string, filePath string, apiKey string, interactive bool, skipSandbox bool) error {
+func VerifyHashWithVirusTotal(hash string, filePath string, apiKey string, interactive bool, skipSandbox bool, pUI *ui.PacmanUI, vtSandboxMessage string) error {
 RetryVT:
 	if apiKey == "" {
 		return nil
@@ -77,7 +78,6 @@ RetryVT:
 			_, _ = fmt.Scanln(&newKey)
 			if newKey != "" {
 				apiKey = strings.TrimSpace(newKey)
-				// Update config
 				cfg, _ := config.LoadConfig()
 				if cfg == nil {
 					cfg = &config.Config{}
@@ -102,7 +102,6 @@ RetryVT:
 			return nil
 		}
 		if interactive {
-			// ponytail: directly relying on fmt to avoid passing the GithubRelease struct just for prompts
 			var confirm string
 			fmt.Printf("\nVirusTotal has no record of %s. Upload to sandbox and wait for analysis? [y/N]: ", filepath.Base(filePath))
 			_, _ = fmt.Scanln(&confirm)
@@ -112,7 +111,7 @@ RetryVT:
 			}
 		}
 		log.Info("Uploading file to VirusTotal sandbox...", "file", filepath.Base(filePath))
-		return uploadToVirusTotal(filePath, apiKey)
+		return uploadToVirusTotal(filePath, apiKey, pUI, vtSandboxMessage)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -157,7 +156,24 @@ func CalculateSHA256(filePath string) (string, error) {
 	return hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
-func uploadToVirusTotal(filePath string, apiKey string) error {
+// progressReader wraps an io.Reader and calls a callback with the number of bytes read.
+type progressReader struct {
+	reader   io.Reader
+	total    int64
+	read     int64
+	callback func(read, total int64)
+}
+
+func (pr *progressReader) Read(p []byte) (n int, err error) {
+	n, err = pr.reader.Read(p)
+	pr.read += int64(n)
+	if pr.callback != nil {
+		pr.callback(pr.read, pr.total)
+	}
+	return n, err
+}
+
+func uploadToVirusTotal(filePath string, apiKey string, pUI *ui.PacmanUI, vtSandboxMessage string) error {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return err
@@ -171,6 +187,7 @@ func uploadToVirusTotal(filePath string, apiKey string) error {
 
 	uploadURL := fmt.Sprintf("%s/files", vtBaseURL)
 
+	// For large files, first get the upload URL
 	if info.Size() > 32*1024*1024 {
 		req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/files/upload_url", vtBaseURL), nil)
 		req.Header.Set("x-apikey", apiKey)
@@ -191,6 +208,11 @@ func uploadToVirusTotal(filePath string, apiKey string) error {
 		uploadURL = result.Data
 	}
 
+	// Start VT upload animation with real progress tracking
+	if pUI != nil && vtSandboxMessage != "" {
+		pUI.SetVTUpload(true, vtSandboxMessage)
+	}
+
 	pr, pw := io.Pipe()
 	writer := multipart.NewWriter(pw)
 
@@ -198,7 +220,22 @@ func uploadToVirusTotal(filePath string, apiKey string) error {
 		defer func() { _ = pw.Close() }()
 		part, err := writer.CreateFormFile("file", filepath.Base(filePath))
 		if err == nil {
-			_, _ = io.Copy(part, file)
+			if pUI != nil && info.Size() > 0 {
+				// Wrap file with progress tracking for UI
+				progReader := &progressReader{
+					reader: file,
+					total:  info.Size(),
+					callback: func(read, total int64) {
+						if model := pUI.Model(); model != nil {
+							model.ProgressTarget = float64(read) / float64(total)
+						}
+					},
+				}
+				_, _ = io.Copy(part, progReader)
+			} else {
+				// No UI or unknown size - use simple copy
+				_, _ = io.Copy(part, file)
+			}
 		}
 		_ = writer.Close()
 	}()
@@ -209,12 +246,19 @@ func uploadToVirusTotal(filePath string, apiKey string) error {
 
 	client := &http.Client{Timeout: 10 * time.Minute}
 	resp, err := doVTRequestWithRetry(client, req)
+
 	if err != nil {
+		if pUI != nil {
+			pUI.SetVTUpload(false, "")
+		}
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
+		if pUI != nil {
+			pUI.SetVTUpload(false, "")
+		}
 		return fmt.Errorf("virustotal upload failed with status %d", resp.StatusCode)
 	}
 
@@ -226,19 +270,25 @@ func uploadToVirusTotal(filePath string, apiKey string) error {
 	_ = json.NewDecoder(resp.Body).Decode(&result)
 
 	log.Info("Upload complete. Waiting for sandbox analysis...", "analysis_id", result.Data.ID)
-	return pollVirusTotalAnalysis(result.Data.ID, apiKey)
+	if pUI != nil {
+		pUI.SetVTUpload(false, "")
+	}
+	return pollVirusTotalAnalysis(result.Data.ID, apiKey, pUI, vtSandboxMessage)
 }
 
-func pollVirusTotalAnalysis(analysisID string, apiKey string) error {
+func pollVirusTotalAnalysis(analysisID string, apiKey string, pUI *ui.PacmanUI, vtSandboxMessage string) error {
 	client := &http.Client{Timeout: 10 * time.Second}
 	for {
-		time.Sleep(vtPollDelay) // ponytail: naive polling without backoff
+		time.Sleep(vtPollDelay)
 
 		req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/analyses/%s", vtBaseURL, analysisID), nil)
 		req.Header.Set("x-apikey", apiKey)
 
 		resp, err := doVTRequestWithRetry(client, req)
 		if err != nil {
+			if pUI != nil {
+				pUI.SetVTUpload(false, "")
+			}
 			return err
 		}
 
@@ -258,9 +308,15 @@ func pollVirusTotalAnalysis(analysisID string, apiKey string) error {
 		if result.Data.Attributes.Status == "completed" {
 			malicious := result.Data.Attributes.Stats.Malicious
 			if malicious > 0 {
+				if pUI != nil {
+					pUI.SetVTUpload(false, "")
+				}
 				return fmt.Errorf("virustotal sandbox blocked installation: %d engines detected file as malicious", malicious)
 			}
 			log.Info("VirusTotal sandbox analysis confirms file is clean.")
+			if pUI != nil {
+				pUI.SetVTUpload(false, "")
+			}
 			return nil
 		}
 		log.Info("Sandbox analysis still in progress...")

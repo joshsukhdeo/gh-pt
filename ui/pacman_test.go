@@ -398,3 +398,57 @@ func TestPacmanUI_ErrorStopsCleanly(t *testing.T) {
 		t.Errorf("expected model HasError = true")
 	}
 }
+
+func TestPacmanModel_VTUploadMessage(t *testing.T) {
+	m := NewPacmanModel("test/repo")
+	m.ProgressTarget = 0.0
+	m.ProgressCurrent = 0.0
+
+	// Enable VT upload mode at 0% progress
+	model, _ := m.Update(PacmanVTUploadMsg{Active: true, Message: "o o o VirusTotal_SANDBOX_UPLOAD o o o"})
+	m = model.(*PacmanModel)
+
+	if !m.VTUploadActive {
+		t.Error("expected VTUploadActive = true")
+	}
+	if m.VTUploadMessage != "o o o VirusTotal_SANDBOX_UPLOAD o o o" {
+		t.Errorf("expected VTUploadMessage = 'o o o VirusTotal_SANDBOX_UPLOAD o o o', got %q", m.VTUploadMessage)
+	}
+
+	view := m.View().Content
+	if !strings.Contains(view, "o o o VirusTotal_SANDBOX_UPLOAD o o o") {
+		t.Errorf("expected view to contain full VT upload message at 0%% progress, got:\n%s", view)
+	}
+	if !strings.Contains(view, "ᗧ") {
+		t.Errorf("expected view to contain pacman, got:\n%s", view)
+	}
+
+	// Test at 100% progress - message should be fully eaten
+	m.ProgressTarget = 1.0
+	m.ProgressCurrent = 1.0
+	view = m.View().Content
+	if !strings.Contains(view, "🏁") {
+		t.Errorf("expected view to contain flag at 100%% progress, got:\n%s", view)
+	}
+
+	// Test with DisableIcons at 0% progress
+	m.DisableIcons = true
+	m.ProgressTarget = 0.0
+	m.ProgressCurrent = 0.0
+	model, _ = m.Update(PacmanVTUploadMsg{Active: true, Message: "o o o VirusTotal_SANDBOX_UPLOAD o o o"})
+	m = model.(*PacmanModel)
+	view = m.View().Content
+	if !strings.Contains(view, "o o o VirusTotal_SANDBOX_UPLOAD o o o") {
+		t.Errorf("expected disabled icons view to contain VT upload message, got:\n%s", view)
+	}
+	if !strings.Contains(view, "C ") {
+		t.Errorf("expected disabled icons view to contain pacman 'C', got:\n%s", view)
+	}
+
+	// Disable VT upload
+	model, _ = m.Update(PacmanVTUploadMsg{Active: false})
+	m = model.(*PacmanModel)
+	if m.VTUploadActive {
+		t.Error("expected VTUploadActive = false after disabling")
+	}
+}

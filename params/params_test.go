@@ -72,7 +72,7 @@ func TestCLIDefaults(t *testing.T) {
 	assert.False(t, cli.Install.Interactive)
 
 	assert.Equal(t, "latest", cli.Install.ReleaseVersion)
-	assert.False(t, cli.Install.All)
+	assert.Empty(t, cli.Install.All)
 	assert.True(t, cli.Install.TargetPathCreate)
 	assert.False(t, cli.Install.Overwrite)
 	assert.Equal(t, "info", cli.LogLevel)
@@ -96,6 +96,16 @@ func TestCLIParse(t *testing.T) {
 
 	assert.Equal(t, "joshsukhdeo/gh-pt", cli.Install.Repository)
 	assert.True(t, cli.Install.Interactive)
+	assert.Equal(t, AllFlag("extracted"), cli.Install.All)
+
+	// Explicit modes
+	_, err = parser.Parse([]string{"joshsukhdeo/gh-pt", "--all=assets"})
+	require.NoError(t, err)
+	assert.Equal(t, AllFlag("assets"), cli.Install.All)
+
+	_, err = parser.Parse([]string{"joshsukhdeo/gh-pt", "--all", "archives"})
+	require.NoError(t, err)
+	assert.Equal(t, AllFlag("archives"), cli.Install.All)
 }
 
 func TestTruncateRegex(t *testing.T) {

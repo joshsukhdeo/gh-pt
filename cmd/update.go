@@ -14,6 +14,7 @@ import (
 
 	"github.com/charmbracelet/log"
 	"github.com/cli/go-gh/v2/pkg/api"
+	"github.com/joshsukhdeo/gh-pt/compile"
 	"github.com/joshsukhdeo/gh-pt/params"
 	"github.com/joshsukhdeo/gh-pt/release"
 	"github.com/joshsukhdeo/gh-pt/state"
@@ -190,15 +191,20 @@ func processSingleUpdate(
 	if len(app.Type) > 0 {
 		appParamsCopy.Type = app.Type
 	}
-	appParamsCopy.All = app.All
-	appParamsCopy.AssetBinaries = app.AssetBinaries
-	appParamsCopy.AssetBinariesRegexp = app.AssetBinariesRegexp
+	if app.All {
+		appParamsCopy.All = "extracted"
+	}
+	appParamsCopy.Extract = app.Extract
+	appParamsCopy.ExtractRegex = app.ExtractRegex
 	appParamsCopy.Extractor = app.Extractor
 	appParamsCopy.Sidecars = app.Sidecars
 	appParamsCopy.SidecarSymlinkTo = app.SidecarSymlinkTo
 	appParamsCopy.IncludeSidecars = app.IncludeSidecars
 	appParamsCopy.SidecarMode = app.SidecarMode
-	if app.SymlinkDir != "" {
+	appParamsCopy.Driver = app.Driver
+	appParamsCopy.Plugin = app.Plugin
+	appParamsCopy.DriverMap = app.DriverMap
+	if app.SymlinkDir != "" || (app.Driver != "" && app.Driver != "none") || (app.Plugin != "" && app.Plugin != "none") || app.DriverMap != "" {
 		appParamsCopy.Symlink = true
 	}
 	appParamsCopy.EnvInject = app.EnvInject
@@ -228,15 +234,25 @@ func processSingleUpdate(
 	// Reconcile obsolete assets after successful update installation
 	updatedSidecars := app.InstalledSidecars
 	updatedBinaries := app.InstalledBinaries
+	resolvedSymlinkDir := app.SymlinkDir
+	if appParamsCopy.ResolvedSymlinkDir != "" {
+		resolvedSymlinkDir = appParamsCopy.ResolvedSymlinkDir
+	}
 	targetPath := oldTargetPath
 	if targetPath == "" {
 		targetPath = app.TargetPath
 	}
 
-	if freshState, err := state.LoadState(); err == nil && freshState.Apps != nil {
+	if appParamsCopy.InstalledSidecars != nil || len(appParamsCopy.InstalledBinaries) > 0 || appParamsCopy.ResolvedSymlinkDir != "" {
+		updatedSidecars = appParamsCopy.InstalledSidecars
+		updatedBinaries = appParamsCopy.InstalledBinaries
+	} else if freshState, err := state.LoadState(); err == nil && freshState.Apps != nil {
 		if updatedApp, ok := freshState.Apps[app.Repository]; ok && updatedApp != nil {
 			if updatedApp.TargetPath != "" {
 				targetPath = updatedApp.TargetPath
+			}
+			if updatedApp.SymlinkDir != "" {
+				resolvedSymlinkDir = updatedApp.SymlinkDir
 			}
 			if !stringSlicesEqual(updatedApp.InstalledSidecars, oldInstalledSidecars) ||
 				!stringSlicesEqual(updatedApp.InstalledBinaries, oldInstalledBinaries) ||
@@ -247,6 +263,85 @@ func processSingleUpdate(
 		}
 	}
 
+	reconcileObsoleteSidecars(oldInstalledSidecars, updatedSidecars, targetPath)
+
+	newBinarySet := make(map[string]bool, len(updatedBinaries)*2)
+	for _, b := range updatedBinaries {
+		newBinarySet[b] = true
+		newBinarySet[filepath.Base(b)] = true
+	}
+
+	if targetPath != "" {
+		for _, oldBin := range oldInstalledBinaries {
+			if strings.TrimSpace(oldBin) == "" {
+				continue
+			}
+			if !newBinarySet[oldBin] && !newBinarySet[filepath.Base(oldBin)] {
+				binName := oldBin
+				if filepath.Base(binName) != binName || filepath.IsAbs(binName) {
+					binName = filepath.Base(oldBin)
+				}
+				binPath, err := safeDeletePath(targetPath, binName)
+				if err != nil {
+					log.Warn(fmt.Sprintf("Skipping unsafe binary name %q", oldBin), "error", err)
+					continue
+				}
+				if err := os.Remove(binPath); err != nil && !os.IsNotExist(err) {
+					log.Warn(fmt.Sprintf("Failed to remove obsolete binary %s", binPath), "error", err)
+				} else if err == nil {
+					log.Info(fmt.Sprintf("Removed obsolete binary %s", binPath))
+				}
+			}
+		}
+	}
+
+	log.Info(fmt.Sprintf("Successfully updated %s", app.Repository))
+	state.LogHistory("update", app.Repository, latestTag)
+
+	// Incremental checkpointing: atomically persist state per completed app update
+	if !r.NoSaveState && !r.DryRun {
+		if err := state.Mutate(func(currentSt *state.State) error {
+			if currentSt.Apps == nil {
+				currentSt.Apps = make(map[string]*state.InstalledApp)
+			}
+			if currentApp, ok := currentSt.Apps[app.Repository]; ok && currentApp != nil {
+				currentApp.Version = latestTag
+				currentApp.InstalledSidecars = updatedSidecars
+				currentApp.InstalledBinaries = updatedBinaries
+				currentApp.Driver = app.Driver
+				currentApp.Plugin = app.Plugin
+				currentApp.DriverMap = app.DriverMap
+				currentApp.SymlinkDir = resolvedSymlinkDir
+			} else {
+				app.Version = latestTag
+				app.InstalledSidecars = updatedSidecars
+				app.InstalledBinaries = updatedBinaries
+				app.SymlinkDir = resolvedSymlinkDir
+				currentSt.Apps[app.Repository] = app
+			}
+			return nil
+		}); err != nil {
+			log.Warn(fmt.Sprintf("Failed to checkpoint state for %s", app.Repository), "error", err)
+		}
+	}
+
+	mu.Lock()
+	successfulUpdates[app.Repository] = latestTag
+	if appEntry, ok := st.Apps[app.Repository]; ok {
+		appEntry.Version = latestTag
+		appEntry.InstalledSidecars = updatedSidecars
+		appEntry.InstalledBinaries = updatedBinaries
+		appEntry.Driver = app.Driver
+		appEntry.Plugin = app.Plugin
+		appEntry.DriverMap = app.DriverMap
+		appEntry.SymlinkDir = resolvedSymlinkDir
+	}
+	mu.Unlock()
+
+	return nil
+}
+
+func reconcileObsoleteSidecars(oldInstalledSidecars, updatedSidecars []string, targetPath string) {
 	newSidecarSet := make(map[string]bool, len(updatedSidecars)*2)
 	for _, sc := range updatedSidecars {
 		newSidecarSet[sc] = true
@@ -324,72 +419,6 @@ func processSingleUpdate(
 		}
 		_ = cmdTrigger.Run()
 	}
-
-	newBinarySet := make(map[string]bool, len(updatedBinaries)*2)
-	for _, b := range updatedBinaries {
-		newBinarySet[b] = true
-		newBinarySet[filepath.Base(b)] = true
-	}
-
-	if targetPath != "" {
-		for _, oldBin := range oldInstalledBinaries {
-			if strings.TrimSpace(oldBin) == "" {
-				continue
-			}
-			if !newBinarySet[oldBin] && !newBinarySet[filepath.Base(oldBin)] {
-				binName := oldBin
-				if filepath.Base(binName) != binName || filepath.IsAbs(binName) {
-					binName = filepath.Base(oldBin)
-				}
-				binPath, err := safeDeletePath(targetPath, binName)
-				if err != nil {
-					log.Warn(fmt.Sprintf("Skipping unsafe binary name %q", oldBin), "error", err)
-					continue
-				}
-				if err := os.Remove(binPath); err != nil && !os.IsNotExist(err) {
-					log.Warn(fmt.Sprintf("Failed to remove obsolete binary %s", binPath), "error", err)
-				} else if err == nil {
-					log.Info(fmt.Sprintf("Removed obsolete binary %s", binPath))
-				}
-			}
-		}
-	}
-
-	log.Info(fmt.Sprintf("Successfully updated %s", app.Repository))
-	state.LogHistory("update", app.Repository, latestTag)
-
-	// Incremental checkpointing: atomically persist state per completed app update
-	if !r.NoSaveState && !r.DryRun {
-		if err := state.Mutate(func(currentSt *state.State) error {
-			if currentSt.Apps == nil {
-				currentSt.Apps = make(map[string]*state.InstalledApp)
-			}
-			if currentApp, ok := currentSt.Apps[app.Repository]; ok && currentApp != nil {
-				currentApp.Version = latestTag
-				currentApp.InstalledSidecars = updatedSidecars
-				currentApp.InstalledBinaries = updatedBinaries
-			} else {
-				app.Version = latestTag
-				app.InstalledSidecars = updatedSidecars
-				app.InstalledBinaries = updatedBinaries
-				currentSt.Apps[app.Repository] = app
-			}
-			return nil
-		}); err != nil {
-			log.Warn(fmt.Sprintf("Failed to checkpoint state for %s", app.Repository), "error", err)
-		}
-	}
-
-	mu.Lock()
-	successfulUpdates[app.Repository] = latestTag
-	if appEntry, ok := st.Apps[app.Repository]; ok {
-		appEntry.Version = latestTag
-		appEntry.InstalledSidecars = updatedSidecars
-		appEntry.InstalledBinaries = updatedBinaries
-	}
-	mu.Unlock()
-
-	return nil
 }
 
 func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
@@ -472,20 +501,140 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 				continue
 			}
 
-			var cmd *exec.Cmd
-			if runtime.GOOS == "windows" {
-				cmd = exec.Command("powershell", "-ExecutionPolicy", "Bypass", "-File", app.CompileScript)
-			} else {
-				cmd = exec.Command("sh", app.CompileScript)
-			}
-			cmd.Stdin = os.Stdin
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
+			homeDir, _ := os.UserHomeDir()
+			parts := strings.Split(app.Repository, "/")
+			repoName := parts[len(parts)-1]
+			repoDir := filepath.Join(homeDir, "builds", repoName)
 
-			if err := cmd.Run(); err != nil {
-				log.Error(fmt.Sprintf("Failed to update %s via compile script", app.Repository), "error", err)
+			// 1. Git synchronization if local checkout exists
+			if gitInfo, err := os.Stat(filepath.Join(repoDir, ".git")); err == nil && gitInfo.IsDir() {
+				log.Info("synchronizing source repository", "repo", app.Repository, "target_sha", remoteCommit)
+				fetchCmd := exec.Command("git", "-C", repoDir, "fetch", "--all")
+				if out, err := fetchCmd.CombinedOutput(); err != nil {
+					log.Warn("git fetch failed in build repo", "repo", app.Repository, "error", err, "output", string(out))
+				}
+				if remoteCommit != "" {
+					checkoutCmd := exec.Command("git", "-C", repoDir, "checkout", remoteCommit)
+					if out, err := checkoutCmd.CombinedOutput(); err != nil {
+						log.Warn("git checkout failed in build repo", "repo", app.Repository, "commit", remoteCommit, "error", err, "output", string(out))
+					}
+				} else {
+					pullCmd := exec.Command("git", "-C", repoDir, "pull", "--ff-only")
+					_ = pullCmd.Run()
+				}
+			}
+
+			// 2. Sandboxed container execution or host fallback
+			useContainer := !r.NoCompileContainer && os.Getenv("GHPT_NO_COMPILE_CONTAINER") != "1"
+			var compileErr error
+			ranInContainer := false
+
+			if useContainer {
+				ghptDir := filepath.Join(repoDir, ".ghpt")
+				if info, err := os.Stat(ghptDir); err == nil && info.IsDir() {
+					hasPodman := false
+					if _, err := exec.LookPath("podman"); err == nil {
+						hasPodman = true
+					}
+					hasDocker := false
+					if _, err := exec.LookPath("docker"); err == nil {
+						hasDocker = true
+					}
+					if hasPodman || hasDocker {
+						log.Debug("executing source build in container", "repo", app.Repository)
+						var installDirTarget string
+						if app.Global {
+							installDirTarget = "/usr/local/.ghpt"
+						} else {
+							installDirTarget = filepath.Join(homeDir, ".local", ".ghpt")
+						}
+						reconstructCmd := "bash -c 'cat /build/.ghpt/header.sh /build/.ghpt/body.sh /build/.ghpt/footer.sh > /build/.ghpt/compile.sh && bash /build/.ghpt/compile.sh'"
+						compileCfg := &compile.Config{
+							Repository:       app.Repository,
+							RepoDir:          repoDir,
+							BuildDir:         repoDir,
+							ScriptPath:       app.CompileScript,
+							ManifestPath:     filepath.Join(ghptDir, "manifest.json"),
+							TargetPath:       app.TargetPath,
+							SymlinkDir:       app.SymlinkDir,
+							InstallDirTarget: installDirTarget,
+							Track:            "latest-commit",
+							Version:          "source-build",
+							CompileScript:    reconstructCmd,
+							Driver:           app.Driver,
+							Plugin:           app.Plugin,
+							DriverMap:        app.DriverMap,
+							IncludeSidecars:  app.IncludeSidecars,
+							SidecarMode:      app.SidecarMode,
+						}
+						compileErr = compile.ExecuteInContainer(compileCfg)
+						ranInContainer = true
+						if compileErr != nil {
+							log.Warn("container compile failed, falling back to host script", "error", compileErr)
+						}
+					}
+				}
+			}
+
+			if !ranInContainer || compileErr != nil {
+				var cmd *exec.Cmd
+				if runtime.GOOS == "windows" {
+					cmd = exec.Command("powershell", "-ExecutionPolicy", "Bypass", "-File", app.CompileScript)
+				} else {
+					cmd = exec.Command("sh", app.CompileScript)
+				}
+				cmd.Stdin = os.Stdin
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				compileErr = cmd.Run()
+			}
+
+			if compileErr != nil {
+				log.Error(fmt.Sprintf("Failed to update %s via compile script", app.Repository), "error", compileErr)
 			} else {
 				log.Info(fmt.Sprintf("Successfully updated %s via compile script", app.Repository))
+
+				// Refresh symlinks
+				if app.SymlinkDir != "" {
+					if err := createSymlinks(app.SymlinkDir, app.TargetPath); err != nil {
+						log.Warn(fmt.Sprintf("Failed to refresh symlinks for %s", app.Repository), "error", err)
+					}
+				}
+
+				// Re-deploy driver and plugin manifests
+				if (app.Driver != "" && app.Driver != "none") || (app.Plugin != "" && app.Plugin != "none") || app.DriverMap != "" {
+					log.Debug("re-deploying driver manifests for source build", "driver", app.Driver)
+					rel := &release.GithubRelease{
+						CliParams: &params.ExecContext{
+							Repository: app.Repository,
+							CommonInstallFlags: params.CommonInstallFlags{
+								TargetFlags: params.TargetFlags{
+									Global:     app.Global,
+									TargetPath: app.TargetPath,
+								},
+								SidecarFlags: params.SidecarFlags{
+									Driver:    app.Driver,
+									Plugin:    app.Plugin,
+									DriverMap: app.DriverMap,
+								},
+								ExecutionFlags: params.ExecutionFlags{
+									DryRun: r.DryRun,
+								},
+							},
+						},
+					}
+					pkgDir := app.SymlinkDir
+					if pkgDir == "" {
+						pkgDir = app.TargetPath
+					}
+					manifests, mErr := rel.DeployDriverAndPluginManifests(pkgDir)
+					if mErr != nil {
+						log.Warn(fmt.Sprintf("Failed to deploy driver/plugin manifests for %s", app.Repository), "error", mErr)
+					}
+					reconcileObsoleteSidecars(app.InstalledSidecars, manifests, app.TargetPath)
+					app.InstalledSidecars = manifests
+				}
+
 				if remoteCommit != "" {
 					app.Version = remoteCommit
 				}

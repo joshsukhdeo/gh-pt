@@ -36,6 +36,7 @@ type InteractiveSelector struct {
 	Prompt     string
 	Repository string
 	Single     bool
+	AllMode    string
 	Prompter   Prompter
 }
 

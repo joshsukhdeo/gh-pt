@@ -19,6 +19,16 @@ Agents and subagents MUST read only the context file relevant to their active pa
 → state: state/AGENTS.md
 → config: config/AGENTS.md
 → memory: .memory/ (decisions.md, patterns.md, inbox.md)
+→ specs: DOCS/SPECS/
+→ wayfinder: DOCS/WAYFINDER/
+→ research: DOCS/RESEARCH/
+→ scripts: scripts/ (1-off temporary scripts: scripts/tmp/)
+
+## Organization Guidelines
+- **Specifications** (`spec-driven-development`, `spec-miner`): Store in `DOCS/SPECS/` (max 2 subdir nesting from repo root).
+- **Wayfinder Maps** (`wayfinder`): Store in `DOCS/WAYFINDER/`.
+- **Research Docs** (`research`): Store in `DOCS/RESEARCH/`.
+- **Scripts**: Reusable scripts in `scripts/`; 1-off temporary scripts in `scripts/tmp/`. Request user permission (listing exact files) before deleting temporary scripts from `scripts/tmp/` or AI-generated garbage files.
 
 ## Core Invariants
 1. **GitHub CLI Required**: `gh` CLI presence & auth required.

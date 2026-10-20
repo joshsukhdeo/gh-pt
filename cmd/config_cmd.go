@@ -273,7 +273,7 @@ func RunVTScan(target string) error {
 			if err != nil {
 				return fmt.Errorf("failed to hash %s: %w", target, err)
 			}
-			return release.VerifyHashWithVirusTotal(hash, target, apiKey, true, false)
+			return release.VerifyHashWithVirusTotal(hash, target, apiKey, true, false, nil, "")
 		}
 		return fmt.Errorf("app %s not found in state and is not a valid file path", target)
 	}
@@ -290,7 +290,7 @@ func RunVTScan(target string) error {
 			continue
 		}
 
-		if err := release.VerifyHashWithVirusTotal(hash, binPath, apiKey, true, false); err != nil {
+		if err := release.VerifyHashWithVirusTotal(hash, binPath, apiKey, true, false, nil, ""); err != nil {
 			return fmt.Errorf("virustotal scan failed for %s: %w", binPath, err)
 		}
 	}

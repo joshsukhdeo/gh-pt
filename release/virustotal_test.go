@@ -22,7 +22,7 @@ func TestVerifyHashWithVirusTotal_Unknown_SkipSandbox(t *testing.T) {
 	defer server.Close()
 	vtBaseURL = server.URL
 
-	err := VerifyHashWithVirusTotal("unknownhash", "dummy.txt", "test-api-key", false, true)
+	err := VerifyHashWithVirusTotal("unknownhash", "dummy.txt", "test-api-key", false, true, nil, "")
 	assert.NoError(t, err)
 }
 
@@ -56,7 +56,7 @@ func TestVerifyHashWithVirusTotal_Unknown_Upload(t *testing.T) {
 	defer server.Close()
 	vtBaseURL = server.URL
 
-	err := VerifyHashWithVirusTotal("unknownhash", f.Name(), "test-api-key", false, false)
+	err := VerifyHashWithVirusTotal("unknownhash", f.Name(), "test-api-key", false, false, nil, "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "malicious")
 }
@@ -100,7 +100,7 @@ func TestVerifyHashWithVirusTotal_Unknown_UploadLarge(t *testing.T) {
 	defer server.Close()
 	vtBaseURL = server.URL
 
-	err := VerifyHashWithVirusTotal("unknownhash_large", f.Name(), "test-api-key", false, false)
+	err := VerifyHashWithVirusTotal("unknownhash_large", f.Name(), "test-api-key", false, false, nil, "")
 	assert.NoError(t, err)
 }
 
@@ -134,7 +134,7 @@ func TestVerifyHashWithVirusTotal_Malicious(t *testing.T) {
 	defer server.Close()
 	vtBaseURL = server.URL + "/"
 
-	err := VerifyHashWithVirusTotal("hash", "file", "key", false, true)
+	err := VerifyHashWithVirusTotal("hash", "file", "key", false, true, nil, "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "blocked installation:")
 }
@@ -155,7 +155,7 @@ func TestVerifyHashWithVirusTotal_Clean(t *testing.T) {
 	defer server.Close()
 	vtBaseURL = server.URL + "/"
 
-	err := VerifyHashWithVirusTotal("hash", "file", "key", false, true)
+	err := VerifyHashWithVirusTotal("hash", "file", "key", false, true, nil, "")
 	assert.NoError(t, err)
 }
 
@@ -218,7 +218,7 @@ func TestVerifyHashWithVirusTotal_Errors(t *testing.T) {
 	file := filepath.Join(tmpDir, "file")
 	require.NoError(t, os.WriteFile(file, []byte("x"), 0644))
 
-	err := VerifyHashWithVirusTotal("hash", file, "key", false, false)
+	err := VerifyHashWithVirusTotal("hash", file, "key", false, false, nil, "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "virustotal upload failed with status")
 
@@ -228,7 +228,7 @@ func TestVerifyHashWithVirusTotal_Errors(t *testing.T) {
 	defer server500.Close()
 	vtBaseURL = server500.URL
 
-	err = VerifyHashWithVirusTotal("hash", file, "key", false, false)
+	err = VerifyHashWithVirusTotal("hash", file, "key", false, false, nil, "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "virustotal api returned status")
 
@@ -239,7 +239,7 @@ func TestVerifyHashWithVirusTotal_Errors(t *testing.T) {
 	defer serverBadJSON.Close()
 	vtBaseURL = serverBadJSON.URL
 
-	err = VerifyHashWithVirusTotal("hash", file, "key", false, false)
+	err = VerifyHashWithVirusTotal("hash", file, "key", false, false, nil, "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to decode")
 }
@@ -265,7 +265,7 @@ func TestPollVirusTotalAnalysis(t *testing.T) {
 	defer server.Close()
 	vtBaseURL = server.URL
 
-	err := pollVirusTotalAnalysis("id", "key")
+	err := pollVirusTotalAnalysis("id", "key", nil, "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "blocked installation")
 
@@ -297,7 +297,7 @@ func TestPollVirusTotalAnalysis(t *testing.T) {
 	defer server2.Close()
 	vtBaseURL = server2.URL
 
-	err = pollVirusTotalAnalysis("id", "key")
+	err = pollVirusTotalAnalysis("id", "key", nil, "")
 	assert.NoError(t, err)
 }
 
@@ -319,6 +319,6 @@ func TestVerifyHashWithVirusTotal_Interactive(t *testing.T) {
 	defer server.Close()
 	vtBaseURL = server.URL
 
-	err = VerifyHashWithVirusTotal("hash", "file", "key", true, false)
+	err = VerifyHashWithVirusTotal("hash", "file", "key", true, false, nil, "")
 	assert.NoError(t, err)
 }

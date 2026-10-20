@@ -1200,8 +1200,7 @@ func (c *AssetClassifier) PickPrimaryDefaultAssetWithContext(repo string, assets
 			Items:            selectorItems,
 			RegexpMatchers:   regexMatchers,
 			Repository:       repo,
-			Single:           true,
-			OnlyFirstMatch:   true,
+			AllMode:          "assets",
 			AllowForeignArch: false,
 			AvxLevel:         c.HostAVXLevel,
 		}

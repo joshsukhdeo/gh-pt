@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -1150,4 +1151,175 @@ func TestDoUpdate_IncrementalCheckpointing(t *testing.T) {
 	assert.Equal(t, "v2.0.0", freshSt.Apps["test/app-success"].Version, "successful app must be checkpointed to state")
 	require.NotNil(t, freshSt.Apps["test/app-fail"])
 	assert.Equal(t, "v1.0.0", freshSt.Apps["test/app-fail"].Version, "failed app must remain at old version")
+}
+
+func TestDoUpdate_PreservesDriverPluginAndReconcilesSidecars(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tmpDir)
+	xdg.Reload()
+
+	pkgDir := filepath.Join(tmpDir, "pkg")
+	targetDir := filepath.Join(tmpDir, "bin")
+	require.NoError(t, os.MkdirAll(pkgDir, 0755))
+	require.NoError(t, os.MkdirAll(targetDir, 0755))
+
+	activeManifest := filepath.Join(pkgDir, "active_icd.json")
+	obsoleteManifest := filepath.Join(pkgDir, "obsolete_icd.json")
+	newV2Manifest := filepath.Join(pkgDir, "v2_icd.json")
+
+	require.NoError(t, os.WriteFile(activeManifest, []byte(`{"active": true}`), 0644))
+	require.NoError(t, os.WriteFile(obsoleteManifest, []byte(`{"obsolete": true}`), 0644))
+
+	st, err := state.LoadState()
+	require.NoError(t, err)
+
+	require.NoError(t, st.AddApp(&state.InstalledApp{
+		Repository:        "test/driver-app",
+		Version:           "v1.0.0",
+		TargetPath:        targetDir,
+		SymlinkDir:        pkgDir,
+		Driver:            "vulkan",
+		Plugin:            "vst",
+		DriverMap:         `.*icd.*\.json$:vulkan`,
+		InstalledSidecars: []string{activeManifest, obsoleteManifest},
+		InstalledBinaries: []string{"mybin"},
+	}))
+
+	mockGQL := &mockGQLClient{
+		doFunc: func(query string, variables map[string]interface{}, response interface{}) error {
+			resp, ok := response.(*map[string]GQLRepoResult)
+			require.True(t, ok)
+			*resp = map[string]GQLRepoResult{
+				"repo_0": {LatestRelease: &struct {
+					TagName string `json:"tagName"`
+					Name    string `json:"name"`
+				}{TagName: "v2.0.0"}},
+			}
+			return nil
+		},
+	}
+	origNewGQL := newGraphQLClient
+	newGraphQLClient = func() (GQLClient, error) { return mockGQL, nil }
+	defer func() { newGraphQLClient = origNewGQL }()
+
+	origInstall := installReleaseFunc
+	installReleaseFunc = func(appParams *params.ExecContext, ghClient *api.RESTClient) error {
+		assert.Equal(t, "vulkan", appParams.Driver)
+		assert.Equal(t, "vst", appParams.Plugin)
+		assert.Equal(t, `.*icd.*\.json$:vulkan`, appParams.DriverMap)
+		assert.True(t, appParams.Symlink)
+		assert.True(t, appParams.NoSaveState)
+
+		_ = os.WriteFile(newV2Manifest, []byte(`{"v2": true}`), 0644)
+
+		appParams.InstalledSidecars = []string{activeManifest, newV2Manifest}
+		appParams.InstalledBinaries = []string{"mybin"}
+		appParams.ResolvedSymlinkDir = pkgDir
+		return nil
+	}
+	defer func() { installReleaseFunc = origInstall }()
+
+	r := &RootCLI{}
+	r.Update = true
+	r.ProgressBar = "none"
+
+	err = DoUpdate(r, nil)
+	require.NoError(t, err)
+
+	// Assert: obsoleteManifest removed from disk
+	assert.NoFileExists(t, obsoleteManifest)
+	// Assert: activeManifest still exists on disk
+	assert.FileExists(t, activeManifest)
+	// Assert: new manifest exists
+	assert.FileExists(t, newV2Manifest)
+
+	// Assert: state.LoadState()
+	freshSt, err := state.LoadState()
+	require.NoError(t, err)
+	updatedApp := freshSt.Apps["test/driver-app"]
+	require.NotNil(t, updatedApp)
+	assert.Equal(t, "v2.0.0", updatedApp.Version)
+	assert.Equal(t, "vulkan", updatedApp.Driver)
+	assert.Equal(t, "vst", updatedApp.Plugin)
+	assert.Equal(t, `.*icd.*\.json$:vulkan`, updatedApp.DriverMap)
+	assert.Equal(t, pkgDir, updatedApp.SymlinkDir)
+	assert.ElementsMatch(t, []string{activeManifest, newV2Manifest}, updatedApp.InstalledSidecars)
+}
+
+func TestDoUpdate_CompileScriptSyncsDeploysDriversAndReconcilesSidecars(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tmpDir)
+	t.Setenv("HOME", tmpDir)
+	xdg.Reload()
+
+	// Initialize local git repo in ~/builds/srcapp
+	repoDir := filepath.Join(tmpDir, "builds", "srcapp")
+	require.NoError(t, os.MkdirAll(repoDir, 0755))
+	initCmd := exec.Command("git", "init", repoDir)
+	require.NoError(t, initCmd.Run())
+
+	symlinkDir := filepath.Join(tmpDir, "symlink")
+	binDir := filepath.Join(tmpDir, "bin")
+	require.NoError(t, os.MkdirAll(symlinkDir, 0755))
+	require.NoError(t, os.MkdirAll(binDir, 0755))
+
+	// Create dummy libvulkan_test.so and Vulkan ICD manifest
+	libPath := filepath.Join(symlinkDir, "libvulkan_test.so")
+	require.NoError(t, os.WriteFile(libPath, []byte("libvulkan binary"), 0755))
+	icdManifest := filepath.Join(symlinkDir, "libvulkan_test_icd.json")
+	require.NoError(t, os.WriteFile(icdManifest, []byte(`{"ICD": {"library_path": "libvulkan_test.so"}}`), 0644))
+
+	// Create compile script that generates an updated binary in symlinkDir
+	scriptPath := filepath.Join(tmpDir, "script.sh")
+	updatedBinPath := filepath.Join(symlinkDir, "my_compiled_tool")
+	scriptContent := fmt.Sprintf("#!/bin/sh\necho '#!/bin/sh' > %s\necho 'echo hello' >> %s\nchmod +x %s\n", updatedBinPath, updatedBinPath, updatedBinPath)
+	require.NoError(t, os.WriteFile(scriptPath, []byte(scriptContent), 0755))
+
+	// Create an obsolete sidecar on disk
+	obsoleteSidecar := filepath.Join(tmpDir, "obsolete_sidecar.json")
+	require.NoError(t, os.WriteFile(obsoleteSidecar, []byte(`{"obsolete": true}`), 0644))
+
+	// Seed state.json
+	st, err := state.LoadState()
+	require.NoError(t, err)
+
+	require.NoError(t, st.AddApp(&state.InstalledApp{
+		Repository:        "owner/srcapp",
+		Version:           "oldsha",
+		CompileScript:     scriptPath,
+		SymlinkDir:        symlinkDir,
+		TargetPath:        binDir,
+		Driver:            "vulkan",
+		DriverMap:         `.*icd.*\.json$:vulkan`,
+		InstalledSidecars: []string{obsoleteSidecar},
+	}))
+
+	r := &RootCLI{}
+	r.Update = true
+	r.ProgressBar = "none"
+	r.NoCompileContainer = true
+
+	err = DoUpdate(r, nil)
+	require.NoError(t, err)
+
+	// 1. Assert: createSymlinks refreshed symlinks in binDir from symlinkDir
+	binSymlink := filepath.Join(binDir, "my_compiled_tool")
+	assert.FileExists(t, binSymlink, "symlink to compiled binary must exist in TargetPath")
+
+	// 2. Assert: obsoleteSidecar was removed from disk
+	assert.NoFileExists(t, obsoleteSidecar, "obsolete sidecar must be deleted")
+
+	// 3. Assert: state.LoadState() shows updated InstalledSidecars containing the new Vulkan manifest
+	freshSt, err := state.LoadState()
+	require.NoError(t, err)
+	updatedApp := freshSt.Apps["owner/srcapp"]
+	require.NotNil(t, updatedApp)
+	assert.Equal(t, "vulkan", updatedApp.Driver)
+	assert.Equal(t, `.*icd.*\.json$:vulkan`, updatedApp.DriverMap)
+	assert.Equal(t, symlinkDir, updatedApp.SymlinkDir)
+	assert.NotEmpty(t, updatedApp.InstalledSidecars, "InstalledSidecars must not be empty")
+	assert.NotContains(t, updatedApp.InstalledSidecars, obsoleteSidecar)
+	for _, sc := range updatedApp.InstalledSidecars {
+		assert.FileExists(t, sc, "deployed sidecar manifest must exist on disk")
+	}
 }

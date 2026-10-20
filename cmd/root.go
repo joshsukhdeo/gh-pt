@@ -380,9 +380,9 @@ func validateInputs(r *RootCLI) error {
 		}
 	}
 
-	// Validate asset binaries regexp
-	if c.AssetBinariesRegexp != "" && strings.ContainsAny(c.AssetBinariesRegexp, "`$&|;(){}[]<>") {
-		return fmt.Errorf("asset binaries regexp contains shell metacharacters: %q", c.AssetBinariesRegexp)
+	// Validate extract regexp
+	if c.ExtractRegex != "" && strings.ContainsAny(c.ExtractRegex, "`$&|;(){}[]<>") {
+		return fmt.Errorf("extract regexp contains shell metacharacters: %q", c.ExtractRegex)
 	}
 
 	// Validate FallbackReleases - cap at 3
@@ -803,8 +803,8 @@ func (r *RootCLI) RunInstall() error {
 		return r.handleCompileFromSource(cfg)
 	}
 
-	if r.AssetBinariesRegexp == "" {
-		r.AssetBinariesRegexp = "(?i).*"
+	if r.ExtractRegex == "" {
+		r.ExtractRegex = "(?i).*"
 	}
 
 	if r.ReleaseAssetRegexp == "" {
@@ -819,8 +819,8 @@ func (r *RootCLI) RunInstall() error {
 		"release version", r.ReleaseVersion,
 		"release asset name", r.ReleaseAsset,
 		"release asset regexp", params.TruncateRegex(r.ReleaseAssetRegexp, 200),
-		"release asset binary names", r.AssetBinaries,
-		"release asset binary name regexp", params.TruncateRegex(r.AssetBinariesRegexp, 200),
+		"release extract names", r.Extract,
+		"release extract regexp", params.TruncateRegex(r.ExtractRegex, 200),
 		"target path", r.TargetPath,
 		"renaming binaries", r.Rename,
 	)
@@ -1982,6 +1982,11 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 			Track:            r.Track,
 			Version:          "source-build",
 			CompileScript:    reconstructCmd,
+			Driver:           r.Driver,
+			Plugin:           r.Plugin,
+			DriverMap:        r.DriverMap,
+			IncludeSidecars:  r.IncludeSidecars,
+			SidecarMode:      r.SidecarMode,
 		}
 
 		// Execute in hardened container (network=none, cap-drop=ALL, read-only, seccomp, non-root user)
@@ -2069,6 +2074,12 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 		}
 	}
 
+	installDest := targetPath
+	if symlinkDir != "" {
+		installDest = symlinkDir
+	}
+	r.deploySourceDriversAndPlugins(installDest)
+
 	// Determine version based on track
 	var version string
 	if r.Track == "latest-commit" {
@@ -2114,8 +2125,8 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 				existingHooks = existing.Hooks
 			}
 			sidecarList := r.InstalledSidecars
-			if len(sidecarList) == 0 && len(installedSidecars) > 0 {
-				sidecarList = installedSidecars
+			if len(installedSidecars) > 0 {
+				sidecarList = append(sidecarList, installedSidecars...)
 			}
 			_ = st.AddApp(&state.InstalledApp{
 				Repository:        r.Repository,
@@ -2129,6 +2140,11 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 				SymlinkDir:        symlinkDir,
 				Sidecars:          r.CliParams.Sidecars,
 				InstalledSidecars: sidecarList,
+				IncludeSidecars:   r.IncludeSidecars,
+				SidecarMode:       r.SidecarMode,
+				Driver:            r.Driver,
+				Plugin:            r.Plugin,
+				DriverMap:         r.DriverMap,
 				Hooks:             existingHooks,
 			})
 		}
@@ -2192,6 +2208,26 @@ func (r *RootCLI) runPostInstallHook(repo string) error {
 		return nil
 	}
 	return executeHookScript("post-install", repo, script)
+}
+
+func (r *RootCLI) deploySourceDriversAndPlugins(pkgDir string) []string {
+	if pkgDir == "" {
+		return nil
+	}
+	if (r.Driver == "" || r.Driver == "none") && (r.Plugin == "" || r.Plugin == "none") && r.DriverMap == "" {
+		return nil
+	}
+	r.ensureCliParams()
+	rel := &release.GithubRelease{CliParams: &r.ExecContext}
+	manifests, err := rel.DeployDriverAndPluginManifests(pkgDir)
+	if err != nil {
+		log.Warn("failed to deploy driver/plugin manifests for source build", "error", err, "dir", pkgDir)
+		return nil
+	}
+	if len(manifests) > 0 {
+		r.InstalledSidecars = append(r.InstalledSidecars, manifests...)
+	}
+	return manifests
 }
 
 func GetDefaultTargetPath() string {

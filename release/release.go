@@ -126,6 +126,7 @@ type GithubRelease struct {
 	WarnUnmappedAssets  *bool
 	VerifiedSigned      bool
 	VerificationMethod  string
+	SymlinkDir          string
 }
 
 type Prompter interface {
@@ -1775,7 +1776,8 @@ func (r *GithubRelease) Install() (installErr error) {
 			Regexps:          r.CliParams.ReleaseAssetRegexps,
 			Interactive:      r.CliParams.Interactive,
 			AllowForeignArch: r.CliParams.AllowForeignArch,
-			Single:           !r.CliParams.Interactive && !r.CliParams.All,
+			Single:           !r.CliParams.Interactive && r.CliParams.All == "",
+			AllMode:          string(r.CliParams.All),
 			AvxLevel:         avxLvl,
 		})
 		if err != nil {
@@ -2045,12 +2047,10 @@ func (r *GithubRelease) Install() (installErr error) {
 				sel := &selector.Selector{
 					Kind:           selector.Binary,
 					Items:          binaries,
-					NamesMatcher:   r.CliParams.AssetBinaries,
-					RegexpMatchers: []string{r.CliParams.AssetBinariesRegexp},
-					Single:         r.CliParams.OnlyFirstMatch,
+					NamesMatcher:   r.CliParams.Extract,
+					RegexpMatchers: []string{r.CliParams.ExtractRegex},
+					AllMode:        string(r.CliParams.All),
 					Repository:     r.CliParams.Repository,
-					OnlyFirstMatch: r.CliParams.OnlyFirstMatch,
-					MaxExeInstalls: r.CliParams.MaxExeInstalls,
 				}
 				filteredBinaries, selErr := sel.Run()
 				if selErr == nil && len(filteredBinaries) > 0 {
@@ -2157,29 +2157,42 @@ func (r *GithubRelease) Install() (installErr error) {
 				if hashErr != nil {
 					return fmt.Errorf("failed to calculate SHA-256 for VirusTotal: %w", hashErr)
 				}
-				err := VerifyHashWithVirusTotal(vtHash, downloadedAssetPath, r.CliParams.VTApiKey, r.CliParams.Interactive && !r.CliParams.DisablePrompts, r.CliParams.SkipVtSandbox)
+
+				cfg, _ := config.LoadConfig()
+				var vtSandboxMessage string
+				if cfg != nil {
+					vtSandboxMessage = cfg.Core.VTSandboxMessage
+				}
+
+				var pUIPtr *ui.PacmanUI
+				if pUI != nil {
+					if pacUI, ok := pUI.(*ui.PacmanUI); ok {
+						pUIPtr = pacUI
+					}
+				}
+
+				err := VerifyHashWithVirusTotal(vtHash, downloadedAssetPath, r.CliParams.VTApiKey, r.CliParams.Interactive && !r.CliParams.DisablePrompts, r.CliParams.SkipVtSandbox, pUIPtr, vtSandboxMessage)
 				if err != nil {
 					return err
 				}
 			}
 
 			binarySelector, selErr := selector.BinarySelector(selector.BinaryMatchCriteria{
-				DownloadPath:   filepath.Join(downloadDir, asset.Name),
-				Names:          r.CliParams.AssetBinaries,
-				Matcher:        r.CliParams.AssetBinariesRegexp,
-				Interactive:    r.CliParams.Interactive,
-				Extractor:      r.CliParams.Extractor,
-				Repository:     r.CliParams.Repository,
-				OnlyFirstMatch: r.CliParams.OnlyFirstMatch,
-				MaxExeInstalls: r.CliParams.MaxExeInstalls,
+				DownloadPath: filepath.Join(downloadDir, asset.Name),
+				Names:        r.CliParams.Extract,
+				Matcher:      r.CliParams.ExtractRegex,
+				Interactive:  r.CliParams.Interactive,
+				Extractor:    r.CliParams.Extractor,
+				Repository:   r.CliParams.Repository,
+				AllMode:      string(r.CliParams.All),
 			})
 			if selErr != nil {
-				log.Error("could not create release asset binary selector", "repository", r.CliParams.Repository, "release id", releases[0].Id, "release name", releases[0].Name, "release asset name", asset.Name, "downloaded asset", filepath.Join(downloadDir, asset.Name), "asset binary name matchers", r.CliParams.AssetBinaries, "asset binary regexp matcher", params.TruncateRegex(r.CliParams.AssetBinariesRegexp, 200), "error", selErr)
+				log.Error("could not create release asset binary selector", "repository", r.CliParams.Repository, "release id", releases[0].Id, "release name", releases[0].Name, "release asset name", asset.Name, "downloaded asset", filepath.Join(downloadDir, asset.Name), "asset extract names", r.CliParams.Extract, "asset extract regexp matcher", params.TruncateRegex(r.CliParams.ExtractRegex, 200), "error", selErr)
 				return selErr
 			}
 			binaries, execErr = binarySelector.Run()
 			if execErr != nil {
-				log.Error("could not select release asset binary", "repository", r.CliParams.Repository, "release id", releases[0].Id, "release name", releases[0].Name, "release asset name", asset.Name, "downloaded asset", filepath.Join(downloadDir, asset.Name), "asset binary name matchers", r.CliParams.AssetBinaries, "asset binary regexp matcher", params.TruncateRegex(r.CliParams.AssetBinariesRegexp, 200), "error", execErr)
+				log.Error("could not select release asset binary", "repository", r.CliParams.Repository, "release id", releases[0].Id, "release name", releases[0].Name, "release asset name", asset.Name, "downloaded asset", filepath.Join(downloadDir, asset.Name), "asset extract names", r.CliParams.Extract, "asset extract regexp matcher", params.TruncateRegex(r.CliParams.ExtractRegex, 200), "error", execErr)
 				return execErr
 			}
 		}
@@ -2357,6 +2370,7 @@ func (r *GithubRelease) Install() (installErr error) {
 				if err != nil {
 					return err
 				}
+				r.SymlinkDir = symlinkDir
 				if pUI != nil {
 					pUI.UpdateSymlink(symlinkDir)
 					pUI.Update(6, "", "", "", "", "")
@@ -2652,6 +2666,12 @@ func (r *GithubRelease) Install() (installErr error) {
 	}
 	r.InstalledSidecars = filteredSidecars
 
+	if r.CliParams != nil {
+		r.CliParams.InstalledSidecars = r.InstalledSidecars
+		r.CliParams.InstalledBinaries = r.InstalledBinaries
+		r.CliParams.ResolvedSymlinkDir = r.SymlinkDir
+	}
+
 	if !r.CliParams.NoSaveState && !r.CliParams.DryRun {
 		st, err := state.LoadState()
 		if err == nil {
@@ -2664,9 +2684,9 @@ func (r *GithubRelease) Install() (installErr error) {
 				Version:                  releases[0].Name,
 				Rename:                   r.CliParams.Rename,
 				Type:                     r.CliParams.Type,
-				All:                      r.CliParams.All,
-				AssetBinaries:            r.CliParams.AssetBinaries,
-				AssetBinariesRegexp:      r.CliParams.AssetBinariesRegexp,
+				All:                      r.CliParams.All != "",
+				Extract:                  r.CliParams.Extract,
+				ExtractRegex:             r.CliParams.ExtractRegex,
 				InstalledBinaries:        r.InstalledBinaries,
 				InstalledAssetNames:      r.InstalledAssetCleanNames,
 				InstalledAssetsFullNames: r.InstalledAssetFullNames,
@@ -2681,6 +2701,8 @@ func (r *GithubRelease) Install() (installErr error) {
 				SidecarMode:              r.CliParams.SidecarMode,
 				Driver:                   r.CliParams.Driver,
 				Plugin:                   r.CliParams.Plugin,
+				DriverMap:                r.CliParams.DriverMap,
+				SymlinkDir:               r.SymlinkDir,
 				InstalledSidecars:        r.InstalledSidecars,
 				FallbackReleases:         r.CliParams.FallbackReleases,
 				InsecureAllowUnsigned:    r.CliParams.InsecureAllowUnsigned,

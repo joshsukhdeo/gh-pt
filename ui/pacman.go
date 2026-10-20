@@ -56,6 +56,12 @@ type PacmanSetAssetIndexMsg struct {
 	Index int
 }
 
+// PacmanVTUploadMsg updates VirusTotal sandbox upload status and message.
+type PacmanVTUploadMsg struct {
+	Active  bool
+	Message string
+}
+
 // PacmanSymlinkMsg updates symlink path for the active asset.
 type PacmanSymlinkMsg struct {
 	Symlink string
@@ -109,6 +115,10 @@ type PacmanModel struct {
 	ErrorMsg  string
 	StatusMsg string
 	GhostType string
+
+	// VirusTotal sandbox upload
+	VTUploadActive  bool
+	VTUploadMessage string
 
 	// Terminal dimensions
 	Width  int
@@ -246,6 +256,12 @@ func (m *PacmanModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.ProgressTarget = stageToProgress(m.Stage, m.CurrentAsset, len(m.Assets))
 
+	case PacmanVTUploadMsg:
+		m.VTUploadActive = msg.Active
+		if msg.Message != "" {
+			m.VTUploadMessage = msg.Message
+		}
+
 	case PacmanSymlinkMsg:
 		if len(m.Assets) > 0 && m.CurrentAsset < len(m.Assets) {
 			m.Assets[m.CurrentAsset].Symlink = msg.Symlink
@@ -366,6 +382,80 @@ func (m *PacmanModel) renderTrack() string {
 	var sb strings.Builder
 	sb.WriteString("  ") // Left margin
 
+	// VirusTotal sandbox upload mode: show custom message that pacman eats through
+	if m.VTUploadActive && m.VTUploadMessage != "" {
+		msg := m.VTUploadMessage
+		if m.DisableIcons {
+			msg = strings.ReplaceAll(msg, "•", ".")
+		}
+		msgRunes := []rune(msg)
+		msgLen := len(msgRunes)
+
+		// Calculate how much of the message has been "eaten" based on progress
+		eaten := int(m.ProgressCurrent * float64(msgLen))
+		if eaten < 0 {
+			eaten = 0
+		}
+		if eaten > msgLen {
+			eaten = msgLen
+		}
+
+		// Render eaten portion (empty space)
+		for i := 0; i < eaten; i++ {
+			sb.WriteString(" ")
+		}
+
+		// Pacman at current position
+		if eaten < msgLen {
+			if m.DisableIcons {
+				sb.WriteString("C ")
+			} else {
+				pacChar := "ᗧ"
+				sb.WriteString(m.pacmanStyle.Render(pacChar) + " ")
+			}
+
+			// Remaining message ahead of pacman
+			for i := eaten; i < msgLen; i++ {
+				sb.WriteString(string(msgRunes[i]))
+			}
+		} else {
+			if m.DisableIcons {
+				sb.WriteString("C ")
+			} else {
+				sb.WriteString(m.pacmanStyle.Render("ᗧ") + " ")
+			}
+		}
+
+		// End target
+		endIcon := "🍒"
+		if m.DisableIcons {
+			endIcon = "*"
+		}
+		if m.ProgressCurrent >= 0.999 || m.Completed {
+			endIcon = "🏁"
+			if m.DisableIcons {
+				endIcon = "F"
+			}
+		}
+		if m.HasError {
+			endIcon = "👻"
+			if m.DisableIcons {
+				endIcon = "X"
+			}
+		}
+		sb.WriteString(endIcon)
+
+		// Percentage
+		percent := int(m.ProgressCurrent * 100)
+		if percent > 100 {
+			percent = 100
+		}
+		fmt.Fprintf(&sb, " %3d%%", percent)
+
+		return sb.String()
+	}
+
+	// Normal mode: dots
 	// Dots eaten behind pacman (empty space)
 	for i := 0; i < pacPos; i++ {
 		sb.WriteString("  ")
@@ -782,6 +872,19 @@ func (p *PacmanUI) UpdateSymlink(symlink string) {
 	}
 
 	msg := PacmanSymlinkMsg{Symlink: symlink}
+	if p.program != nil && p.started && !p.stopped {
+		p.program.Send(msg)
+	} else if p.model != nil {
+		p.model.Update(msg)
+	}
+}
+
+// SetVTUpload updates the VirusTotal sandbox upload status and message.
+func (p *PacmanUI) SetVTUpload(active bool, message string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	msg := PacmanVTUploadMsg{Active: active, Message: message}
 	if p.program != nil && p.started && !p.stopped {
 		p.program.Send(msg)
 	} else if p.model != nil {

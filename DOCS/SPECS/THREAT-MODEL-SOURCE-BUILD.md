@@ -396,7 +396,7 @@ docker run \
 **Files**:
 - `compile/container.go`: Update container execution logic
 - `compile/seccomp-profile.json`: Seccomp profile
-- `docs/SPEC-SOURCE-REPOS.md`: Document security model
+- `DOCS/SPECS/SPEC-SOURCE-REPOS.md`: Document security model
 
 ---
 
@@ -457,7 +457,7 @@ Stage 2: Compile Container
 **Files**:
 - `cmd/root.go`: Update workflow to use two containers
 - `compile/container.go`: Add AI container logic
-- `docs/SPEC-SOURCE-REPOS.md`: Document two-stage architecture
+- `DOCS/SPECS/SPEC-SOURCE-REPOS.md`: Document two-stage architecture
 
 ---
 

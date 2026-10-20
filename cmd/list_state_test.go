@@ -22,9 +22,9 @@ func TestListState_LsAndLl(t *testing.T) {
 		PackageNames: []string{"pkg1", "pkg2"},
 	}))
 	require.NoError(t, st.AddApp(&state.InstalledApp{
-		Repository:    "test/repo-types-long",
-		Type:          []string{"very-long-type-name-that-is-over-25-chars-abc-def-ghi"},
-		AssetBinaries: []string{"bin1", "bin2"},
+		Repository: "test/repo-types-long",
+		Type:       []string{"very-long-type-name-that-is-over-25-chars-abc-def-ghi"},
+		Extract:    []string{"bin1", "bin2"},
 	}))
 
 	r1 := &cmd.RootCLI{ExecContext: params.ExecContext{Ls: "test", Full: true}}
