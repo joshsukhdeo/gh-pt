@@ -511,3 +511,79 @@ func TestAssetClassifier_BareLinuxBinaryNativeOverWine(t *testing.T) {
 	assert.Contains(t, cannotNames, "hfdownloader_linux_arm64_v3.4.0")
 	assert.Contains(t, cannotNames, "checksums.txt")
 }
+
+func TestAssetClassifier_OSVersionMatchingAndClosestChoice(t *testing.T) {
+	// 1. Ubuntu 26.04 host: exact match when 26.04 is available
+	c26 := NewAssetClassifier("linux", "amd64", "off", "avx2")
+	c26.HostDistro = "ubuntu"
+	c26.HostDistroVersion = "26.04"
+	c26.HostDistroCodename = "resolute"
+
+	assetsWith26 := []string{
+		"mytool_ubuntu22.04_amd64.deb",
+		"mytool_ubuntu24.04_amd64.deb",
+		"mytool_ubuntu26.04_amd64.deb",
+	}
+
+	best := c26.PickPrimaryDefaultAsset(assetsWith26)
+	assert.Equal(t, "mytool_ubuntu26.04_amd64.deb", best, "Ubuntu 26.04 host must pick exact 26.04 asset")
+
+	// 2. Ubuntu 26.04 host: closest choice (24.04 > 22.04) when 26.04 is absent
+	assetsWithout26 := []string{
+		"mytool_ubuntu22.04_amd64.deb",
+		"mytool_ubuntu24.04_amd64.deb",
+	}
+	bestFallback := c26.PickPrimaryDefaultAsset(assetsWithout26)
+	assert.Equal(t, "mytool_ubuntu24.04_amd64.deb", bestFallback, "Ubuntu 26.04 host must pick closest 24.04 asset over 22.04")
+
+	// 3. Ubuntu 26.04 host with tarball archives (e.g. ovms)
+	ovmsAssets := []string{
+		"ovms_ubuntu22_2026.4.1_python_on.tar.gz",
+		"ovms_ubuntu24_2026.4.1_python_on.tar.gz",
+	}
+	bestOvms := c26.PickPrimaryDefaultAsset(ovmsAssets)
+	assert.Equal(t, "ovms_ubuntu24_2026.4.1_python_on.tar.gz", bestOvms, "Ubuntu 26.04 host must pick closest ubuntu24 over ubuntu22")
+
+	// 4. Ubuntu 26.04 host with codenames
+	codenameAssets := []string{
+		"pkg_jammy_amd64.deb",
+		"pkg_noble_amd64.deb",
+		"pkg_resolute_amd64.deb",
+	}
+	assert.Equal(t, "pkg_resolute_amd64.deb", c26.PickPrimaryDefaultAsset(codenameAssets))
+
+	codenameFallback := []string{
+		"pkg_jammy_amd64.deb",
+		"pkg_noble_amd64.deb",
+	}
+	assert.Equal(t, "pkg_noble_amd64.deb", c26.PickPrimaryDefaultAsset(codenameFallback))
+
+	// 5. Ubuntu 24.04 host: exact match for 24.04
+	c24 := NewAssetClassifier("linux", "amd64", "off", "avx2")
+	c24.HostDistro = "ubuntu"
+	c24.HostDistroVersion = "24.04"
+	c24.HostDistroCodename = "noble"
+
+	assert.Equal(t, "mytool_ubuntu24.04_amd64.deb", c24.PickPrimaryDefaultAsset(assetsWith26))
+
+	// 6. Ubuntu 24.04 host when 24.04 is absent: prefer older compatible (22.04) over newer incompatible (26.04)
+	assets22And26 := []string{
+		"mytool_ubuntu22.04_amd64.deb",
+		"mytool_ubuntu26.04_amd64.deb",
+	}
+	assert.Equal(t, "mytool_ubuntu22.04_amd64.deb", c24.PickPrimaryDefaultAsset(assets22And26))
+
+	// 7. Core Selector.Run() integration test
+	sel := &Selector{
+		Kind: Asset,
+		Items: []*SelectorItem{
+			{Name: "mytool_ubuntu22.04_amd64.deb"},
+			{Name: "mytool_ubuntu24.04_amd64.deb"},
+		},
+		RegexpMatchers: []string{".*amd64.*"},
+	}
+	selected, err := sel.Run()
+	require.NoError(t, err)
+	require.NotEmpty(t, selected)
+	assert.Equal(t, "mytool_ubuntu24.04_amd64.deb", selected[0].Name, "Selector.Run must order closest Ubuntu version first")
+}

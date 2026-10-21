@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/log"
@@ -89,7 +90,7 @@ func (s *Selector) Run() ([]*SelectorItem, error) {
 		}
 	}
 
-	if s.Kind == Asset && len(s.NamesMatcher) == 0 && (s.AllMode == "assets" || s.AllMode == "") {
+	if s.Kind == Asset && len(s.NamesMatcher) == 0 && s.AllMode == "" {
 		classifier := DefaultClassifier()
 		if s.AvxLevel != "" && s.AvxLevel != "auto" {
 			classifier.HostAVXLevel = s.AvxLevel
@@ -115,8 +116,8 @@ func (s *Selector) Run() ([]*SelectorItem, error) {
 				return matchedItems, nil
 			}
 		}
-	} else if s.Kind == Asset && len(s.NamesMatcher) == 0 && s.AllMode == "extracted" && len(s.RegexpMatchers) == 0 {
-		// --all extracted mode without explicit regex: pick best package type, then return all packages of that type
+	} else if s.Kind == Asset && len(s.NamesMatcher) == 0 && s.AllMode != "" && len(s.RegexpMatchers) == 0 {
+		// --all mode without explicit regex: pick best package type, then return all packages of that type
 		classifier := DefaultClassifier()
 		if s.AvxLevel != "" && s.AvxLevel != "auto" {
 			classifier.HostAVXLevel = s.AvxLevel
@@ -138,6 +139,9 @@ func (s *Selector) Run() ([]*SelectorItem, error) {
 				}
 			}
 			if len(matchedItems) > 0 {
+				sort.SliceStable(matchedItems, func(i, j int) bool {
+					return classifier.ScoreAssetOSVersion(matchedItems[i].Name) < classifier.ScoreAssetOSVersion(matchedItems[j].Name)
+				})
 				return matchedItems, nil
 			}
 		}
@@ -326,6 +330,13 @@ func (s *Selector) Run() ([]*SelectorItem, error) {
 							if len(nativeMatches) > 0 {
 								currentMatches = nativeMatches
 							}
+						}
+
+						if s.Kind == Asset && len(currentMatches) > 1 {
+							classifier := DefaultClassifier()
+							sort.SliceStable(currentMatches, func(i, j int) bool {
+								return classifier.ScoreAssetOSVersion(currentMatches[i].Name) < classifier.ScoreAssetOSVersion(currentMatches[j].Name)
+							})
 						}
 
 						for _, item := range currentMatches {

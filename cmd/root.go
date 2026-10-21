@@ -2329,12 +2329,14 @@ func buildRegexFromTypes(types []string, wine string) []string {
 		if err == nil {
 			content := string(osRelease)
 			lines := strings.Split(content, "\n")
+			var distro, versionID, codename string
 			for _, line := range lines {
 				if strings.HasPrefix(line, "ID=") {
-					distro := strings.ToLower(strings.Trim(strings.TrimPrefix(line, "ID="), "\""))
-					if distro != "" && distro != "linux" {
-						osRegexList = append(osRegexList, distro)
-					}
+					distro = strings.ToLower(strings.Trim(strings.TrimPrefix(line, "ID="), "\""))
+				} else if strings.HasPrefix(line, "VERSION_ID=") {
+					versionID = strings.Trim(strings.TrimPrefix(line, "VERSION_ID="), "\"")
+				} else if strings.HasPrefix(line, "VERSION_CODENAME=") {
+					codename = strings.ToLower(strings.Trim(strings.TrimPrefix(line, "VERSION_CODENAME="), "\""))
 				} else if strings.HasPrefix(line, "ID_LIKE=") {
 					idLike := strings.ToLower(strings.Trim(strings.TrimPrefix(line, "ID_LIKE="), "\""))
 					if idLike != "" {
@@ -2345,6 +2347,20 @@ func buildRegexFromTypes(types []string, wine string) []string {
 						}
 					}
 				}
+			}
+			if distro == "ubuntu" {
+				if codename != "" && versionID != "" {
+					verNoDot := strings.ReplaceAll(versionID, ".", "")
+					verDot := strings.ReplaceAll(versionID, ".", `\.`)
+					osRegexList = append([]string{fmt.Sprintf(`(?:ubuntu[-_]?(?:%s|%s)|%s)`, verDot, verNoDot, codename)}, osRegexList...)
+				} else if versionID != "" {
+					verNoDot := strings.ReplaceAll(versionID, ".", "")
+					verDot := strings.ReplaceAll(versionID, ".", `\.`)
+					osRegexList = append([]string{fmt.Sprintf(`(?:ubuntu[-_]?(?:%s|%s))`, verDot, verNoDot)}, osRegexList...)
+				}
+				osRegexList = append(osRegexList, "ubuntu")
+			} else if distro != "" && distro != "linux" {
+				osRegexList = append([]string{distro}, osRegexList...)
 			}
 		}
 		osRegexList = append(osRegexList, "linux")

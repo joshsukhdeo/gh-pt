@@ -502,12 +502,12 @@ func RemoveApp(target string, purge bool, unsafeSkipDirFlagCheck bool) error {
 
 		if app.SymlinkDir != "" {
 			cleanSym := filepath.Clean(app.SymlinkDir)
-			if (app.TargetPath != "" && cleanSym == filepath.Clean(app.TargetPath)) || safety.IsVitalOrProtected(cleanSym) {
-				log.Warn(fmt.Sprintf("Refusing to purge protected or target directory %s as package directory", app.SymlinkDir))
-			} else if err := safety.AssertSafeToRemoveAll(app.SymlinkDir); err != nil {
-				log.Warn(fmt.Sprintf("Refusing to purge package directory %s", app.SymlinkDir), "error", err)
-			} else if _, err := os.Lstat(app.SymlinkDir); err == nil {
-				if err := func() error {
+			if _, err := os.Lstat(cleanSym); err == nil {
+				if (app.TargetPath != "" && cleanSym == filepath.Clean(app.TargetPath)) || safety.IsVitalOrProtected(cleanSym) {
+					log.Warn(fmt.Sprintf("Refusing to purge protected or target directory %s as package directory", app.SymlinkDir))
+				} else if err := safety.AssertSafeToRemoveAll(app.SymlinkDir); err != nil {
+					log.Warn(fmt.Sprintf("Refusing to purge package directory %s", app.SymlinkDir), "error", err)
+				} else if err := func() error {
 					if unsafeSkipDirFlagCheck {
 						return safety.RemoveLegacySafe(app.SymlinkDir)
 					}

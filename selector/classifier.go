@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/pterm/pterm"
@@ -64,16 +66,39 @@ type ClassifiedAsset struct {
 // AssetClassifier is the universal detection and categorization engine
 // for release assets across install, update, and show commands.
 type AssetClassifier struct {
-	HostOS       string
-	HostArch     string
-	WineMode     string
-	HostAVXLevel string
-	HostPkgMgr   string // "dpkg", "rpm", or "" for unknown
+	HostOS             string
+	HostArch           string
+	WineMode           string
+	HostAVXLevel       string
+	HostPkgMgr         string // "dpkg", "rpm", or "" for unknown
+	HostDistro         string
+	HostDistroVersion  string
+	HostDistroCodename string
 }
 
 var (
-	lookPath = exec.LookPath
+	lookPath      = exec.LookPath
+	readOSRelease = func() ([]byte, error) { return osReadFile("/etc/os-release") }
 )
+
+func detectHostDistro() (distro, versionID, codename string) {
+	data, err := readOSRelease()
+	if err != nil {
+		return "", "", ""
+	}
+	lines := strings.Split(string(data), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "ID=") {
+			distro = strings.ToLower(strings.Trim(strings.TrimPrefix(line, "ID="), "\""))
+		} else if strings.HasPrefix(line, "VERSION_ID=") {
+			versionID = strings.Trim(strings.TrimPrefix(line, "VERSION_ID="), "\"")
+		} else if strings.HasPrefix(line, "VERSION_CODENAME=") {
+			codename = strings.ToLower(strings.Trim(strings.TrimPrefix(line, "VERSION_CODENAME="), "\""))
+		}
+	}
+	return distro, versionID, codename
+}
 
 // IsWineSupportedOS reports whether the given OS can run Wine.
 func IsWineSupportedOS(os string) bool {
@@ -129,12 +154,16 @@ func NewAssetClassifier(hostOS, hostArch, wineMode, hostAVX string) *AssetClassi
 		}
 	}
 
+	distro, versionID, codename := detectHostDistro()
 	return &AssetClassifier{
-		HostOS:       hostOS,
-		HostArch:     hostArch,
-		WineMode:     wineMode,
-		HostAVXLevel: hostAVX,
-		HostPkgMgr:   detectHostPackageManager(),
+		HostOS:             hostOS,
+		HostArch:           hostArch,
+		WineMode:           wineMode,
+		HostAVXLevel:       hostAVX,
+		HostPkgMgr:         detectHostPackageManager(),
+		HostDistro:         distro,
+		HostDistroVersion:  versionID,
+		HostDistroCodename: codename,
 	}
 }
 
@@ -922,6 +951,107 @@ func extractPackageBase(name string) string {
 	return strings.ToLower(base)
 }
 
+var (
+	ubuntuVerRegex1          = regexp.MustCompile(`(?i)ubuntu[-_]?([0-9]{2})\.([0-9]{2})`)
+	ubuntuVerRegex2          = regexp.MustCompile(`(?i)ubuntu[-_]?([0-9]{2})([0-9]{2})`)
+	ubuntuVerRegex3          = regexp.MustCompile(`(?i)ubuntu[-_]?([0-9]{2})(?:[^0-9]|$)`)
+	ubuntuStandaloneVerRegex = regexp.MustCompile(`(?i)[-_]([0-9]{2}\.[0-9]{2})[-_.]`)
+	ubuntuCodenameRegex      = regexp.MustCompile(`(?i)(?:^|[-_.])(resolute|noble|jammy|focal|bionic|xenial)(?:[-_.]|$)`)
+)
+
+func parseUbuntuVersion(lower string) (float64, bool) {
+	if m := ubuntuVerRegex1.FindStringSubmatch(lower); len(m) == 3 {
+		major, _ := strconv.Atoi(m[1])
+		minor, _ := strconv.Atoi(m[2])
+		return float64(major) + float64(minor)/100.0, true
+	}
+	if m := ubuntuVerRegex2.FindStringSubmatch(lower); len(m) == 3 {
+		major, _ := strconv.Atoi(m[1])
+		minor, _ := strconv.Atoi(m[2])
+		return float64(major) + float64(minor)/100.0, true
+	}
+	if m := ubuntuVerRegex3.FindStringSubmatch(lower); len(m) == 2 {
+		major, _ := strconv.Atoi(m[1])
+		return float64(major) + 0.04, true
+	}
+	if m := ubuntuCodenameRegex.FindStringSubmatch(lower); len(m) == 2 {
+		switch strings.ToLower(m[1]) {
+		case "resolute":
+			return 26.04, true
+		case "noble":
+			return 24.04, true
+		case "jammy":
+			return 22.04, true
+		case "focal":
+			return 20.04, true
+		case "bionic":
+			return 18.04, true
+		case "xenial":
+			return 16.04, true
+		}
+	}
+	if m := ubuntuStandaloneVerRegex.FindStringSubmatch(lower); len(m) == 2 {
+		var ver float64
+		if _, err := fmt.Sscanf(m[1], "%f", &ver); err == nil && ver >= 16.0 && ver <= 30.0 {
+			return ver, true
+		}
+	}
+	return 0, false
+}
+
+// ScoreAssetOSVersion computes a distance score between an asset name and the host OS.
+// Lower score = better match. Exact host match = 0.0.
+func (c *AssetClassifier) ScoreAssetOSVersion(name string) float64 {
+	lower := strings.ToLower(name)
+	hostDistro := c.HostDistro
+	if hostDistro == "" {
+		hostDistro = "ubuntu"
+	}
+
+	hostVer := 0.0
+	if c.HostDistroVersion != "" {
+		_, _ = fmt.Sscanf(c.HostDistroVersion, "%f", &hostVer)
+	}
+	if hostVer == 0.0 {
+		hostVer = 26.04
+	}
+
+	if hostDistro == "ubuntu" || c.HostOS == "linux" {
+		// 1. Check if asset matches Ubuntu version
+		if assetVer, ok := parseUbuntuVersion(lower); ok {
+			if assetVer == hostVer {
+				return 0.0 // Exact match!
+			}
+			if assetVer < hostVer {
+				// Older version: glibc backwards-compatible. Closest distance wins.
+				return hostVer - assetVer
+			}
+			// Newer version: potential glibc incompatibility, distance + penalty
+			return (assetVer - hostVer) + 10.0
+		}
+	}
+
+	// 2. Generic Ubuntu asset without specific version
+	if strings.Contains(lower, "ubuntu") {
+		return 8.0
+	}
+
+	// 3. Debian asset (compatible parent distro on Ubuntu)
+	if strings.Contains(lower, "debian") {
+		return 15.0
+	}
+
+	// 4. Incompatible Linux distros (e.g. Alpine musl, Fedora on Ubuntu, Arch)
+	if strings.Contains(lower, "alpine") || strings.Contains(lower, "musl") ||
+		strings.Contains(lower, "fedora") || strings.Contains(lower, "centos") ||
+		strings.Contains(lower, "rhel") || strings.Contains(lower, "archlinux") {
+		return 500.0
+	}
+
+	// 5. Generic Linux asset (e.g. foo_linux_amd64.tar.gz)
+	return 20.0
+}
+
 // PickDefaultAssetsWithContext identifies all assets that should be installed by default.
 // Packages compete only amongst themselves for precedence (e.g. .deb > .appimage > .rpm on dpkg).
 // Binaries found (standalone executable or companion CLI) are installed alongside the package by default,
@@ -989,6 +1119,13 @@ func (c *AssetClassifier) PickDefaultAssetsWithContext(repo string, assets []str
 		}
 	}
 
+	sort.SliceStable(packageCandidates, func(i, j int) bool {
+		return c.ScoreAssetOSVersion(packageCandidates[i]) < c.ScoreAssetOSVersion(packageCandidates[j])
+	})
+	sort.SliceStable(binaryCandidates, func(i, j int) bool {
+		return c.ScoreAssetOSVersion(binaryCandidates[i]) < c.ScoreAssetOSVersion(binaryCandidates[j])
+	})
+
 	// If regex matchers are provided, filter candidates according to the regexes
 	if len(regexMatchers) > 0 {
 		var matchedPkgs []string
@@ -1003,6 +1140,9 @@ func (c *AssetClassifier) PickDefaultAssetsWithContext(repo string, assets []str
 				}
 			}
 			if len(matchedPkgs) > 0 {
+				sort.SliceStable(matchedPkgs, func(i, j int) bool {
+					return c.ScoreAssetOSVersion(matchedPkgs[i]) < c.ScoreAssetOSVersion(matchedPkgs[j])
+				})
 				packageCandidates = matchedPkgs
 				break
 			}
@@ -1020,6 +1160,9 @@ func (c *AssetClassifier) PickDefaultAssetsWithContext(repo string, assets []str
 				}
 			}
 			if len(matchedBins) > 0 {
+				sort.SliceStable(matchedBins, func(i, j int) bool {
+					return c.ScoreAssetOSVersion(matchedBins[i]) < c.ScoreAssetOSVersion(matchedBins[j])
+				})
 				binaryCandidates = matchedBins
 				break
 			}
@@ -1235,6 +1378,10 @@ func (c *AssetClassifier) PickPrimaryDefaultAssetWithContext(repo string, assets
 	if len(candidates) == 0 {
 		return ""
 	}
+
+	sort.SliceStable(candidates, func(i, j int) bool {
+		return c.ScoreAssetOSVersion(candidates[i]) < c.ScoreAssetOSVersion(candidates[j])
+	})
 
 	// Prefer candidate matching host AVX if present
 	for _, cand := range candidates {
