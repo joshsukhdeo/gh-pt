@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/adrg/xdg"
@@ -205,6 +206,58 @@ func TestGithubRelease_InstallArchivedBinary(t *testing.T) {
 	content, err := os.ReadFile(destFile)
 	require.NoError(t, err)
 	assert.Equal(t, "archived content", string(content))
+}
+
+func TestGithubRelease_EnsureExecutable(t *testing.T) {
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test_bin")
+	err := os.WriteFile(testFile, []byte("echo hi"), 0644)
+	require.NoError(t, err)
+
+	gr := &GithubRelease{}
+
+	// 1. Normal chmod success
+	err = gr.ensureExecutable(testFile, 0755)
+	require.NoError(t, err)
+	fi, err := os.Stat(testFile)
+	require.NoError(t, err)
+	assert.NotZero(t, fi.Mode().Perm()&0111)
+
+	// 2. Chmod error (EPERM), but file is already executable -> succeeds without error
+	origChmod := osChmod
+	defer func() { osChmod = origChmod }()
+
+	osChmod = func(name string, mode os.FileMode) error {
+		return &os.PathError{Op: "chmod", Path: name, Err: syscall.EPERM}
+	}
+
+	err = gr.ensureExecutable(testFile, 0755)
+	assert.NoError(t, err)
+
+	// 3. Chmod error (EPERM) and file is NOT executable -> triggers elevated sudo chmod
+	notExecFile := filepath.Join(tmpDir, "not_exec_bin")
+	// Temporarily restore real chmod to set 0644
+	osChmod = origChmod
+	err = os.WriteFile(notExecFile, []byte("echo nonexec"), 0644)
+	require.NoError(t, err)
+
+	origExecCommand := execCommand
+	execCommand = helperCommand
+	defer func() { execCommand = origExecCommand }()
+
+	osChmod = func(name string, mode os.FileMode) error {
+		return &os.PathError{Op: "chmod", Path: name, Err: syscall.EPERM}
+	}
+
+	grWithElevation := &GithubRelease{
+		CliParams: &params.ExecContext{
+			CommonInstallFlags: params.CommonInstallFlags{
+				DisablePrompts: true,
+			},
+		},
+	}
+	err = grWithElevation.ensureExecutable(notExecFile, 0755)
+	assert.NoError(t, err)
 }
 
 func TestGithubRelease_InstallPkg(t *testing.T) {

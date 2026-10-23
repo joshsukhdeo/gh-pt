@@ -90,6 +90,7 @@ var (
 	execCommand      = exec.Command
 	ghExec           = gh.Exec
 	getNativeManager = resolver.GetNativeManager
+	osChmod          = os.Chmod
 )
 
 type GithubRelease struct {
@@ -713,6 +714,47 @@ func (r *GithubRelease) installArchivedBinary(fileSystem fs.FS, binaryPath strin
 
 	destinationFile, err := os.Create(destinationPath)
 	if err != nil {
+		if os.IsPermission(err) {
+			log.Info("permission denied, attempting to install with elevated privileges")
+
+			var cmd *exec.Cmd
+			if os.Geteuid() == 0 {
+				if r.CliParams != nil && r.CliParams.Interactive {
+					if !r.interactiveConfirm(fmt.Sprintf("Run 'install -m 755 %s %s'?", extractedBinaryPath, destinationPath)) {
+						return fmt.Errorf("permission denied and user aborted installation")
+					}
+				}
+				cmd = execCommand("install", "-m", "755", extractedBinaryPath, destinationPath)
+			} else {
+				if err := r.ensureSudo(); err != nil {
+					return err
+				}
+				if r.CliParams != nil && r.CliParams.Interactive {
+					if !r.interactiveConfirm(fmt.Sprintf("Run 'sudo install -m 755 %s %s'?", extractedBinaryPath, destinationPath)) {
+						return fmt.Errorf("permission denied and user aborted sudo installation")
+					}
+				}
+				cmd = execCommand("sudo", "install", "-m", "755", extractedBinaryPath, destinationPath)
+			}
+
+			if r.UI != nil {
+				r.UI.Pause()
+				defer r.UI.Resume()
+			}
+			cmd.Stdin = os.Stdin
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("elevated install failed: %w", err)
+			}
+			noComp := false
+			if r.CliParams != nil {
+				noComp = r.CliParams.NoCompletionSetup
+			}
+			ScanAndInstallArchiveCompletions(tempExtractDir, filepath.Base(destinationPath), noComp)
+			_ = SetupBinaryCompletions(destinationPath, noComp)
+			return nil
+		}
 		return err
 	}
 	defer func() {
@@ -724,7 +766,7 @@ func (r *GithubRelease) installArchivedBinary(fileSystem fs.FS, binaryPath strin
 		return err
 	}
 
-	err = os.Chmod(destinationPath, 0755)
+	err = r.ensureExecutable(destinationPath, 0755)
 	if err != nil {
 		return err
 	}
@@ -1071,7 +1113,7 @@ func (r *GithubRelease) installBinary(binaryPath string) error {
 		return err
 	}
 
-	err = os.Chmod(destinationPath, 0755)
+	err = r.ensureExecutable(destinationPath, 0755)
 	if err != nil {
 		return err
 	}
@@ -1085,13 +1127,63 @@ func (r *GithubRelease) installBinary(binaryPath string) error {
 	return nil
 }
 
+func (r *GithubRelease) ensureExecutable(destinationPath string, mode os.FileMode) error {
+	err := osChmod(destinationPath, mode)
+	if err == nil {
+		return nil
+	}
+
+	if fi, statErr := os.Stat(destinationPath); statErr == nil {
+		// If the file is already executable by owner, group, or other, do not fail installation.
+		if fi.Mode().Perm()&0111 != 0 {
+			log.Debug("chmod failed, but file is already executable; proceeding",
+				"destination", destinationPath,
+				"current_mode", fmt.Sprintf("%04o", fi.Mode().Perm()),
+				"target_mode", fmt.Sprintf("%04o", mode),
+				"error", err)
+			return nil
+		}
+	}
+
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+
+	if os.Geteuid() == 0 {
+		return err
+	}
+
+	if r != nil {
+		if r.CliParams != nil && r.CliParams.DryRun {
+			return nil
+		}
+		if errSudo := r.ensureSudo(); errSudo == nil {
+			if r.CliParams == nil || !r.CliParams.Interactive || r.interactiveConfirm(fmt.Sprintf("Run 'sudo chmod %04o %s'?", mode, destinationPath)) {
+				if r.UI != nil {
+					r.UI.Pause()
+					defer r.UI.Resume()
+				}
+				cmd := execCommand("sudo", "chmod", fmt.Sprintf("%04o", mode), destinationPath)
+				cmd.Stdin = os.Stdin
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				if sudoErr := cmd.Run(); sudoErr == nil {
+					return nil
+				}
+			}
+		}
+	}
+
+	return err
+}
+
 func (r *GithubRelease) ensureSudo() error {
 	if os.Geteuid() == 0 {
 		return nil
 	}
 	check := execCommand("sudo", "-n", "true")
 	if err := check.Run(); err != nil {
-		if !r.CliParams.Interactive {
+		if r.CliParams == nil || !r.CliParams.Interactive {
 			return fmt.Errorf("sudo session expired or unavailable; cannot prompt for password in headless mode (-D). Run 'sudo -v' beforehand or use an interactive session")
 		}
 		log.Warn("sudo session not cached; you may be prompted for your password")

@@ -514,7 +514,13 @@ func helperCopyFile(src, dst string) error {
 	if err != nil {
 		return nil
 	}
-	return os.Chmod(dst, srcInfo.Mode())
+	if err := os.Chmod(dst, srcInfo.Mode()); err != nil {
+		if dstInfo, statErr := os.Stat(dst); statErr == nil && (dstInfo.Mode().Perm()&0111) != 0 {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 func helperCopyDir(src, dst string) error {
