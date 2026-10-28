@@ -128,6 +128,8 @@ type GithubRelease struct {
 	VerifiedSigned      bool
 	VerificationMethod  string
 	SymlinkDir          string
+	BackedUpFiles       map[string]string
+	PreviousApp         *state.InstalledApp
 }
 
 type Prompter interface {
@@ -643,7 +645,24 @@ func (r *GithubRelease) resolveDestinationPath(binaryPath string) string {
 	return destinationPath
 }
 
+func (r *GithubRelease) ensurePreviousAppBackedUp() {
+	if r.BackedUpFiles != nil || r.CliParams == nil || r.CliParams.Repository == "" {
+		return
+	}
+	st, err := state.LoadState()
+	if err != nil || st.Apps == nil {
+		return
+	}
+	if existing, ok := st.Apps[r.CliParams.Repository]; ok && existing != nil {
+		r.PreviousApp = state.CloneInstalledApp(existing)
+		if backups, err := state.BackupAppBinaries(existing); err == nil {
+			r.BackedUpFiles = backups
+		}
+	}
+}
+
 func (r *GithubRelease) installArchivedBinary(fileSystem fs.FS, binaryPath string) error {
+	r.ensurePreviousAppBackedUp()
 	if r.CliParams.DryRun {
 		destinationPath := r.resolveDestinationPath(binaryPath)
 		r.InstalledBinaries = append(r.InstalledBinaries, filepath.Base(destinationPath))
@@ -1009,6 +1028,7 @@ func (r *GithubRelease) resolveBinaryDependencies(binaryPath string, extractDir 
 }
 
 func (r *GithubRelease) installBinary(binaryPath string) error {
+	r.ensurePreviousAppBackedUp()
 	if r.CliParams.DryRun {
 		destinationPath := r.resolveDestinationPath(binaryPath)
 		r.InstalledBinaries = append(r.InstalledBinaries, filepath.Base(destinationPath))
@@ -2966,13 +2986,23 @@ func (r *GithubRelease) Install() (installErr error) {
 		}
 	}
 
-	if r.CliParams == nil || (!r.CliParams.Update && !r.CliParams.UpdateAll) {
-		repo := ""
-		if r.CliParams != nil {
-			repo = r.CliParams.Repository
-		}
-		state.LogHistory("install", repo, releases[0].Name)
+	repo := ""
+	if r.CliParams != nil {
+		repo = r.CliParams.Repository
 	}
+	prevVer := ""
+	if r.PreviousApp != nil {
+		prevVer = r.PreviousApp.Version
+	}
+	action := "install"
+	if r.CliParams != nil && (r.CliParams.Update || r.CliParams.UpdateAll) {
+		action = "update"
+	}
+	newVer := ""
+	if len(releases) > 0 {
+		newVer = releases[0].Name
+	}
+	_, _ = state.RecordUpdate(action, repo, prevVer, newVer, r.PreviousApp, r.BackedUpFiles, true, "")
 
 	return nil
 }

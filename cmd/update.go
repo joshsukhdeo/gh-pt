@@ -225,6 +225,15 @@ func processSingleUpdate(
 	appParamsCopy.SpecificallyTargeted = specificallyTargeted
 	appParamsCopy.InsecureAllowUnsigned = app.AllowsUnsigned(r.InsecureAllowUnsigned, specificallyTargeted, r.Overwrite)
 
+	var backupFiles map[string]string
+	var prevAppSnapshot *state.InstalledApp
+	if !r.DryRun {
+		prevAppSnapshot = state.CloneInstalledApp(app)
+		if bFiles, bErr := state.BackupAppBinaries(app); bErr == nil {
+			backupFiles = bFiles
+		}
+	}
+
 	err := installReleaseFunc(&appParamsCopy, ghClient)
 	if err != nil {
 		log.Error(fmt.Sprintf("Failed to update %s", app.Repository), "error", err)
@@ -296,7 +305,7 @@ func processSingleUpdate(
 	}
 
 	log.Info(fmt.Sprintf("Successfully updated %s", app.Repository))
-	state.LogHistory("update", app.Repository, latestTag)
+	_, _ = state.RecordUpdate("update", app.Repository, app.Version, latestTag, prevAppSnapshot, backupFiles, true, "Updated successfully")
 
 	// Incremental checkpointing: atomically persist state per completed app update
 	if !r.NoSaveState && !r.DryRun {

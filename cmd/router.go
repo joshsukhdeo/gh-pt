@@ -138,6 +138,14 @@ func RunCommand(cmdStr string, cli *params.CLI) error {
 		return StateUpdate(cli.State.Update.Target, updates)
 	case "state edit":
 		return StateEdit()
+	case "history", "history <repository>":
+		return RunHistory(&cli.History)
+	case "rollback", "rollback <repository>":
+		return RunRollback(&cli.Rollback)
+	case "state history", "state history <repository>":
+		return RunHistory(&cli.State.History)
+	case "state rollback", "state rollback <repository>":
+		return RunRollback(&cli.State.Rollback)
 	case "show", "show <repository>":
 		flags := params.CommonInstallFlags{
 			ReleaseVersion: cli.Show.Version,

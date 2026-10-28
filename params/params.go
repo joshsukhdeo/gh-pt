@@ -66,6 +66,8 @@ type CLI struct {
 	Completions CompletionsCmd `cmd:"" help:"Generate shell completions."`
 	Search      SearchCmd      `cmd:"" help:"Search for repositories on GitHub."`
 	Helper      HelperCmd      `cmd:"" help:"AI-safe helper functions."`
+	History     HistoryCmd     `cmd:"" help:"View update history for the last 30 days."`
+	Rollback    RollbackCmd    `cmd:"" help:"Rollback an application to a previous version."`
 	Test        bool           `help:"Hidden flag for testing to dump parsed parameters." hidden:""`
 
 	// Global flags
@@ -292,13 +294,36 @@ func (c *CLI) ToExecContext() ExecContext {
 }
 
 type StateCmd struct {
-	Cat    StateCatCmd    `cmd:"" help:"Dump raw state file to stdout."`
-	View   StateViewCmd   `cmd:"" help:"Show state file path."`
-	Add    StateAddCmd    `cmd:"" help:"Add state entry for a repository."`
-	Rm     StateRmCmd     `cmd:"" help:"Remove state entry."`
-	Update StateUpdateCmd `cmd:"" help:"Update state entry fields."`
-	Edit   StateEditCmd   `cmd:"" help:"Edit saved state interactively."`
+	Cat      StateCatCmd      `cmd:"" help:"Dump raw state file to stdout."`
+	View     StateViewCmd     `cmd:"" help:"Show state file path."`
+	Add      StateAddCmd      `cmd:"" help:"Add state entry for a repository."`
+	Rm       StateRmCmd       `cmd:"" help:"Remove state entry."`
+	Update   StateUpdateCmd   `cmd:"" help:"Update state entry fields."`
+	Edit     StateEditCmd     `cmd:"" help:"Edit saved state interactively."`
+	History  StateHistoryCmd  `cmd:"" help:"Show update history for the last 30 days."`
+	Rollback StateRollbackCmd `cmd:"" help:"Rollback application to a previous version."`
 }
+
+type HistoryCmd struct {
+	Repository string `arg:"" optional:"" predictor:"installed_apps" predict:"installed_apps" help:"Filter history by repository (owner/repo)."`
+	Days       int    `name:"days" default:"30" help:"Show history within the last N days (default: 30)."`
+	Format     string `name:"format" enum:"table,json" default:"table" help:"Output format (table or json)."`
+	Clean      bool   `name:"clean" help:"Prune history entries and backups older than the retention period."`
+	NoColor    bool   `name:"no-color" help:"Disable color output."`
+	NoEmojis   bool   `name:"no-emojis" help:"Disable emoji output."`
+}
+
+type RollbackCmd struct {
+	Repository string `arg:"" predictor:"installed_apps" predict:"installed_apps" help:"Repository to roll back (owner/repo)."`
+	To         string `name:"to" help:"Specific version to roll back to (defaults to previous version)."`
+	DryRun     bool   `name:"dry-run" help:"Show what would be rolled back without making changes."`
+	Force      bool   `short:"f" name:"force" help:"Bypass confirmation prompts."`
+	NoColor    bool   `name:"no-color" help:"Disable color output."`
+	NoEmojis   bool   `name:"no-emojis" help:"Disable emoji output."`
+}
+
+type StateHistoryCmd = HistoryCmd
+type StateRollbackCmd = RollbackCmd
 
 type StateCatCmd struct{}
 
