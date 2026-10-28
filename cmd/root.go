@@ -220,7 +220,7 @@ func needsGitHubAPI(r *RootCLI) bool {
 		return false
 	}
 	// Clone/Fork/Show/CompileFromSource don't need GitHub API for release fetching
-	if r.Clone || r.Fork || r.CompileFromSource || r.Show || r.ShowAssets > -1 || r.ShowVersions > -1 || r.ShowDescription > -1 || r.ShowReadme > -1 {
+	if r.Clone || r.Fork || r.CompileFromSource || r.Show {
 		return false
 	}
 	// Update/Upgrade/Install need GitHub API
@@ -262,7 +262,8 @@ func validateGHCLI() error {
 		if strings.Contains(authErr, "not logged in") || strings.Contains(authErr, "no auth") {
 			return fmt.Errorf("GitHub CLI not authenticated\n  → Run: gh auth login\n  → Or set GH_TOKEN environment variable with 'repo' scope")
 		}
-		return fmt.Errorf("failed to check gh auth status: %v\n  → Run 'gh auth status' to diagnose", err)
+		log.Error("GitHub authentication failed", "error", authErr)
+		return fmt.Errorf("failed to check gh auth status: %s\n  → Run 'gh auth status' to diagnose", authErr)
 	}
 
 	authStr := strings.TrimSpace(string(authOut))
@@ -424,7 +425,7 @@ func (r *RootCLI) Validate() error {
 		return err
 	}
 
-	if r.Clone || r.Fork || r.CompileFromSource || r.Show || r.ShowAssets > -1 || r.ShowVersions > -1 || r.ShowDescription > -1 || r.ShowReadme > -1 {
+	if r.Clone || r.Fork || r.CompileFromSource || r.Show {
 		return nil
 	}
 
@@ -608,7 +609,7 @@ func (r *RootCLI) RunInstall() error {
 		} else if os.Getenv("VIRUSTOTAL_API_KEY") != "" {
 			r.VTApiKey = os.Getenv("VIRUSTOTAL_API_KEY")
 		} else if cfg != nil && cfg.Core.VTApiKey != "" {
-			r.VTApiKey = cfg.Core.VTApiKey
+			r.VTApiKey = strings.TrimSpace(cfg.Core.VTApiKey)
 		}
 	}
 	if r.VTApiKey != "" && !r.Barbarous {
@@ -708,16 +709,16 @@ func (r *RootCLI) RunInstall() error {
 	}
 
 	// Validate gh CLI is installed and authenticated (for commands needing GitHub API)
+	var ghClient *api.RESTClient
+	var err error
 	if needsGitHubAPI(r) {
-		if err := validateGHCLI(); err != nil {
+		if err = validateGHCLI(); err != nil {
 			return err
 		}
-	}
-
-	// Create GitHub client with timeout and proper error handling
-	ghClient, err := newGitHubRESTClient()
-	if err != nil {
-		return formatGitHubError(err, r.Repository)
+		ghClient, err = newGitHubRESTClient()
+		if err != nil {
+			return formatGitHubError(err, r.Repository)
+		}
 	}
 
 	if r.Ls != "" || r.Ll != "" {
@@ -824,6 +825,10 @@ func (r *RootCLI) RunInstall() error {
 		"target path", r.TargetPath,
 		"renaming binaries", r.Rename,
 	)
+
+	if ghClient == nil {
+		return fmt.Errorf("GitHub client is not initialized")
+	}
 
 	response := struct{ Name string }{}
 	err = ghClient.Get(fmt.Sprintf("repos/%s", r.Repository), &response)
@@ -1102,7 +1107,9 @@ func buildCompilePrompt(repo, buildDir, scriptPath, targetPath, symlinkDir strin
 		basePrompt = fmt.Sprintf("Please inspect the repository '%s' (cloned at '%s') and create an automated compilation/build workflow. Follow all build instructions for '%s', compile the application/binaries, install or copy them to '%s', and purge any temporary build artifacts.", repo, buildDir, repo, targetPath)
 	}
 
-	instruction := `\n\nWORKFLOW — USE ONLY ghpt helper COMMANDS (do NOT output any code or JSON):
+	instruction := `
+
+WORKFLOW — USE ONLY ghpt helper COMMANDS (or output the manifest and compilation script using the code blocks below):
 
 1. INSPECT: Run 'ghpt helper --get-system-info' to understand the build environment
 2. MANIFEST: Use 'ghpt helper --append-manifest "manager=pkg@version"' to declare build dependencies
@@ -1116,11 +1123,26 @@ func buildCompilePrompt(repo, buildDir, scriptPath, targetPath, symlinkDir strin
    - Validate with 'ghpt helper --validate-compile-script' (MUST pass before execution)
 4. EXECUTE: Run 'ghpt helper --run-compile-script' (only works if validation passes)
 
+OUTPUT FORMAT:
+You MUST output the dependency manifest and the compilation script in structured code blocks:
+
+` + "```ghpt-manifest" + `
+toolchain <primary build tool, e.g. gcc, cargo, go, make, cmake>
+dep <package-name> <resolver: apt|dnf|pacman|mise|uv|cargo|vcpkg>
+` + "```" + `
+
+` + "```bash" + `
+#!/bin/bash
+set -euo pipefail
+# build commands here
+# copy built binaries to destination using exclusively:
+ghpt helper --install "bin=./path/to/binary"
+` + "```" + `
+
 KEY RULES:
 - ghpt binary checks PROCESS TREE for 'gh-pt' ancestor — if found, ONLY 'ghpt helper' subcommands permitted
 - Dependencies are installed via CONTAINERIZATION before script runs (container image matches user's OS)
-- NEVER output JSON or code — use helper commands exclusively
-- body.sh must be created in .ghpt/ directory using template from --get-body-template
+- body.sh must be created in .ghpt/ directory using template from --get-body-template (or via the bash code block above)
 - INSIDE body.sh, use exclusively 'ghpt helper --install "SRC=DEST"' to copy files (not direct filesystem writes)
 - --run-compile-script ONLY executes if --validate-compile-script returns true
 - Source builds default to symlink mode; version = commit hash (latest-commit) or git tag (stable/prerelease)`
@@ -1136,7 +1158,9 @@ func buildCompileFixPrompt(repo, buildDir, scriptPath, targetPath, symlinkDir, e
 		basePrompt = fmt.Sprintf("The automated compilation workflow at '%s' for repository '%s' (cloned at '%s') failed to run with the following error output (attempt %d of 2):\n\n%s\n\nPlease fix the workflow so that it successfully compiles and installs the binaries into '%s'.", scriptPath, repo, buildDir, attempt, errorOutput, targetPath)
 	}
 
-	instruction := `\n\nWORKFLOW — USE ONLY ghpt helper COMMANDS (do NOT output any code or JSON):
+	instruction := `
+
+WORKFLOW — USE ONLY ghpt helper COMMANDS (or output the fixed compilation script using the code block below):
 
 1. REVIEW: Check current manifest with 'ghpt helper --get-manifest'
 2. FIX MANIFEST: Use 'ghpt helper --append-manifest' or '--remove-from-manifest' as needed
@@ -1147,11 +1171,20 @@ func buildCompileFixPrompt(repo, buildDir, scriptPath, targetPath, symlinkDir, e
 4. VALIDATE: Run 'ghpt helper --validate-compile-script' (MUST pass before execution)
 5. EXECUTE: Run 'ghpt helper --run-compile-script' (only works if validation passes)
 
+OUTPUT FORMAT:
+Output the corrected script in a bash code block:
+
+` + "```bash" + `
+#!/bin/bash
+set -euo pipefail
+# fixed build commands
+ghpt helper --install "bin=./path/to/binary"
+` + "```" + `
+
 KEY RULES:
 - ghpt binary checks PROCESS TREE for 'gh-pt' ancestor — if found, ONLY 'ghpt helper' subcommands permitted
 - Dependencies are installed via CONTAINERIZATION before script runs (container image matches user's OS)
-- NEVER output JSON or code — use helper commands exclusively
-- body.sh must be created in .ghpt/ directory using template from --get-body-template
+- body.sh must be created in .ghpt/ directory using template from --get-body-template (or via the bash code block above)
 - INSIDE body.sh, use exclusively 'ghpt helper --install "SRC=DEST"' to copy files (not direct filesystem writes)
 - --run-compile-script ONLY executes if --validate-compile-script returns true
 - Source builds default to symlink mode; version = commit hash (latest-commit) or git tag (stable/prerelease)`
@@ -1207,6 +1240,8 @@ func (r *RootCLI) runAIAgentInContainer(aiCmdTemplate, prompt, repoDir string) (
 	// For now, use the same base image but with network enabled
 	aiImage := compile.DetectContainerImage()
 
+	homeDir, _ := os.UserHomeDir()
+
 	// Build container command with network access for AI
 	containerArgs := []string{
 		"run", "--rm",
@@ -1217,7 +1252,22 @@ func (r *RootCLI) runAIAgentInContainer(aiCmdTemplate, prompt, repoDir string) (
 		"-w", "/build",
 		// Set environment variables
 		"-e", "GH_PT_PROMPT=" + prompt,
-		"-e", "HOME=/tmp",
+	}
+
+	if homeDir != "" && runtime.GOOS != "windows" {
+		containerArgs = append(containerArgs,
+			"-v", fmt.Sprintf("%s:%s:ro", homeDir, homeDir),
+			"-e", fmt.Sprintf("HOME=%s", homeDir),
+			"-e", fmt.Sprintf("PATH=%s/bin:%s/.local/bin:%s", homeDir, homeDir, os.Getenv("PATH")),
+		)
+	} else {
+		containerArgs = append(containerArgs, "-e", "HOME=/tmp")
+	}
+
+	for _, key := range []string{"GEMINI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GH_TOKEN", "GITHUB_TOKEN"} {
+		if v := os.Getenv(key); v != "" {
+			containerArgs = append(containerArgs, "-e", fmt.Sprintf("%s=%s", key, v))
+		}
 	}
 
 	// Add the AI command
@@ -1843,7 +1893,11 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 			log.Info(fmt.Sprintf("Generating AI compilation body.sh using container: %s", aiCmdTemplate))
 			resp, err := r.runAIAgentInContainer(aiCmdTemplate, prompt, repoDir)
 			if err != nil {
-				return fmt.Errorf("AI agent failed to generate body.sh: %w", err)
+				log.Warn("AI container execution failed, falling back to host execution", "error", err)
+				resp, err = runAIAgentWithOutput(aiCmdTemplate, prompt, repoDir)
+				if err != nil {
+					return fmt.Errorf("AI agent failed to generate body.sh: %w", err)
+				}
 			}
 			aiResp = resp
 		} else {
@@ -1918,6 +1972,9 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 			return fmt.Errorf("failed to write compilation script '%s': %w", scriptPath, err)
 		}
 		_ = os.Chmod(scriptPath, 0755)
+		compileInRepo := filepath.Join(ghptDir, "compile.sh")
+		_ = os.Remove(compileInRepo)
+		_ = os.WriteFile(compileInRepo, []byte(compileScript), 0755)
 	}
 
 	// 4. Resolve dependencies and watch install-dir
@@ -1964,11 +2021,15 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 	}
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
-		log.Info("executing compile script in hardened container (stage 2)", "attempt", attempt+1)
+		if useContainer {
+			log.Info("executing compile script in hardened container (stage 2)", "attempt", attempt+1)
+		} else {
+			log.Info("executing compile script directly on host (stage 2)", "attempt", attempt+1)
+		}
 
 		// Use the compile package's hardened container execution with three-part reconstruction
 		// The container will reconstruct compile.sh from header.sh + body.sh + footer.sh at runtime
-		reconstructCmd := "bash -c 'cat /build/.ghpt/header.sh /build/.ghpt/body.sh /build/.ghpt/footer.sh > /build/.ghpt/compile.sh && bash /build/.ghpt/compile.sh'"
+		reconstructCmd := "bash -c 'cat /build/.ghpt/header.sh /build/.ghpt/body.sh /build/.ghpt/footer.sh > /tmp/compile.sh && bash /tmp/compile.sh'"
 
 		compileCfg := &compile.Config{
 			Repository:       r.Repository,
@@ -1989,8 +2050,16 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 			SidecarMode:      r.SidecarMode,
 		}
 
-		// Execute in hardened container (network=none, cap-drop=ALL, read-only, seccomp, non-root user)
-		err := compile.ExecuteInContainer(compileCfg)
+		var err error
+		if useContainer {
+			err = compile.ExecuteInContainer(compileCfg)
+		} else {
+			cmd := exec.Command("bash", scriptPath)
+			cmd.Dir = repoDir
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			err = cmd.Run()
+		}
 		if err == nil {
 			lastErr = nil
 			break
@@ -2008,6 +2077,10 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 			var fixErr error
 			if useAIContainer {
 				fixResp, fixErr = r.runAIAgentInContainer(aiCmdTemplate, fixPrompt, repoDir)
+				if fixErr != nil {
+					log.Warn("AI container repair failed, falling back to host execution", "error", fixErr)
+					fixResp, fixErr = runAIAgentWithOutput(aiCmdTemplate, fixPrompt, repoDir)
+				}
 			} else {
 				log.Warn("*** [SECURITY: AI_SANDBOX_BYPASS] Executing AI repair directly on host without container isolation (--no-ai-container specified). Host compromise risk! ***")
 				fixResp, fixErr = runAIAgentWithOutput(aiCmdTemplate, fixPrompt, repoDir)
@@ -2015,7 +2088,7 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 			if fixErr != nil {
 				log.Warn("AI repair command execution failed", "error", fixErr)
 			}
-			fixPayload, pErr := ai.ParseAIOutput(fixResp)
+			fixPayload, pErr := ai.ParseScriptFix(fixResp)
 			if pErr != nil {
 				log.Warn("failed to parse AI fix response", "error", pErr)
 			}
@@ -2040,6 +2113,9 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 					headerContent = strings.ReplaceAll(headerContent, "{{.Version}}", "source-build")
 					compileScript := headerContent + newBodyContent + ai.FooterTemplate
 					_ = os.WriteFile(scriptPath, []byte(compileScript), 0755)
+					compileInRepo := filepath.Join(ghptDir, "compile.sh")
+					_ = os.Remove(compileInRepo)
+					_ = os.WriteFile(compileInRepo, []byte(compileScript), 0755)
 				}
 			}
 		}

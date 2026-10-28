@@ -34,15 +34,32 @@ func DetectContainerImage() string {
 	hostOS, _ := DetectHostOS()
 	switch hostOS {
 	case "linux":
-		return "ubuntu:22.04"
+		if data, err := os.ReadFile("/etc/os-release"); err == nil {
+			content := string(data)
+			var distro, versionID string
+			for _, line := range strings.Split(content, "\n") {
+				if strings.HasPrefix(line, "ID=") {
+					distro = strings.ToLower(strings.Trim(strings.TrimPrefix(line, "ID="), "\""))
+				} else if strings.HasPrefix(line, "VERSION_ID=") {
+					versionID = strings.Trim(strings.TrimPrefix(line, "VERSION_ID="), "\"")
+				}
+			}
+			if distro != "" && versionID != "" {
+				return fmt.Sprintf("%s:%s", distro, versionID)
+			}
+			if distro != "" {
+				return fmt.Sprintf("%s:latest", distro)
+			}
+		}
+		return "ubuntu:26.04"
 	case "darwin":
 		// macOS builds need a Linux container with cross-compilation tools
-		return "ubuntu:22.04"
+		return "ubuntu:26.04"
 	case "windows":
 		// Windows builds need a Windows container or cross-compilation setup
 		return "mcr.microsoft.com/windows/servercore:ltsc2022"
 	default:
-		return "ubuntu:22.04"
+		return "ubuntu:26.04"
 	}
 }
 
@@ -92,16 +109,75 @@ func RunContainer(cfg *Config, containerCfg *ContainerConfig) error {
 		return err
 	}
 
-	// Prepare environment variables
-	var envArgs []string
-	for k, v := range containerCfg.EnvVars {
-		envArgs = append(envArgs, "-e", fmt.Sprintf("%s=%s", k, v))
+	// Prepare volume mounts (read-write for repo and install destination)
+	volumeArgs := []string{
+		"-v", fmt.Sprintf("%s:/build:rw", containerCfg.RepoDir),
+		"-v", fmt.Sprintf("%s:%s:rw", containerCfg.RepoDir, containerCfg.RepoDir),
+		"-v", fmt.Sprintf("%s:/install:rw", containerCfg.InstallDir),
+		"-v", fmt.Sprintf("%s:%s:rw", containerCfg.InstallDir, containerCfg.InstallDir),
 	}
 
-	// Prepare volume mounts (read-only for source, read-write for install)
-	volumeArgs := []string{
-		"-v", fmt.Sprintf("%s:/build:ro", containerCfg.RepoDir),
-		"-v", fmt.Sprintf("%s:/install:rw", containerCfg.InstallDir),
+	// Mount ghpt helper binary so helper subcommands execute within container
+	if ghptPath, err := exec.LookPath("ghpt"); err == nil {
+		volumeArgs = append(volumeArgs, "-v", fmt.Sprintf("%s:/usr/local/bin/ghpt:ro", ghptPath))
+	} else if ghptPath, err := exec.LookPath("gh-pt"); err == nil {
+		volumeArgs = append(volumeArgs, "-v", fmt.Sprintf("%s:/usr/local/bin/ghpt:ro", ghptPath))
+	}
+
+	// Mount /usr read-only to make system toolchains and libraries available
+	if _, err := os.Stat("/usr"); err == nil {
+		volumeArgs = append(volumeArgs, "-v", "/usr:/usr:ro")
+	}
+
+	// Prepare environment variables
+	envMap := map[string]string{
+		"GHPT_TARGET_BASE_DIR": containerCfg.InstallDir,
+		"GHPT_TARGET_BIN_DIR":  filepath.Join(containerCfg.InstallDir, "bin"),
+		"GHPT_TARGET_LIB_DIR":  filepath.Join(containerCfg.InstallDir, "lib"),
+		"HOME":                 "/tmp",
+		"PATH":                 "/usr/local/bin:/usr/bin:/bin",
+		"GOCACHE":              "/tmp/go-cache",
+		"GOPATH":               "/tmp/go",
+	}
+
+	// Mount host GOROOT and toolchain paths if available
+	if out, err := exec.Command("go", "env", "GOROOT").Output(); err == nil {
+		hostGoroot := strings.TrimSpace(string(out))
+		if hostGoroot != "" {
+			envMap["GOROOT"] = hostGoroot
+			if _, err := os.Stat(hostGoroot); err == nil {
+				volumeArgs = append(volumeArgs, "-v", fmt.Sprintf("%s:%s:ro", hostGoroot, hostGoroot))
+			}
+		}
+	} else if goroot := os.Getenv("GOROOT"); goroot != "" {
+		envMap["GOROOT"] = goroot
+	} else if _, err := os.Stat("/usr/lib/go-1.26"); err == nil {
+		envMap["GOROOT"] = "/usr/lib/go-1.26"
+	}
+
+	containerPath := "/usr/local/bin:/usr/bin:/bin"
+	if homeDir, err := os.UserHomeDir(); err == nil && homeDir != "" {
+		miseDir := filepath.Join(homeDir, ".local", "share", "mise")
+		if _, err := os.Stat(miseDir); err == nil {
+			volumeArgs = append(volumeArgs, "-v", fmt.Sprintf("%s:%s:ro", miseDir, miseDir))
+			miseShims := filepath.Join(miseDir, "shims")
+			if _, err := os.Stat(miseShims); err == nil {
+				containerPath = fmt.Sprintf("%s:%s", miseShims, containerPath)
+			}
+		}
+		if goPath, err := exec.LookPath("go"); err == nil {
+			containerPath = fmt.Sprintf("%s:%s", filepath.Dir(goPath), containerPath)
+		}
+	}
+	envMap["PATH"] = containerPath
+
+	for k, v := range containerCfg.EnvVars {
+		envMap[k] = v
+	}
+
+	var envArgs []string
+	for k, v := range envMap {
+		envArgs = append(envArgs, "-e", fmt.Sprintf("%s=%s", k, v))
 	}
 
 	// Prepare the command to run inside the container
@@ -121,7 +197,7 @@ func RunContainer(cfg *Config, containerCfg *ContainerConfig) error {
 		// Read-only root filesystem
 		"--read-only",
 		// Tmpfs for temporary storage (needed by build tools)
-		"--tmpfs=/tmp:size=100M,mode=1777",
+		"--tmpfs=/tmp:size=2G,mode=1777",
 		// Non-root user
 		"--user=1000:1000",
 	}
@@ -134,7 +210,11 @@ func RunContainer(cfg *Config, containerCfg *ContainerConfig) error {
 	cmdArgs = append(cmdArgs, "-w", "/build")
 
 	// Add image and command
-	cmdArgs = append(cmdArgs, containerCfg.Image, "bash", scriptPath)
+	if cfg != nil && cfg.CompileScript != "" {
+		cmdArgs = append(cmdArgs, containerCfg.Image, "bash", "-c", cfg.CompileScript)
+	} else {
+		cmdArgs = append(cmdArgs, containerCfg.Image, "bash", scriptPath)
+	}
 
 	log.Info("executing compile script in hardened container",
 		"runtime", runtimeName,

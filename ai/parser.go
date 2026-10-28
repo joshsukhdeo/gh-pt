@@ -144,8 +144,13 @@ set -euo pipefail
 # Minimal environment - delegate to ghpt helper, don't rely on env vars
 export GHPT_TARGET_BASE_DIR="{{.InstallPrefix}}"
 export GHPT_REPO_PATH="{{.RepoPath}}"
-export GHPT_LOG_FILE="{{.RepoPath}}/.ghpt/compile.log"
-export GHPT_INSTALL_LOG="{{.RepoPath}}/.ghpt/install.log"
+if [ -w "{{.RepoPath}}/.ghpt" ]; then
+    export GHPT_LOG_FILE="{{.RepoPath}}/.ghpt/compile.log"
+    export GHPT_INSTALL_LOG="{{.RepoPath}}/.ghpt/install.log"
+else
+    export GHPT_LOG_FILE="/tmp/compile.log"
+    export GHPT_INSTALL_LOG="/tmp/install.log"
+fi
 
 # Ensure target directories exist via ghpt helper
 ghpt helper --install "bin=.ghpt/.keep" 2>/dev/null || true
@@ -349,6 +354,22 @@ func ParseAIOutput(raw string) (*CompilePayload, error) {
 		Script:       script,
 		ManifestJSON: manifestJSON,
 	}, nil
+}
+
+// ParseScriptFix extracts the script from a fix response, even if manifest is omitted.
+func ParseScriptFix(raw string) (*CompilePayload, error) {
+	payload, err := ParseAIOutput(raw)
+	if err == nil {
+		return payload, nil
+	}
+	bashMatch := bashBlockRegex.FindStringSubmatch(raw)
+	if len(bashMatch) >= 2 {
+		script := strings.TrimSpace(bashMatch[1])
+		if script != "" {
+			return &CompilePayload{Script: script}, nil
+		}
+	}
+	return nil, err
 }
 
 // ValidateBodyScript validates the body.sh script using AST-based parsing.
