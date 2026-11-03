@@ -190,6 +190,7 @@ func (c *AssetClassifier) SubcategoryOrder() []ArchSubcategory {
 	if c.HostOS == "windows" || c.WineMode == "off" || c.WineMode == "disallow" {
 		return []ArchSubcategory{
 			SubcatNative,
+			SubcatUniversal,
 			SubcatEmulated,
 			SubcatForeign,
 			SubcatSidecar,
@@ -202,6 +203,7 @@ func (c *AssetClassifier) SubcategoryOrder() []ArchSubcategory {
 	}
 	return []ArchSubcategory{
 		SubcatNative,
+		SubcatUniversal,
 		SubcatEmulated,
 		SubcatWine,
 		SubcatForeign,
@@ -219,6 +221,8 @@ func (c *AssetClassifier) SubcategoryTitle(subcat ArchSubcategory) string {
 	switch subcat {
 	case SubcatNative:
 		return "native [NAT]"
+	case SubcatUniversal:
+		return "universal [UNI]"
 	case SubcatEmulated:
 		return "emulated [EMU]"
 	case SubcatWine:
@@ -629,6 +633,14 @@ func (c *AssetClassifier) DetectSubcategory(name string) ArchSubcategory {
 			return SubcatForeign
 		}
 		if strings.Contains(lower, "riscv") || strings.Contains(lower, "s390x") || strings.Contains(lower, "ppc64") {
+			return SubcatForeign
+		}
+
+		// Check for universal Linux packages (AppImage, Flatpak, Snap) on arm64
+		if c.HostOS == "linux" && (strings.HasSuffix(lower, ".appimage") || strings.HasSuffix(lower, ".flatpak") || strings.HasSuffix(lower, ".snap")) {
+			if strings.Contains(lower, "arm64") || strings.Contains(lower, "aarch64") {
+				return SubcatUniversal
+			}
 			return SubcatForeign
 		}
 
@@ -1069,7 +1081,7 @@ func (c *AssetClassifier) PickDefaultAssetsWithContext(repo string, assets []str
 	var candidates []string
 	for _, a := range assets {
 		subcat := c.DetectSubcategory(a)
-		if subcat == SubcatNative {
+		if subcat == SubcatNative || subcat == SubcatUniversal {
 			candidates = append(candidates, a)
 		}
 	}
@@ -1361,7 +1373,7 @@ func (c *AssetClassifier) PickPrimaryDefaultAssetWithContext(repo string, assets
 	var candidates []string
 	for _, a := range assets {
 		subcat := c.DetectSubcategory(a)
-		if subcat == SubcatNative {
+		if subcat == SubcatNative || subcat == SubcatUniversal {
 			candidates = append(candidates, a)
 		}
 	}
