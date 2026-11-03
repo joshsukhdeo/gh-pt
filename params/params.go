@@ -52,7 +52,7 @@ type CLI struct {
 	Install     InstallCmd     `cmd:"" default:"withargs" help:"Install a GitHub release or clone a repository (default)."`
 	Ls          StateLsCmd     `cmd:"" aliases:"list" help:"List saved state (short format)."`
 	Ll          StateLlCmd     `cmd:"" help:"List saved state (long format)."`
-	Rm          StateRmCmd     `cmd:"" help:"Uninstall an application and remove it from state."`
+	Rm          StateRmCmd     `cmd:"" aliases:"uninstall" help:"Uninstall an application and remove it from state."`
 	Upgrade     UpgradeCmd     `cmd:"" help:"Update installations."`
 	State       StateCmd       `cmd:"" help:"Manage saved state and installations."`
 	Config      ConfigCmd      `cmd:"" help:"Manage configuration."`
@@ -298,7 +298,7 @@ type StateCmd struct {
 	Cat      StateCatCmd      `cmd:"" help:"Dump raw state file to stdout."`
 	View     StateViewCmd     `cmd:"" help:"Show state file path."`
 	Add      StateAddCmd      `cmd:"" help:"Add state entry for a repository."`
-	Rm       StateRmCmd       `cmd:"" help:"Remove state entry."`
+	Rm       StateRmCmd       `cmd:"" aliases:"uninstall" help:"Remove state entry."`
 	Update   StateUpdateCmd   `cmd:"" help:"Update state entry fields."`
 	Edit     StateEditCmd     `cmd:"" help:"Edit saved state interactively."`
 	History  StateHistoryCmd  `cmd:"" help:"Show update history for the last 30 days."`

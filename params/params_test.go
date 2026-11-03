@@ -71,6 +71,23 @@ func TestCLIFlags_Gearlever(t *testing.T) {
 	assert.True(t, cli.Install.Gearlever)
 }
 
+func TestCLIFlags_UninstallAlias(t *testing.T) {
+	var cli CLI
+	parser, err := kong.New(&cli, kong.Vars{
+		"install_types": "deb,rpm",
+		"install_path":  "/test/path",
+		"clone_path":    "~/src",
+		"fork_path":     "~/src/forks",
+		"extractor":     "default",
+	})
+	require.NoError(t, err)
+
+	ctx, err := parser.Parse([]string{"uninstall", "Sidenai/sidex"})
+	require.NoError(t, err)
+	assert.Equal(t, "rm <target>", ctx.Command())
+	assert.Equal(t, "Sidenai/sidex", cli.Rm.Target)
+}
+
 func TestCLIDefaults(t *testing.T) {
 	var cli CLI
 	parser, err := kong.New(&cli, kong.Vars{

@@ -26,6 +26,9 @@ func TestHelperProcess(t *testing.T) {
 	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
 		return
 	}
+	if out := os.Getenv("MOCK_HELPER_OUTPUT"); out != "" {
+		_, _ = os.Stdout.WriteString(out)
+	}
 	os.Exit(0)
 }
 
@@ -411,4 +414,46 @@ func TestRemoveApp_CleansUpDriverManifests(t *testing.T) {
 	// Manifest and package dir should be cleanly unlinked
 	assert.NoFileExists(t, manifestFile)
 	assert.NoDirExists(t, pkgDir)
+}
+
+func TestRemoveApp_Gearlever(t *testing.T) {
+	setupState(t)
+
+	origExecCommand := execCommand
+	origExecLookPath := execLookPath
+	defer func() {
+		execCommand = origExecCommand
+		execLookPath = origExecLookPath
+	}()
+
+	execLookPath = func(file string) (string, error) {
+		if file == "gearlever" {
+			return "/usr/bin/gearlever", nil
+		}
+		return "", os.ErrNotExist
+	}
+
+	mockJSON := `{"schema_version": 1, "installed": [{"name": "SideX", "path": "/home/user/AppImages/sidex.appimage", "desktop_id": "sidex.desktop"}]}`
+	var removedArgs []string
+
+	execCommand = func(name string, args ...string) *exec.Cmd {
+		if len(args) > 0 && args[0] == "--list-installed" {
+			cs := []string{"-test.run=TestHelperProcess", "--", name}
+			cmd := exec.Command(os.Args[0], cs...)
+			cmd.Env = []string{"GO_WANT_HELPER_PROCESS=1", "MOCK_HELPER_OUTPUT=" + mockJSON}
+			return cmd
+		}
+		if len(args) > 0 && args[0] == "--remove" {
+			removedArgs = args
+			cs := []string{"-test.run=TestHelperProcess", "--", name}
+			cmd := exec.Command(os.Args[0], cs...)
+			cmd.Env = []string{"GO_WANT_HELPER_PROCESS=1"}
+			return cmd
+		}
+		return helperCommand(name, args...)
+	}
+
+	err := RemoveApp("sidex", false, false)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"--remove", "/home/user/AppImages/sidex.appimage", "-y", "--delete"}, removedArgs)
 }

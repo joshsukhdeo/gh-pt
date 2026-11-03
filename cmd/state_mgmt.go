@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -294,6 +295,83 @@ func RmStateOnly(target string) error {
 	}
 	return st.Save()
 }
+
+type gearleverAppList struct {
+	Installed []struct {
+		Name      string `json:"name"`
+		Path      string `json:"path"`
+		DesktopID string `json:"desktop_id"`
+	} `json:"installed"`
+}
+
+func removeGearleverApp(target string) (bool, error) {
+	var cmdName string
+	var baseArgs []string
+
+	if _, err := execLookPath("gearlever"); err == nil {
+		cmdName = "gearlever"
+		baseArgs = []string{"--list-installed", "--json"}
+	} else if _, err := execLookPath("flatpak"); err == nil {
+		cmdName = "flatpak"
+		baseArgs = []string{"run", "it.mijorus.gearlever", "--list-installed", "--json"}
+	} else {
+		return false, nil
+	}
+
+	out, err := execCommand(cmdName, baseArgs...).Output()
+	if err != nil {
+		return false, err
+	}
+
+	var list gearleverAppList
+	if err := json.Unmarshal(out, &list); err != nil {
+		return false, nil
+	}
+
+	cleanTarget := strings.ToLower(target)
+	if parts := strings.Split(cleanTarget, "/"); len(parts) == 2 {
+		cleanTarget = parts[1]
+	}
+	cleanTarget = strings.TrimSuffix(cleanTarget, ".appimage")
+
+	var matchedPath string
+	var matchedName string
+	for _, app := range list.Installed {
+		nameLower := strings.ToLower(app.Name)
+		desktopLower := strings.ToLower(strings.TrimSuffix(app.DesktopID, ".desktop"))
+		pathLower := strings.ToLower(app.Path)
+
+		if nameLower == cleanTarget || desktopLower == cleanTarget || strings.Contains(pathLower, cleanTarget) {
+			matchedPath = app.Path
+			matchedName = app.Name
+			break
+		}
+	}
+
+	if matchedPath == "" {
+		return false, nil
+	}
+
+	log.Infof("Uninstalling %s via GearLever (%s)...", matchedName, matchedPath)
+	var rmArgs []string
+	if cmdName == "gearlever" {
+		rmArgs = []string{"--remove", matchedPath, "-y", "--delete"}
+	} else {
+		rmArgs = []string{"run", "it.mijorus.gearlever", "--remove", matchedPath, "-y", "--delete"}
+	}
+
+	rmCmd := execCommand(cmdName, rmArgs...)
+	rmCmd.Stdout = os.Stdout
+	rmCmd.Stderr = os.Stderr
+	rmCmd.Stdin = os.Stdin
+	if err := rmCmd.Run(); err != nil {
+		return false, fmt.Errorf("gearlever remove failed: %w", err)
+	}
+
+	fmt.Printf("\nSuccessfully uninstalled %s via GearLever!\n", matchedName)
+	return true, nil
+}
+
 func RemoveApp(target string, purge bool, unsafeSkipDirFlagCheck bool) error {
 	st, err := state.LoadState()
 	if err != nil {
@@ -302,11 +380,15 @@ func RemoveApp(target string, purge bool, unsafeSkipDirFlagCheck bool) error {
 
 	toRemove := findTargetApps(st, target)
 	if len(toRemove) == 0 {
+		if removed, err := removeGearleverApp(target); err == nil && removed {
+			return nil
+		}
 		log.Warnf("No application found matching '%s'", target)
 		return nil
 	}
 
 	for _, r := range toRemove {
+		_, _ = removeGearleverApp(r)
 		app := st.Apps[r]
 		if app == nil {
 			delete(st.Apps, r)

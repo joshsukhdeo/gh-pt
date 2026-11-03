@@ -76,7 +76,7 @@ func RunCommand(cmdStr string, cli *params.CLI) error {
 		flags := params.CommonInstallFlags{Global: cli.Ll.Global, NoColor: cli.Ll.NoColor, NoEmojis: cli.Ll.NoEmojis}
 		resolveDisplayPreferences(&flags, r)
 		return ListState(&RootCLI{ExecContext: params.ExecContext{Ll: cli.Ll.Filter, Full: true, ListFormat: cli.Ll.Format, DisableIcons: r.DisableIcons, CommonInstallFlags: flags}})
-	case "rm", "rm <target>":
+	case "rm", "rm <target>", "uninstall", "uninstall <target>":
 
 		if cli.Rm.StateOnly {
 			return RmStateOnly(cli.Rm.Target)
