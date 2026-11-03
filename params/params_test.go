@@ -55,6 +55,22 @@ func TestCLIFlags_CloneAndFork(t *testing.T) {
 	assert.Equal(t, "my-ai -p %s", cli3.Source.AICmd)
 }
 
+func TestCLIFlags_Gearlever(t *testing.T) {
+	var cli CLI
+	parser, err := kong.New(&cli, kong.Vars{
+		"install_types": "deb,rpm",
+		"install_path":  "/test/path",
+		"clone_path":    "~/src",
+		"fork_path":     "~/src/forks",
+		"extractor":     "default",
+	})
+	require.NoError(t, err)
+
+	_, err = parser.Parse([]string{"install", "Sidenai/sidex", "--gearlever"})
+	require.NoError(t, err)
+	assert.True(t, cli.Install.Gearlever)
+}
+
 func TestCLIDefaults(t *testing.T) {
 	var cli CLI
 	parser, err := kong.New(&cli, kong.Vars{

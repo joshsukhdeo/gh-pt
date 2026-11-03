@@ -1192,3 +1192,145 @@ func TestGithubRelease_Verbose_DisablesAnimation(t *testing.T) {
 	assert.True(t, isNullUI, "UI must be NullProgressBar when Verbose is true")
 	assert.Nil(t, ui.GlobalPacman, "GlobalPacman must be nil when Verbose is true")
 }
+
+func TestGithubRelease_InstallGearlever(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tempDir)
+	xdg.Reload()
+
+	appImagePath := filepath.Join(tempDir, "testapp.AppImage")
+	require.NoError(t, os.WriteFile(appImagePath, []byte("fake-appimage-content"), 0755))
+	plainBinPath := filepath.Join(tempDir, "testapp")
+	require.NoError(t, os.WriteFile(plainBinPath, []byte("fake-binary-content"), 0755))
+
+	origLookPath := lookPath
+	origExecCommand := execCommand
+	defer func() {
+		lookPath = origLookPath
+		execCommand = origExecCommand
+	}()
+
+	t.Run("fails when binary is not an AppImage", func(t *testing.T) {
+		cliParams := &params.ExecContext{
+			CommonInstallFlags: params.CommonInstallFlags{
+				ExecutionFlags: params.ExecutionFlags{
+					Gearlever: true,
+				},
+			},
+		}
+		gr := MakeGithubRelease(cliParams, &MockGithubClient{})
+		err := gr.installBinary(plainBinPath)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "--gearlever requires an AppImage asset")
+	})
+
+	t.Run("uses gearlever when available in PATH", func(t *testing.T) {
+		var invokedCmd string
+		var invokedArgs []string
+		lookPath = func(file string) (string, error) {
+			if file == "gearlever" {
+				return "/usr/bin/gearlever", nil
+			}
+			return "", os.ErrNotExist
+		}
+		execCommand = func(name string, args ...string) *exec.Cmd {
+			invokedCmd = name
+			invokedArgs = args
+			return helperCommand(name, args...)
+		}
+
+		cliParams := &params.ExecContext{
+			CommonInstallFlags: params.CommonInstallFlags{
+				ExecutionFlags: params.ExecutionFlags{
+					Gearlever:      true,
+					DisablePrompts: true,
+				},
+				TargetFlags: params.TargetFlags{
+					Overwrite: true,
+				},
+			},
+		}
+		gr := MakeGithubRelease(cliParams, &MockGithubClient{})
+		err := gr.installBinary(appImagePath)
+		require.NoError(t, err)
+		assert.Equal(t, "gearlever", invokedCmd)
+		assert.Equal(t, []string{"--integrate", appImagePath, "-y", "--replace"}, invokedArgs)
+		assert.True(t, gr.CliParams.NoSaveState)
+		assert.Contains(t, gr.InstalledBinaries, "testapp.AppImage")
+	})
+
+	t.Run("falls back to flatpak when gearlever CLI not in PATH", func(t *testing.T) {
+		var invokedCmd string
+		var invokedArgs []string
+		lookPath = func(file string) (string, error) {
+			if file == "gearlever" {
+				return "", os.ErrNotExist
+			}
+			if file == "flatpak" {
+				return "/usr/bin/flatpak", nil
+			}
+			return "", os.ErrNotExist
+		}
+		execCommand = func(name string, args ...string) *exec.Cmd {
+			invokedCmd = name
+			invokedArgs = args
+			return helperCommand(name, args...)
+		}
+
+		cliParams := &params.ExecContext{
+			CommonInstallFlags: params.CommonInstallFlags{
+				ExecutionFlags: params.ExecutionFlags{
+					Gearlever: true,
+				},
+			},
+		}
+		gr := MakeGithubRelease(cliParams, &MockGithubClient{})
+		err := gr.installBinary(appImagePath)
+		require.NoError(t, err)
+		assert.Equal(t, "flatpak", invokedCmd)
+		assert.Equal(t, []string{"run", "it.mijorus.gearlever", "--integrate", appImagePath}, invokedArgs)
+	})
+
+	t.Run("returns error when neither gearlever nor flatpak exists", func(t *testing.T) {
+		lookPath = func(file string) (string, error) {
+			return "", os.ErrNotExist
+		}
+
+		cliParams := &params.ExecContext{
+			CommonInstallFlags: params.CommonInstallFlags{
+				ExecutionFlags: params.ExecutionFlags{
+					Gearlever: true,
+				},
+			},
+		}
+		gr := MakeGithubRelease(cliParams, &MockGithubClient{})
+		err := gr.installBinary(appImagePath)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "gearlever not found")
+	})
+
+	t.Run("dry-run logs without executing command", func(t *testing.T) {
+		cmdExecuted := false
+		lookPath = func(file string) (string, error) {
+			return "/usr/bin/gearlever", nil
+		}
+		execCommand = func(name string, args ...string) *exec.Cmd {
+			cmdExecuted = true
+			return helperCommand(name, args...)
+		}
+
+		cliParams := &params.ExecContext{
+			CommonInstallFlags: params.CommonInstallFlags{
+				ExecutionFlags: params.ExecutionFlags{
+					Gearlever: true,
+					DryRun:    true,
+				},
+			},
+		}
+		gr := MakeGithubRelease(cliParams, &MockGithubClient{})
+		err := gr.installBinary(appImagePath)
+		require.NoError(t, err)
+		assert.False(t, cmdExecuted, "execCommand should not be called during dry-run")
+		assert.Contains(t, gr.InstalledBinaries, "testapp.AppImage")
+	})
+}

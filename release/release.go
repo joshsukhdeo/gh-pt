@@ -91,7 +91,12 @@ var (
 	ghExec           = gh.Exec
 	getNativeManager = resolver.GetNativeManager
 	osChmod          = os.Chmod
+	lookPath         = exec.LookPath
 )
+
+func isAppImage(path string) bool {
+	return strings.HasSuffix(strings.ToLower(path), ".appimage")
+}
 
 type GithubRelease struct {
 	CliParams                *params.ExecContext
@@ -702,6 +707,13 @@ func (r *GithubRelease) installArchivedBinary(fileSystem fs.FS, binaryPath strin
 		log.Warn("dependency resolution encountered an error", "error", err)
 	}
 
+	if r.CliParams != nil && r.CliParams.Gearlever {
+		if !isAppImage(extractedBinaryPath) {
+			return fmt.Errorf("--gearlever requires an AppImage asset, but %s is not an AppImage", filepath.Base(binaryPath))
+		}
+		return r.installGearlever(extractedBinaryPath)
+	}
+
 	destinationPath := r.resolveDestinationPath(binaryPath)
 	r.InstalledBinaries = append(r.InstalledBinaries, filepath.Base(destinationPath))
 	r.InstalledFiles = append(r.InstalledFiles, destinationPath)
@@ -1029,6 +1041,12 @@ func (r *GithubRelease) resolveBinaryDependencies(binaryPath string, extractDir 
 
 func (r *GithubRelease) installBinary(binaryPath string) error {
 	r.ensurePreviousAppBackedUp()
+	if r.CliParams != nil && r.CliParams.Gearlever {
+		if !isAppImage(binaryPath) {
+			return fmt.Errorf("--gearlever requires an AppImage asset, but %s is not an AppImage", filepath.Base(binaryPath))
+		}
+		return r.installGearlever(binaryPath)
+	}
 	if r.CliParams.DryRun {
 		destinationPath := r.resolveDestinationPath(binaryPath)
 		r.InstalledBinaries = append(r.InstalledBinaries, filepath.Base(destinationPath))
@@ -1144,6 +1162,62 @@ func (r *GithubRelease) installBinary(binaryPath string) error {
 	}
 	_ = SetupBinaryCompletions(destinationPath, noComp)
 
+	return nil
+}
+
+func (r *GithubRelease) installGearlever(binaryPath string) error {
+	if r.CliParams != nil {
+		r.CliParams.NoSaveState = true
+	}
+
+	cmdName := "gearlever"
+	args := []string{"--integrate", binaryPath}
+
+	if _, err := lookPath("gearlever"); err != nil {
+		if _, err := lookPath("flatpak"); err == nil {
+			cmdName = "flatpak"
+			args = []string{"run", "it.mijorus.gearlever", "--integrate", binaryPath}
+		} else {
+			return fmt.Errorf("gearlever not found: please install gearlever or flatpak it.mijorus.gearlever")
+		}
+	}
+
+	if r.CliParams != nil {
+		if r.CliParams.DisablePrompts || r.CliParams.Overwrite {
+			args = append(args, "-y")
+		}
+		if r.CliParams.Overwrite {
+			args = append(args, "--replace")
+		}
+	}
+
+	if r.CliParams != nil && r.CliParams.DryRun {
+		r.InstalledBinaries = append(r.InstalledBinaries, filepath.Base(binaryPath))
+		r.InstalledFiles = append(r.InstalledFiles, binaryPath)
+		log.Infof("[dry-run] Would integrate AppImage via GearLever: %s %s", cmdName, strings.Join(args, " "))
+		return nil
+	}
+
+	if r.UI != nil {
+		r.UI.Stop()
+	}
+	ui.GlobalPacman = nil
+
+	if err := osChmod(binaryPath, 0755); err != nil {
+		log.Warnf("failed to chmod 0755 %s: %v", binaryPath, err)
+	}
+
+	log.Infof("Integrating AppImage via GearLever: %s %s", cmdName, strings.Join(args, " "))
+	cmd := execCommand(cmdName, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("gearlever integration failed: %w", err)
+	}
+
+	r.InstalledBinaries = append(r.InstalledBinaries, filepath.Base(binaryPath))
+	r.InstalledFiles = append(r.InstalledFiles, binaryPath)
 	return nil
 }
 
@@ -2589,6 +2663,10 @@ func (r *GithubRelease) Install() (installErr error) {
 			default:
 				log.Debug("binary is a plain executable")
 				binariesOutput[binary.Name] = "binary"
+				if r.CliParams != nil && r.CliParams.Gearlever {
+					binariesOutput[binary.Name] = "gearlever"
+					installCmd = fmt.Sprintf("gearlever --integrate %s", actualDownloadPath)
+				}
 				if binary.Compressed {
 					execErr = r.installArchivedBinary(binary.Fs, binary.FsPath)
 				} else {
@@ -3002,7 +3080,9 @@ func (r *GithubRelease) Install() (installErr error) {
 	if len(releases) > 0 {
 		newVer = releases[0].Name
 	}
-	_, _ = state.RecordUpdate(action, repo, prevVer, newVer, r.PreviousApp, r.BackedUpFiles, true, "")
+	if r.CliParams == nil || (!r.CliParams.NoSaveState && !r.CliParams.DryRun) {
+		_, _ = state.RecordUpdate(action, repo, prevVer, newVer, r.PreviousApp, r.BackedUpFiles, true, "")
+	}
 
 	return nil
 }

@@ -557,6 +557,19 @@ func (r *RootCLI) RunInstall() error {
 	if r.SelfInflictedDebt {
 		r.AllowDowngrade = true
 	}
+	if r.Gearlever {
+		r.NoSaveState = true
+		if r.ReleaseAssetRegexp == "" {
+			r.Type = []string{"appimage"}
+		}
+		if r.CliParams != nil {
+			r.CliParams.NoSaveState = true
+			r.CliParams.Gearlever = true
+			if r.CliParams.ReleaseAssetRegexp == "" {
+				r.CliParams.Type = []string{"appimage"}
+			}
+		}
+	}
 
 	if !r.Verbose {
 		log.SetLevel(log.WarnLevel)
@@ -854,7 +867,7 @@ func (r *RootCLI) RunInstall() error {
 		return err
 	}
 
-	if len(existingHooks) > 0 {
+	if !r.NoSaveState && len(existingHooks) > 0 {
 		if st, err := state.LoadState(); err == nil && st.Apps != nil {
 			if app, ok := st.Apps[r.Repository]; ok && app != nil {
 				if app.Hooks == nil {

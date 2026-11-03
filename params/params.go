@@ -240,6 +240,7 @@ type ExecutionFlags struct {
 	PinInstall           bool     `name:"pin-install" default:"false" help:"Pin this installation to the current version."`
 	DryRun               bool     `default:"false" help:"Show what would be downloaded."`
 	NoCompletionSetup    bool     `name:"no-completion-setup" help:"Do not automatically install shell autocompletion scripts for extracted binaries."`
+	Gearlever            bool     `name:"gearlever" env:"GH_PT_GEARLEVER" help:"Install AppImage via Gear Lever and do not manage the package."`
 	Extract              []string `optional:"" short:"b" help:"If release asset is an archive - names of binaries to extract and install (comma-separated or multiple flags)."`
 	ExtractRegex         string   `optional:"" short:"B" help:"If release asset is an archive - regular expression matching binaries in the archive to extract and install."`
 	IsUpgradeCmd         bool     `kong:"-"`

@@ -410,3 +410,27 @@ func TestCompileFromSource_DeploysDriversAndPersistsState(t *testing.T) {
 		assert.FileExists(t, m)
 	}
 }
+
+func TestRootCLI_RunInstall_Gearlever(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tempDir)
+	xdg.Reload()
+
+	r := &RootCLI{}
+	r.Gearlever = true
+	r.DryRun = true
+	r.Repository = "invalid-no-slash"
+	r.ensureCliParams()
+
+	// RunInstall will hit the early Gearlever setup block and then return invalid repo error
+	err := r.RunInstall()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid repository format")
+
+	// Verify that Gearlever set NoSaveState and Type to appimage
+	assert.True(t, r.NoSaveState)
+	assert.True(t, r.CliParams.NoSaveState)
+	assert.True(t, r.CliParams.Gearlever)
+	assert.Equal(t, []string{"appimage"}, r.Type)
+	assert.Equal(t, []string{"appimage"}, r.CliParams.Type)
+}
