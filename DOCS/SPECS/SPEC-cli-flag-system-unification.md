@@ -398,12 +398,12 @@ In `cmd/update.go:processSingleUpdate`:
 
 ## 9. Success Criteria
 
-1. **Clean Command Help Output**:
-   - `gh-pt install --help` displays zero compilation or container flags.
-   - `gh-pt source --help` displays zero release asset, checksum, VT, or extractor flags.
-   - `gh-pt upgrade --help` displays `--no-compile-container` and `--no-ai-container`.
-2. **Zero Regressions in Test Suite**:
-   - All tests in `params/`, `cmd/`, `release/`, `compile/`, `state/`, and `selector/` pass with zero failures.
-3. **Strict Invariant Adherence**:
-   - Zero state-lock bypasses.
-   - Complete isolation under temporary XDG test environments.
+- [x] **Clean Command Help Output**:
+  - `gh-pt install --help` displays zero compilation or container flags.
+  - `gh-pt source --help` displays zero release asset, checksum, VT, or extractor flags.
+  - `gh-pt upgrade --help` displays `--no-compile-container` and `--no-ai-container`.
+- [x] **Zero Regressions in Test Suite**:
+  - All tests in `params/`, `cmd/`, `release/`, `compile/`, `state/`, and `selector/` pass with zero failures (804/804 tests passing).
+- [x] **Strict Invariant Adherence**:
+  - Zero state-lock bypasses.
+  - Complete isolation under temporary XDG test environments.

@@ -48,10 +48,9 @@ func TestCLIFlags_CloneAndFork(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = parser3.Parse([]string{"source", "joshsukhdeo/gh-pt", "--ai", "--ai-cmd", "my-ai -p %s"})
+	_, err = parser3.Parse([]string{"source", "joshsukhdeo/gh-pt", "--ai-cmd", "my-ai -p %s"})
 	require.NoError(t, err)
 	assert.Equal(t, "joshsukhdeo/gh-pt", cli3.Source.Repository)
-	assert.True(t, cli3.Source.AI)
 	assert.Equal(t, "my-ai -p %s", cli3.Source.AICmd)
 }
 

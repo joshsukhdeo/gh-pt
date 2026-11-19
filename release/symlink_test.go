@@ -271,11 +271,15 @@ func TestSymlinkSidecars_AutoMode(t *testing.T) {
 		CliParams: &params.ExecContext{
 			Repository: "coolorg/cooltool",
 			CommonInstallFlags: params.CommonInstallFlags{
-				SidecarFlags: params.SidecarFlags{
-					IncludeSidecars: true,
-					SidecarMode:     "auto",
+				SharedInstallSourceFlags: params.SharedInstallSourceFlags{
+					DriverPluginFlags: params.DriverPluginFlags{
+						IncludeSidecars: true,
+						SidecarMode:     "auto",
+					},
+					TargetFlags: params.TargetFlags{
+						TargetPath: targetBin,
+					},
 				},
-				TargetPath: targetBin,
 			},
 		},
 	}
@@ -301,11 +305,15 @@ func TestSymlinkSidecars_AutoMode(t *testing.T) {
 		CliParams: &params.ExecContext{
 			Repository: "flatorg/flattool",
 			CommonInstallFlags: params.CommonInstallFlags{
-				SidecarFlags: params.SidecarFlags{
-					IncludeSidecars: true,
-					SidecarMode:     "auto",
+				SharedInstallSourceFlags: params.SharedInstallSourceFlags{
+					DriverPluginFlags: params.DriverPluginFlags{
+						IncludeSidecars: true,
+						SidecarMode:     "auto",
+					},
+					TargetFlags: params.TargetFlags{
+						TargetPath: targetBin,
+					},
 				},
-				TargetPath: targetBin,
 			},
 		},
 	}
@@ -317,4 +325,108 @@ func TestSymlinkSidecars_AutoMode(t *testing.T) {
 	expectedXDGH := filepath.Join(xdg.DataHome, "gh-pt", "sidecars", "flatorg/flattool", "tool.h")
 	assert.FileExists(t, expectedXDGJson)
 	assert.FileExists(t, expectedXDGH)
+}
+
+func TestResolvePackageDir_Exported(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	t.Setenv("XDG_DATA_HOME", filepath.Join(homeDir, ".local", "share"))
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(homeDir, ".config"))
+	xdg.Reload()
+
+	canonical := ResolvePackageDir("cli", "cli")
+	expected := filepath.Join(xdg.DataHome, "gh-pt", "packages", "cli", "cli")
+	assert.Equal(t, expected, canonical)
+
+	rel := &GithubRelease{}
+	assert.Equal(t, expected, rel.ResolvePackageDir("cli", "cli"))
+}
+
+func TestDeployBinariesFromStaging_Exported(t *testing.T) {
+	tmpDir := t.TempDir()
+	stagingDir := filepath.Join(tmpDir, "staging")
+	targetDir := filepath.Join(tmpDir, "bin")
+	serviceDir := filepath.Join(stagingDir, "service")
+
+	require.NoError(t, os.MkdirAll(serviceDir, 0755))
+	require.NoError(t, os.MkdirAll(targetDir, 0755))
+
+	// Executable binary
+	binPath := filepath.Join(stagingDir, "mytool")
+	require.NoError(t, os.WriteFile(binPath, []byte("#!/bin/sh\necho ok"), 0755))
+
+	// Non-executable doc
+	docPath := filepath.Join(stagingDir, "README.md")
+	require.NoError(t, os.WriteFile(docPath, []byte("docs"), 0644))
+
+	// Subdir executable
+	svcPath := filepath.Join(serviceDir, "daemon")
+	require.NoError(t, os.WriteFile(svcPath, []byte("#!/bin/sh\necho daemon"), 0755))
+
+	execCtx := &params.ExecContext{}
+	execCtx.TargetPath = targetDir
+	execCtx.Rename = map[string]string{
+		"mytool": "renamedtool",
+	}
+	execCtx.NoCompletionSetup = true
+
+	rel := MakeGithubRelease(execCtx, nil)
+	err := rel.DeployBinariesFromStaging(stagingDir, targetDir)
+	require.NoError(t, err)
+
+	assert.FileExists(t, filepath.Join(targetDir, "renamedtool"))
+	assert.FileExists(t, filepath.Join(targetDir, "daemon"))
+	assert.NoFileExists(t, filepath.Join(targetDir, "README.md"))
+	assert.Contains(t, rel.InstalledBinaries, "renamedtool")
+	assert.Contains(t, rel.InstalledBinaries, "daemon")
+}
+
+func TestDeploySidecarFile_Exported(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	targetBin := filepath.Join(homeDir, ".local", "bin")
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	t.Setenv("XDG_DATA_HOME", filepath.Join(homeDir, ".local", "share"))
+	xdg.Reload()
+
+	stagingDir := filepath.Join(tmpDir, "staging")
+	require.NoError(t, os.MkdirAll(stagingDir, 0755))
+
+	testFile := filepath.Join(stagingDir, "test.so")
+	require.NoError(t, os.WriteFile(testFile, []byte("so-data"), 0755))
+
+	// 1. local-map
+	execCtxLocal := &params.ExecContext{}
+	execCtxLocal.TargetPath = targetBin
+	execCtxLocal.SidecarMode = "local-map"
+	relLocal := MakeGithubRelease(execCtxLocal, nil)
+	dstLocal, err := relLocal.DeploySidecarFile(testFile, "lib/test.so", stagingDir)
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(homeDir, ".local", "lib", "test.so"), dstLocal)
+	assert.FileExists(t, dstLocal)
+
+	// 2. xdg_data_home
+	execCtxXdg := &params.ExecContext{Repository: "myorg/myrepo"}
+	execCtxXdg.TargetPath = targetBin
+	execCtxXdg.SidecarMode = "xdg_data_home"
+	relXdg := MakeGithubRelease(execCtxXdg, nil)
+	dstXdg, err := relXdg.DeploySidecarFile(testFile, "data/test.so", stagingDir)
+	require.NoError(t, err)
+	expectedXdg := filepath.Join(xdg.DataHome, "gh-pt", "sidecars", "myorg/myrepo", "test.so")
+	assert.Equal(t, expectedXdg, dstXdg)
+	assert.FileExists(t, dstXdg)
+
+	// 3. custom-path
+	customPrefix := filepath.Join(tmpDir, "custom-sidecars")
+	execCtxCustom := &params.ExecContext{}
+	execCtxCustom.TargetPath = targetBin
+	execCtxCustom.SidecarMode = "custom-path:" + customPrefix
+	relCustom := MakeGithubRelease(execCtxCustom, nil)
+	dstCustom, err := relCustom.DeploySidecarFile(testFile, "test.so", stagingDir)
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(customPrefix, "test.so"), dstCustom)
+	assert.FileExists(t, dstCustom)
 }

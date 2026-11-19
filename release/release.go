@@ -565,54 +565,6 @@ func (r *GithubRelease) createSidecarSymlinks() {
 	}
 }
 
-func (r *GithubRelease) runAISidecarSetup() error {
-	if !r.CliParams.AISetupSidecars || len(r.InstalledSidecars) == 0 {
-		return nil
-	}
-
-	// Get AI command template from config or use default
-	cfg, _ := config.LoadConfig()
-	aiCmdTemplate := "agy -p \"%s\""
-	if cfg != nil && cfg.AI.AICmd != "" {
-		aiCmdTemplate = cfg.AI.AICmd
-	}
-
-	// Build prompt with sidecar information
-	sidecarList := strings.Join(r.InstalledSidecars, "\n")
-	prompt := fmt.Sprintf(`Analyze the following sidecar files that were installed for %s and provide setup instructions:
-
-%s
-
-These files are located in: %s
-
-Please provide:
-1. What these files appear to be (plugins, libraries, data files, etc.)
-2. Recommended environment variables to set (e.g., PLUGIN_DIR, DATA_PATH)
-3. Suggested symlinks or configuration file modifications needed
-4. Any additional setup steps required for the application to find these files
-
-Format your response as actionable shell commands where possible.`, r.CliParams.Repository, sidecarList, r.resolveSidecarTargetPath())
-
-	log.Info("Initiating AI sidecar setup analysis...")
-
-	// Execute AI agent
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		cmd = exec.Command("powershell", "-Command", aiCmdTemplate, prompt)
-	} else {
-		cmd = exec.Command("sh", "-c", fmt.Sprintf(aiCmdTemplate, prompt))
-	}
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("AI sidecar setup failed: %w", err)
-	}
-
-	return nil
-}
-
 func (r *GithubRelease) resolveDestinationPath(binaryPath string) string {
 	binaryName := filepath.Base(binaryPath)
 	destinationPath := filepath.Join(r.CliParams.TargetPath, binaryName)
@@ -1836,7 +1788,7 @@ func (r *GithubRelease) Install() (installErr error) {
 
 	// Auto-enable IncludeSidecars and Symlink when any sidecar, driver, or plugin param is specified
 	if !r.CliParams.IncludeSidecars {
-		if r.CliParams.Sidecars != "" || len(r.CliParams.SidecarSymlinkTo) > 0 || r.CliParams.AISetupSidecars || r.CliParams.SidecarMode != "" || (r.CliParams.Driver != "" && r.CliParams.Driver != "none") || (r.CliParams.Plugin != "" && r.CliParams.Plugin != "none") {
+		if r.CliParams.Sidecars != "" || len(r.CliParams.SidecarSymlinkTo) > 0 || r.CliParams.SidecarMode != "" || (r.CliParams.Driver != "" && r.CliParams.Driver != "none") || (r.CliParams.Plugin != "" && r.CliParams.Plugin != "none") {
 			r.CliParams.IncludeSidecars = true
 			log.Debug("auto-enabled --include-sidecars due to sidecar/driver/plugin params")
 		}
@@ -1896,7 +1848,7 @@ func (r *GithubRelease) Install() (installErr error) {
 
 			if alreadyInstalled {
 				comp := status.CompareVersions(app.Version, releases[0].Name)
-				anyDowngradeFlag := r.CliParams.AllowDowngrade || r.CliParams.SelfInflictedDebt || r.CliParams.LeRetrogrouch || r.CliParams.RetrogradeStopgap || r.CliParams.Barbarous
+				anyDowngradeFlag := r.CliParams.AllowDowngrade
 				if comp == 0 && !r.CliParams.Overwrite {
 					installState := status.InstallState{
 						InState:          true,
@@ -2073,21 +2025,17 @@ func (r *GithubRelease) Install() (installErr error) {
 	}
 
 	installState := status.InstallState{
-		InState:           inState,
-		AlreadyInstalled:  alreadyInstalled,
-		PrevVersion:       prevVersion,
-		NewVersion:        releases[0].Name,
-		AppName:           r.CliParams.Repository,
-		Type:              cleanAssetType(assets[0].Name),
-		Repo:              r.CliParams.Repository,
-		AssetName:         assets[0].Name,
-		Force:             r.CliParams.Overwrite,
-		AllowDowngrade:    r.CliParams.AllowDowngrade,
-		LeRetrogrouch:     r.CliParams.LeRetrogrouch,
-		RetrogradeStopgap: r.CliParams.RetrogradeStopgap,
-		Barbarous:         r.CliParams.Barbarous,
-		SelfInflictedDebt: r.CliParams.SelfInflictedDebt,
-		IsUpgradeCmd:      r.CliParams.IsUpgradeCmd,
+		InState:          inState,
+		AlreadyInstalled: alreadyInstalled,
+		PrevVersion:      prevVersion,
+		NewVersion:       releases[0].Name,
+		AppName:          r.CliParams.Repository,
+		Type:             cleanAssetType(assets[0].Name),
+		Repo:             r.CliParams.Repository,
+		AssetName:        assets[0].Name,
+		Force:            r.CliParams.Overwrite,
+		AllowDowngrade:   r.CliParams.AllowDowngrade,
+		IsUpgradeCmd:     r.CliParams.IsUpgradeCmd,
 	}
 
 	statusMsg, abortErr := status.GenerateStatusMessage(installState)
@@ -2519,13 +2467,6 @@ func (r *GithubRelease) Install() (installErr error) {
 		// Explicit --sidecars pattern matching
 		if r.CliParams.Sidecars != "" {
 			_ = r.extractExplicitSidecars(extractDir, fsObj)
-
-			// Run AI setup if requested
-			if r.CliParams.AISetupSidecars {
-				if err := r.runAISidecarSetup(); err != nil {
-					log.Warn("AI sidecar setup failed", "error", err)
-				}
-			}
 		}
 
 		binariesOutput := make(map[string]string)

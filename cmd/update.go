@@ -207,7 +207,6 @@ func processSingleUpdate(
 	if app.SymlinkDir != "" || (app.Driver != "" && app.Driver != "none") || (app.Plugin != "" && app.Plugin != "none") || app.DriverMap != "" {
 		appParamsCopy.Symlink = true
 	}
-	appParamsCopy.EnvInject = app.EnvInject
 	appParamsCopy.FallbackReleases = app.FallbackReleases
 	appParamsCopy.ReleaseVersion = "latest"
 	if app.IsPrerelease {
@@ -431,28 +430,6 @@ func reconcileObsoleteSidecars(oldInstalledSidecars, updatedSidecars []string, t
 }
 
 func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
-	if r.Barbarous {
-		r.InsecureAllowUnsigned = true
-		r.VerifyChecksum = false
-		r.SkipVtSandbox = true
-		r.AllowForeignArch = true
-		r.AllowDowngrade = true
-		if r.Wine == "" || r.Wine == "off" {
-			r.Wine = "allow"
-		}
-	}
-	if r.LeRetrogrouch {
-		r.AllowDowngrade = true
-		r.PinInstall = false
-	}
-	if r.RetrogradeStopgap {
-		r.AllowDowngrade = true
-		r.PinInstall = true
-	}
-	if r.SelfInflictedDebt {
-		r.AllowDowngrade = true
-	}
-
 	st, err := state.LoadState()
 	if err != nil {
 		return err
@@ -617,17 +594,19 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 						CliParams: &params.ExecContext{
 							Repository: app.Repository,
 							CommonInstallFlags: params.CommonInstallFlags{
-								TargetFlags: params.TargetFlags{
-									Global:     app.Global,
-									TargetPath: app.TargetPath,
-								},
-								SidecarFlags: params.SidecarFlags{
-									Driver:    app.Driver,
-									Plugin:    app.Plugin,
-									DriverMap: app.DriverMap,
-								},
-								ExecutionFlags: params.ExecutionFlags{
-									DryRun: r.DryRun,
+								SharedInstallSourceFlags: params.SharedInstallSourceFlags{
+									TargetFlags: params.TargetFlags{
+										Global:     app.Global,
+										TargetPath: app.TargetPath,
+									},
+									DriverPluginFlags: params.DriverPluginFlags{
+										Driver:    app.Driver,
+										Plugin:    app.Plugin,
+										DriverMap: app.DriverMap,
+									},
+									SharedRuntimeFlags: params.SharedRuntimeFlags{
+										DryRun: r.DryRun,
+									},
 								},
 							},
 						},
@@ -776,7 +755,7 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 		normalizedStored := strings.TrimPrefix(app.Version, "v")
 
 		comp := status.CompareVersions(app.Version, latestTag)
-		anyDowngradeFlag := r.AllowDowngrade || r.SelfInflictedDebt || r.LeRetrogrouch || r.RetrogradeStopgap || r.Barbarous
+		anyDowngradeFlag := r.AllowDowngrade
 		if latestTag == app.Version || (normalizedLatest != "" && normalizedLatest == normalizedStored) || comp == 0 || (comp < 0 && !anyDowngradeFlag) {
 			indicator := GetStateIndicator(true, app.Pinned, app.IsPrerelease, false, false, r.DisableIcons || r.NoEmojis)
 			repoDisplay := app.Repository

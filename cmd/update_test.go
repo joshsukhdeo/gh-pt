@@ -1323,3 +1323,47 @@ func TestDoUpdate_CompileScriptSyncsDeploysDriversAndReconcilesSidecars(t *testi
 		assert.FileExists(t, sc, "deployed sidecar manifest must exist on disk")
 	}
 }
+
+func TestSourceUpgrade_HonorsNoCompileContainerFlag(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	binDir := filepath.Join(homeDir, ".local", "bin")
+	symlinkDir := filepath.Join(homeDir, ".local", "share", "gh-pt", "packages", "owner", "noctapp")
+	buildDir := filepath.Join(homeDir, "builds", "noctapp")
+
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	t.Setenv("XDG_DATA_HOME", filepath.Join(homeDir, ".local", "share"))
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(homeDir, ".config"))
+	xdg.Reload()
+
+	require.NoError(t, os.MkdirAll(binDir, 0755))
+	require.NoError(t, os.MkdirAll(symlinkDir, 0755))
+	require.NoError(t, os.MkdirAll(buildDir, 0755))
+
+	// Write host compile script that records execution
+	flagFile := filepath.Join(tmpDir, "host_ran.txt")
+	scriptPath := filepath.Join(buildDir, "compile.sh")
+	require.NoError(t, os.WriteFile(scriptPath, []byte(fmt.Sprintf("#!/bin/sh\necho host > '%s'\n", flagFile)), 0755))
+
+	st, err := state.LoadState()
+	require.NoError(t, err)
+
+	require.NoError(t, st.AddApp(&state.InstalledApp{
+		Repository:    "owner/noctapp",
+		Version:       "oldsha",
+		CompileScript: scriptPath,
+		SymlinkDir:    symlinkDir,
+		TargetPath:    binDir,
+	}))
+
+	r := &RootCLI{}
+	r.Update = true
+	r.ProgressBar = "none"
+	r.NoCompileContainer = true
+
+	err = DoUpdate(r, nil)
+	require.NoError(t, err)
+
+	assert.FileExists(t, flagFile, "host compile script must run directly when NoCompileContainer is true")
+}

@@ -31,6 +31,26 @@ func parseWithTestVars(t *testing.T, args []string) (*params.CLI, *kong.Kong) {
 	return &cli, parser
 }
 
+func parseWithTestVarsErr(t *testing.T, args []string) (*params.CLI, error) {
+	var cli params.CLI
+	parser, err := kong.New(
+		&cli,
+		kong.Vars{
+			"install_types": "deb,rpm",
+			"install_path":  "/default/bin",
+			"clone_path":    "~/src",
+			"fork_path":     "~/src/forks",
+			"extractor":     "default",
+			"version":       "2.0.0",
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	_, parseErr := parser.Parse(args)
+	return &cli, parseErr
+}
+
 func TestCLI_TestFlagSerialization(t *testing.T) {
 	cli, _ := parseWithTestVars(t, []string{"install", "cli/cli", "--test", "--global", "-p", "/custom/bin"})
 	assert.True(t, cli.Test)
@@ -44,75 +64,59 @@ func TestCLI_TestFlagSerialization(t *testing.T) {
 	assert.Contains(t, string(data), `"Global":true`)
 }
 
-func TestCLI_SpecialtyFlagCascades(t *testing.T) {
-	t.Run("Barbarous Cascade", func(t *testing.T) {
-		cli, _ := parseWithTestVars(t, []string{"install", "test/app", "--BARBAROUS"})
-		r := &cmd.RootCLI{ExecContext: params.ExecContext{CommonInstallFlags: cli.Install.CommonInstallFlags, Repository: cli.Install.Repository}}
-		assert.True(t, r.Barbarous)
+func TestKong_InstallCmd_RejectsSourceFlags(t *testing.T) {
+	_, err := parseWithTestVarsErr(t, []string{"install", "cli/cli", "--no-compile-container"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown flag")
 
-		// Dry-run run install validation to trigger cascade
-		r.VerifyChecksum = true
-		r.Wine = "off"
-		if r.Barbarous {
-			r.InsecureAllowUnsigned = true
-			r.VerifyChecksum = false
-			r.SkipVtSandbox = true
-			r.AllowForeignArch = true
-			r.AllowDowngrade = true
-			if r.Wine == "" || r.Wine == "off" {
-				r.Wine = "allow"
-			}
-		}
+	_, err = parseWithTestVarsErr(t, []string{"install", "cli/cli", "--target-os=linux"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown flag")
+}
 
-		assert.True(t, r.InsecureAllowUnsigned)
-		assert.False(t, r.VerifyChecksum)
-		assert.True(t, r.SkipVtSandbox)
-		assert.True(t, r.AllowForeignArch)
-		assert.True(t, r.AllowDowngrade)
-		assert.Equal(t, "allow", r.Wine)
-	})
+func TestKong_SourceCmd_RejectsReleaseAssetFlags(t *testing.T) {
+	_, err := parseWithTestVarsErr(t, []string{"source", "cli/cli", "--verify-checksum"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown flag")
 
-	t.Run("LeRetrogrouch Cascade", func(t *testing.T) {
-		cli, _ := parseWithTestVars(t, []string{"install", "test/app", "--LE-RETROGROUCH", "--pin-install"})
-		r := &cmd.RootCLI{ExecContext: params.ExecContext{CommonInstallFlags: cli.Install.CommonInstallFlags, Repository: cli.Install.Repository}}
-		assert.True(t, r.LeRetrogrouch)
+	_, err = parseWithTestVarsErr(t, []string{"source", "cli/cli", "--skip-vt-sandbox"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown flag")
 
-		if r.LeRetrogrouch {
-			r.AllowDowngrade = true
-			r.PinInstall = false
-		}
+	_, err = parseWithTestVarsErr(t, []string{"source", "cli/cli", "--format=tar.gz"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown flag")
 
-		// Default is now true (opt-in), so SkipVtSandbox remains true unless explicitly disabled
-		assert.True(t, r.SkipVtSandbox)
-		assert.True(t, r.AllowDowngrade)
-		assert.False(t, r.PinInstall)
-	})
+	_, err = parseWithTestVarsErr(t, []string{"source", "cli/cli", "--extractor=ouch"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown flag")
+}
 
-	t.Run("RetrogradeStopgap Cascade", func(t *testing.T) {
-		cli, _ := parseWithTestVars(t, []string{"install", "test/app", "--retrograde-stopgap"})
-		r := &cmd.RootCLI{ExecContext: params.ExecContext{CommonInstallFlags: cli.Install.CommonInstallFlags, Repository: cli.Install.Repository}}
-		assert.True(t, r.RetrogradeStopgap)
+func TestKong_UpgradeCmd_AcceptsContainerFlags(t *testing.T) {
+	cli, err := parseWithTestVarsErr(t, []string{"upgrade", "--no-compile-container", "--no-ai-container"})
+	require.NoError(t, err)
+	assert.True(t, cli.Upgrade.NoCompileContainer)
+	assert.True(t, cli.Upgrade.NoAIContainer)
+}
 
-		if r.RetrogradeStopgap {
-			r.AllowDowngrade = true
-			r.PinInstall = true
-		}
+func TestKong_PrunedFlags_FailGracefully(t *testing.T) {
+	prunedFlags := []string{
+		"--env-inject=FOO=bar",
+		"--self-inflicted-technical-debt",
+		"--BARBAROUS",
+		"--allow-root-user-install",
+		"--ai-setup-sidecars",
+		"--LE-RETROGROUCH",
+		"--retrograde-stopgap",
+	}
 
-		assert.True(t, r.AllowDowngrade)
-		assert.True(t, r.PinInstall)
-	})
-
-	t.Run("SelfInflictedDebt Cascade", func(t *testing.T) {
-		cli, _ := parseWithTestVars(t, []string{"install", "test/app", "--self-inflicted-technical-debt"})
-		r := &cmd.RootCLI{ExecContext: params.ExecContext{CommonInstallFlags: cli.Install.CommonInstallFlags, Repository: cli.Install.Repository}}
-		assert.True(t, r.SelfInflictedDebt)
-
-		if r.SelfInflictedDebt {
-			r.AllowDowngrade = true
-		}
-
-		assert.True(t, r.AllowDowngrade)
-	})
+	for _, flag := range prunedFlags {
+		t.Run(flag, func(t *testing.T) {
+			_, err := parseWithTestVarsErr(t, []string{"install", "test/app", flag})
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), "unknown flag")
+		})
+	}
 }
 
 func TestCLI_SidecarFlags(t *testing.T) {
@@ -124,8 +128,6 @@ func TestCLI_SidecarFlags(t *testing.T) {
 			"--sidecar-symlink-to", "/var/lib/plugins",
 			"--include-sidecars",
 			"--sidecar-mode", "custom-path:/my/sidecars",
-			"--env-inject", "PLUGIN_DIR=/opt/sidecars",
-			"--ai-setup-sidecars",
 		})
 
 		// Sidecars is now a regex pattern string
@@ -133,8 +135,6 @@ func TestCLI_SidecarFlags(t *testing.T) {
 		assert.Equal(t, []string{"/etc/plugins", "/var/lib/plugins"}, cli.Install.SidecarSymlinkTo)
 		assert.True(t, cli.Install.IncludeSidecars)
 		assert.Equal(t, "custom-path:/my/sidecars", cli.Install.SidecarMode)
-		assert.Equal(t, []string{"PLUGIN_DIR=/opt/sidecars"}, cli.Install.EnvInject)
-		assert.True(t, cli.Install.AISetupSidecars)
 	})
 
 	t.Run("SidecarMode Auto-Enables IncludeSidecars", func(t *testing.T) {
@@ -197,8 +197,8 @@ func TestCLI_SidecarFlags(t *testing.T) {
 		// Manual struct without parsing
 		manualCmd := params.InstallCmd{
 			Repository: "owner/repo",
-			CommonInstallFlags: params.CommonInstallFlags{
-				SidecarFlags: params.SidecarFlags{
+			SharedInstallSourceFlags: params.SharedInstallSourceFlags{
+				DriverPluginFlags: params.DriverPluginFlags{
 					SidecarMode: "same_dest",
 				},
 			},

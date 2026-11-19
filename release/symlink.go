@@ -62,36 +62,6 @@ func createSymlinkAtomic(src, dest string) error {
 	return copyFile(src, dest, mode)
 }
 
-func createSymlinkOrCopy(srcPath, destPath string) error {
-	if err := createSymlinkAtomic(srcPath, destPath); err == nil {
-		return nil
-	} else {
-		log.Warn("failed to create symlink, attempting fallback", "error", err, "src", srcPath, "dest", destPath)
-	}
-
-	_ = os.Remove(destPath)
-
-	// Attempt hardlink fallback where appropriate
-	if err := os.Link(srcPath, destPath); err == nil {
-		log.Info("created hardlink fallback instead of symlink", "src", srcPath, "dest", destPath)
-		return nil
-	}
-
-	// Fallback to copying file
-	info, err := os.Stat(srcPath)
-	mode := os.FileMode(0755)
-	if err == nil {
-		mode = info.Mode()
-	}
-
-	if err := copyFile(srcPath, destPath, mode); err != nil {
-		return fmt.Errorf("failed to create symlink, hardlink, or copy file from %s to %s: %w", srcPath, destPath, err)
-	}
-
-	log.Info("copied file fallback instead of symlink", "src", srcPath, "dest", destPath)
-	return nil
-}
-
 func copyDir(src, dst string) error {
 	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -191,6 +161,19 @@ func copyFS(fileSystem fs.FS, dst string) error {
 		_, err = io.Copy(out, in)
 		return err
 	})
+}
+
+// ResolvePackageDir resolves the canonical package store directory for owner and repo.
+// Per ADR-004, the standard location is $XDG_DATA_HOME/gh-pt/packages/{ownerID}/{repoID}.
+// Checks state.LoadState() for existing legacy paths before falling back to canonical path.
+func ResolvePackageDir(ownerID, repoID string) string {
+	r := &GithubRelease{}
+	return r.resolvePackageDir(ownerID, repoID)
+}
+
+// ResolvePackageDir determines the canonical extraction path for an application package on this release.
+func (r *GithubRelease) ResolvePackageDir(ownerID, repoID string) string {
+	return r.resolvePackageDir(ownerID, repoID)
 }
 
 // resolvePackageDir determines the canonical extraction path for an application package.
@@ -701,4 +684,195 @@ func (r *GithubRelease) getDefaultSidecarRegex(destPath string) string {
 
 	// 3. Fallback for custom paths
 	return customRegex
+}
+
+// DeployBinariesFromStaging deploys executable binaries from stagingDir (and allowed subdirs)
+// into targetPath, applying rename rules and setting up shell completions.
+func (r *GithubRelease) DeployBinariesFromStaging(stagingDir, targetPath string) error {
+	if err := os.MkdirAll(targetPath, 0755); err != nil {
+		return fmt.Errorf("failed to create target directory: %w", err)
+	}
+
+	dirsToScan := []string{stagingDir}
+	for _, sub := range []string{"service", "preferences"} {
+		subDir := filepath.Join(stagingDir, sub)
+		if info, err := os.Stat(subDir); err == nil && info.IsDir() {
+			dirsToScan = append(dirsToScan, subDir)
+		}
+	}
+
+	noComp := false
+	if r != nil && r.CliParams != nil {
+		noComp = r.CliParams.NoCompletionSetup
+	}
+
+	for _, dir := range dirsToScan {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return fmt.Errorf("failed to read directory %s: %w", dir, err)
+		}
+
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			info, err := entry.Info()
+			if err != nil {
+				continue
+			}
+			if info.Mode()&0111 != 0 { // Executable
+				binName := entry.Name()
+				if r != nil && r.CliParams != nil && len(r.CliParams.Rename) > 0 {
+					if renamed, ok := r.CliParams.Rename[strings.ToLower(binName)]; ok {
+						binName = renamed
+					} else if renamed, ok := r.CliParams.Rename[binName]; ok {
+						binName = renamed
+					}
+				}
+
+				srcPath := filepath.Join(dir, entry.Name())
+				destPath := filepath.Join(targetPath, binName)
+
+				if err := createSymlinkAtomic(srcPath, destPath); err != nil {
+					if _, statErr := os.Lstat(destPath); statErr == nil {
+						if r != nil && r.CliParams != nil && (r.CliParams.Overwrite || r.CliParams.IsUpgradeCmd) {
+							_ = os.Remove(destPath)
+							if retryErr := createSymlinkAtomic(srcPath, destPath); retryErr != nil {
+								return retryErr
+							}
+						} else {
+							return fmt.Errorf("%s already exists; use force to overwrite", destPath)
+						}
+					} else {
+						return err
+					}
+				}
+
+				if r != nil {
+					r.InstalledBinaries = append(r.InstalledBinaries, filepath.Base(destPath))
+					r.InstalledFiles = append(r.InstalledFiles, srcPath)
+					r.InstalledSymlinks = append(r.InstalledSymlinks, destPath)
+				}
+
+				log.Info("created symlink", "source", srcPath, "dest", destPath)
+
+				ScanAndInstallArchiveCompletions(stagingDir, filepath.Base(destPath), noComp)
+				_ = SetupBinaryCompletions(destPath, noComp)
+			}
+		}
+	}
+
+	return nil
+}
+
+// DeploySidecarFile routes a single sidecar file according to SidecarMode and symlinks/copies it to the target destination.
+func (r *GithubRelease) DeploySidecarFile(srcPath, relPath, installDest string) (string, error) {
+	mode := ""
+	if r != nil && r.CliParams != nil {
+		mode = r.CliParams.SidecarMode
+	}
+	if mode == "" || mode == "auto" {
+		parts := strings.Split(filepath.ToSlash(relPath), "/")
+		if len(parts) > 1 {
+			switch parts[0] {
+			case "share", "lib", "lib64", "libs", "etc", "include", "var", "man":
+				mode = "local-map"
+			default:
+				mode = "xdg_data_home"
+			}
+		} else {
+			mode = "xdg_data_home"
+		}
+	}
+
+	var targetBase string
+	var targetRel string
+
+	switch {
+	case mode == "local-map":
+		basePrefix := ""
+		if r != nil && r.CliParams != nil && r.CliParams.TargetPath != "" {
+			basePrefix = filepath.Dir(r.CliParams.TargetPath)
+		}
+		homeDir, _ := os.UserHomeDir()
+		if (r != nil && r.CliParams != nil && r.CliParams.Global) || os.Geteuid() == 0 {
+			basePrefix = "/usr/local"
+		} else if basePrefix == "." || basePrefix == "" || basePrefix == "/" || (r != nil && r.CliParams != nil && basePrefix == filepath.Clean(r.CliParams.TargetPath)) {
+			basePrefix = filepath.Join(homeDir, ".local")
+		}
+
+		parts := strings.Split(filepath.ToSlash(relPath), "/")
+		if len(parts) > 1 {
+			switch parts[0] {
+			case "libs":
+				targetBase = filepath.Join(basePrefix, "lib")
+				targetRel = filepath.Join(parts[1:]...)
+			case "man":
+				targetBase = filepath.Join(basePrefix, "share", "man")
+				targetRel = filepath.Join(parts[1:]...)
+			default:
+				targetBase = filepath.Join(basePrefix, parts[0])
+				targetRel = filepath.Join(parts[1:]...)
+			}
+		} else {
+			targetBase = filepath.Join(basePrefix, "share")
+			targetRel = filepath.Base(relPath)
+		}
+
+	case mode == "same_dest" || mode == "bin":
+		if r != nil && r.CliParams != nil && r.CliParams.TargetPath != "" {
+			targetBase = r.CliParams.TargetPath
+		} else {
+			targetBase = installDest
+		}
+		targetRel = filepath.Base(relPath)
+
+	case strings.HasPrefix(mode, "custom-path:"):
+		targetBase = strings.TrimPrefix(mode, "custom-path:")
+		targetRel = filepath.Base(relPath)
+
+	case mode == "xdg_data_home":
+		fallthrough
+	default:
+		repo := ""
+		if r != nil && r.CliParams != nil {
+			repo = r.CliParams.Repository
+		}
+		if repo != "" {
+			targetBase = filepath.Join(xdg.DataHome, "gh-pt", "sidecars", repo)
+		} else {
+			targetBase = filepath.Join(xdg.DataHome, "gh-pt", "sidecars")
+		}
+		targetRel = filepath.Base(relPath)
+	}
+
+	dstPath := filepath.Join(targetBase, targetRel)
+	if err := os.MkdirAll(filepath.Dir(dstPath), 0755); err != nil {
+		return "", err
+	}
+	_ = safety.WriteGhptManagedMarker(targetBase)
+
+	if err := createSymlinkAtomic(srcPath, dstPath); err != nil {
+		if _, statErr := os.Lstat(dstPath); statErr == nil {
+			if r != nil && r.CliParams != nil && (r.CliParams.Overwrite || r.CliParams.IsUpgradeCmd) {
+				_ = os.Remove(dstPath)
+				if retryErr := createSymlinkAtomic(srcPath, dstPath); retryErr != nil {
+					return "", retryErr
+				}
+			} else {
+				return "", fmt.Errorf("%s already exists; use force to overwrite", dstPath)
+			}
+		} else {
+			return "", err
+		}
+	}
+
+	if r != nil {
+		r.InstalledSidecars = append(r.InstalledSidecars, dstPath)
+	}
+	log.Info("deployed sidecar file", "src", srcPath, "dest", dstPath)
+	return dstPath, nil
 }

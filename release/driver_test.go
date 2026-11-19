@@ -203,15 +203,12 @@ func TestDeployDriverAndPluginManifests_GnomeExtension(t *testing.T) {
 	schemaXML := `<schemalist><schema id="org.gnome.shell.extensions.gsconnect" path="/org/gnome/shell/extensions/gsconnect/"><key name="show-indicators" type="b"><default>true</default></key></schema></schemalist>`
 	require.NoError(t, os.WriteFile(filepath.Join(schemasDir, "org.gnome.shell.extensions.gsconnect.gschema.xml"), []byte(schemaXML), 0644))
 
+	execCtx := &params.ExecContext{
+		Repository: "GSConnect/gnome-shell-extension-gsconnect",
+	}
+	execCtx.Plugin = "gnome-extension"
 	r := &GithubRelease{
-		CliParams: &params.ExecContext{
-			Repository: "GSConnect/gnome-shell-extension-gsconnect",
-			CommonInstallFlags: params.CommonInstallFlags{
-				SidecarFlags: params.SidecarFlags{
-					Plugin: "gnome-extension",
-				},
-			},
-		},
+		CliParams: execCtx,
 	}
 
 	installed, err := r.DeployDriverAndPluginManifests(pkgDir)
@@ -242,15 +239,12 @@ func TestDeployDriverAndPluginManifests(t *testing.T) {
 	jsonContent := `{"ICD": {"library_path": "libvulkan_intel.so"}}`
 	require.NoError(t, os.WriteFile(filepath.Join(pkgDir, "icd.json"), []byte(jsonContent), 0644))
 
+	execCtx2 := &params.ExecContext{
+		Repository: "intel/compute-runtime",
+	}
+	execCtx2.Driver = "vulkan"
 	r := &GithubRelease{
-		CliParams: &params.ExecContext{
-			Repository: "intel/compute-runtime",
-			CommonInstallFlags: params.CommonInstallFlags{
-				SidecarFlags: params.SidecarFlags{
-					Driver: "vulkan",
-				},
-			},
-		},
+		CliParams: execCtx2,
 	}
 
 	installed, err := r.DeployDriverAndPluginManifests(pkgDir)
@@ -353,24 +347,22 @@ func TestInstall_PersistsDriverPluginDriverMapAndSymlinkDir(t *testing.T) {
 	}
 
 	// 1. Normal install: persists state
+	execCtx3 := &params.ExecContext{
+		Repository: "owner/repo",
+	}
+	execCtx3.ReleaseVersion = "latest"
+	execCtx3.Type = []string{"binary"}
+	execCtx3.DisablePrompts = true
+	execCtx3.ProgressBar = "none"
+	execCtx3.TargetPath = targetDir
+	execCtx3.Symlink = true
+	execCtx3.Driver = "vulkan"
+	execCtx3.Plugin = "vst"
+	execCtx3.DriverMap = ".*icd.*\\.json$:vulkan"
+
 	gr := &GithubRelease{
-		CliParams: &params.ExecContext{
-			Repository: "owner/repo",
-			CommonInstallFlags: params.CommonInstallFlags{
-				ReleaseVersion: "latest",
-				Type:           []string{"binary"},
-				DisablePrompts: true,
-				ProgressBar:    "none",
-				TargetPath:     targetDir,
-				Symlink:        true,
-				SidecarFlags: params.SidecarFlags{
-					Driver:    "vulkan",
-					Plugin:    "vst",
-					DriverMap: ".*icd.*\\.json$:vulkan",
-				},
-			},
-		},
-		Client: newMockClient(),
+		CliParams: execCtx3,
+		Client:    newMockClient(),
 	}
 
 	err = gr.Install()
@@ -388,22 +380,19 @@ func TestInstall_PersistsDriverPluginDriverMapAndSymlinkDir(t *testing.T) {
 	// 2. Install with NoSaveState: outputs populated on CliParams
 	execParams := &params.ExecContext{
 		Repository: "owner/repo",
-		CommonInstallFlags: params.CommonInstallFlags{
-			ReleaseVersion: "latest",
-			Type:           []string{"binary"},
-			DisablePrompts: true,
-			ProgressBar:    "none",
-			TargetPath:     targetDir,
-			Symlink:        true,
-			NoSaveState:    true,
-			Overwrite:      true,
-			SidecarFlags: params.SidecarFlags{
-				Driver:    "vulkan",
-				Plugin:    "vst",
-				DriverMap: ".*icd.*\\.json$:vulkan",
-			},
-		},
 	}
+	execParams.ReleaseVersion = "latest"
+	execParams.Type = []string{"binary"}
+	execParams.DisablePrompts = true
+	execParams.ProgressBar = "none"
+	execParams.TargetPath = targetDir
+	execParams.Symlink = true
+	execParams.NoSaveState = true
+	execParams.Overwrite = true
+	execParams.Driver = "vulkan"
+	execParams.Plugin = "vst"
+	execParams.DriverMap = ".*icd.*\\.json$:vulkan"
+
 	grNoSave := &GithubRelease{
 		CliParams: execParams,
 		Client:    newMockClient(),

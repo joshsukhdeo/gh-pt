@@ -416,10 +416,6 @@ func (r *RootCLI) Validate() error {
 		}
 	}
 
-	if r.CompileFromSource && !r.AI {
-		return fmt.Errorf("--compile-from-source can only be used with --ai")
-	}
-
 	// Validate and sanitize inputs
 	if err := validateInputs(r); err != nil {
 		return err
@@ -455,7 +451,6 @@ func (r *RootCLI) Validate() error {
 			"container", inContainer,
 			"global", r.Global,
 			"force_root", r.ForceRoot,
-			"allow_root_user_install", r.AllowRootUserInstall,
 			"pid", os.Getpid(),
 			"uid", os.Getuid(),
 			"euid", os.Geteuid(),
@@ -470,8 +465,8 @@ func (r *RootCLI) Validate() error {
 					log.Warn("sudo -v failed (credentials may not cache)", "error", err)
 				}
 			}
-		} else if !r.AllowRootUserInstall && !r.ForceRoot {
-			err := fmt.Errorf("running as root without --global flag. Use --global for system-wide install or --force-root / --allow-root-user-install to install to user-local paths")
+		} else if !r.ForceRoot {
+			err := fmt.Errorf("running as root without --global flag. Use --global for system-wide install or --force-root to install to user-local paths")
 			log.Error("init error", "error", err)
 			return err
 		}
@@ -485,7 +480,7 @@ func (r *RootCLI) Validate() error {
 
 	targetPathInfo, err := os.Stat(r.TargetPath)
 	if err != nil {
-		if !os.IsNotExist(err) {
+		if os.IsNotExist(err) {
 			createPath := r.TargetPathCreate
 			if r.Interactive {
 				createPath, _ = pterm.DefaultInteractiveConfirm.
@@ -535,27 +530,6 @@ func (r *RootCLI) RunInstall() error {
 	if r.NoColor || os.Getenv("NO_COLOR") != "" {
 		r.NoColor = true
 		ApplyDisplayPreferences(true, false)
-	}
-	if r.Barbarous {
-		r.InsecureAllowUnsigned = true
-		r.VerifyChecksum = false
-		r.SkipVtSandbox = true
-		r.AllowForeignArch = true
-		r.AllowDowngrade = true
-		if r.Wine == "" || r.Wine == "off" {
-			r.Wine = "allow"
-		}
-	}
-	if r.LeRetrogrouch {
-		r.AllowDowngrade = true
-		r.PinInstall = false
-	}
-	if r.RetrogradeStopgap {
-		r.AllowDowngrade = true
-		r.PinInstall = true
-	}
-	if r.SelfInflictedDebt {
-		r.AllowDowngrade = true
 	}
 	if r.Gearlever {
 		r.NoSaveState = true
@@ -625,12 +599,12 @@ func (r *RootCLI) RunInstall() error {
 			r.VTApiKey = strings.TrimSpace(cfg.Core.VTApiKey)
 		}
 	}
-	if r.VTApiKey != "" && !r.Barbarous {
+	if r.VTApiKey != "" {
 		r.SkipVtSandbox = false
 	}
 	if r.CliParams != nil {
 		r.CliParams.VTApiKey = r.VTApiKey
-		if r.VTApiKey != "" && !r.Barbarous {
+		if r.VTApiKey != "" {
 			r.CliParams.SkipVtSandbox = false
 		}
 	}
@@ -1540,31 +1514,35 @@ func (r *RootCLI) moveDistWithSidecarDetection(srcDir, dstDir string) ([]string,
 
 	var installedSidecars []string
 	if len(selected) > 0 {
-		// Sidecar target path is now determined by IncludeSidecars mode in release.go
-		// This code path is for suspected sidecars handling in compile flow
-		sidecarTarget := filepath.Join(xdg.DataHome, "gh-pt", "sidecars")
-		if err := os.MkdirAll(sidecarTarget, 0755); err != nil {
-			log.Warn("could not create sidecar target directory", "error", err)
+		var execCtx *params.ExecContext
+		if r != nil {
+			execCtx = &r.ExecContext
 		}
+		rel := release.MakeGithubRelease(execCtx, nil)
 
 		for _, item := range selected {
 			srcPath := filepath.Join(srcDir, item)
-			dstPath := filepath.Join(sidecarTarget, filepath.Base(item))
-			if err := os.MkdirAll(filepath.Dir(dstPath), 0755); err != nil {
-				return installedSidecars, err
-			}
-			if err := os.Rename(srcPath, dstPath); err != nil {
-				_ = os.Remove(dstPath)
-				if err := copyFile(srcPath, dstPath); err != nil {
+			stagePath := filepath.Join(dstDir, item)
+			if filepath.Clean(srcPath) != filepath.Clean(stagePath) {
+				if err := os.MkdirAll(filepath.Dir(stagePath), 0755); err != nil {
 					return installedSidecars, err
 				}
-				_ = os.Remove(srcPath)
+				if err := os.Rename(srcPath, stagePath); err != nil {
+					_ = os.Remove(stagePath)
+					if err := copyFile(srcPath, stagePath); err != nil {
+						return installedSidecars, err
+					}
+					_ = os.Remove(srcPath)
+				}
 			}
-			_ = os.Chmod(dstPath, 0755)
-
-			installedSidecars = append(installedSidecars, dstPath)
+			deployedPath, err := rel.DeploySidecarFile(stagePath, item, dstDir)
+			if err != nil {
+				log.Warn("could not deploy sidecar file", "error", err, "item", item)
+				continue
+			}
+			installedSidecars = append(installedSidecars, deployedPath)
 			if r != nil {
-				r.InstalledSidecars = append(r.InstalledSidecars, dstPath)
+				r.InstalledSidecars = append(r.InstalledSidecars, deployedPath)
 			}
 		}
 
@@ -1799,7 +1777,7 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 			ownerID = ""
 			repoID = parts[0]
 		}
-		symlinkDir = filepath.Join(homeDir, "src", "apps", ownerID, repoID)
+		symlinkDir = release.ResolvePackageDir(ownerID, repoID)
 	} else if r.Symlink {
 		// Regular installs only use symlink if explicitly requested
 		var ownerID, repoID string
@@ -1810,7 +1788,7 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 			ownerID = ""
 			repoID = parts[0]
 		}
-		symlinkDir = filepath.Join(homeDir, "src", "apps", ownerID, repoID)
+		symlinkDir = release.ResolvePackageDir(ownerID, repoID)
 	}
 
 	if r.DryRun {
@@ -2191,7 +2169,8 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 	}
 
 	if symlinkDir != "" {
-		if err := createSymlinks(symlinkDir, r.TargetPath); err != nil {
+		rel := release.MakeGithubRelease(&r.ExecContext, nil)
+		if err := rel.DeployBinariesFromStaging(symlinkDir, r.TargetPath); err != nil {
 			return fmt.Errorf("failed to create symlinks: %w", err)
 		}
 	}
@@ -2615,52 +2594,14 @@ func loadConfig() *config.Config {
 
 // createSymlinks creates symlinks from executables in symlinkDir (and allowed subdirectories service, preferences) to targetPath
 func createSymlinks(symlinkDir, targetPath string) error {
-	if err := os.MkdirAll(targetPath, 0755); err != nil {
-		return fmt.Errorf("failed to create target directory: %w", err)
-	}
-
-	dirsToScan := []string{symlinkDir}
-	for _, sub := range []string{"service", "preferences"} {
-		subDir := filepath.Join(symlinkDir, sub)
-		if info, err := os.Stat(subDir); err == nil && info.IsDir() {
-			dirsToScan = append(dirsToScan, subDir)
-		}
-	}
-
-	for _, dir := range dirsToScan {
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
-			return fmt.Errorf("failed to read directory %s: %w", dir, err)
-		}
-
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				// Check if file is executable
-				info, err := entry.Info()
-				if err != nil {
-					continue
-				}
-				if info.Mode()&0111 != 0 { // Check if executable
-					srcPath := filepath.Join(dir, entry.Name())
-					destPath := filepath.Join(targetPath, entry.Name())
-
-					// Remove existing symlink/file if exists
-					if err := os.Remove(destPath); err != nil && !os.IsNotExist(err) {
-						return fmt.Errorf("failed to remove existing file/symlink %s: %w", destPath, err)
-					}
-
-					if err := os.Symlink(srcPath, destPath); err != nil {
-						return fmt.Errorf("failed to create symlink %s -> %s: %w", destPath, srcPath, err)
-					}
-
-					log.Info("created symlink", "source", srcPath, "dest", destPath)
-				}
-			}
-		}
-	}
-
-	return nil
+	rel := release.MakeGithubRelease(&params.ExecContext{
+		CommonInstallFlags: params.CommonInstallFlags{
+			SharedInstallSourceFlags: params.SharedInstallSourceFlags{
+				TargetFlags: params.TargetFlags{
+					TargetPath: targetPath,
+				},
+			},
+		},
+	}, nil)
+	return rel.DeployBinariesFromStaging(symlinkDir, targetPath)
 }

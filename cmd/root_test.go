@@ -13,6 +13,7 @@ import (
 	"github.com/adrg/xdg"
 	"github.com/joshsukhdeo/gh-pt/compile"
 	"github.com/joshsukhdeo/gh-pt/params"
+	"github.com/joshsukhdeo/gh-pt/release"
 	"github.com/joshsukhdeo/gh-pt/state"
 	"github.com/joshsukhdeo/gh-pt/ui"
 	"github.com/stretchr/testify/assert"
@@ -304,12 +305,12 @@ func TestRootCLI_VirusTotal_AutoEnable(t *testing.T) {
 				r.VTApiKey = os.Getenv("VT_API_KEY")
 			}
 		}
-		if r.VTApiKey != "" && !r.Barbarous {
+		if r.VTApiKey != "" {
 			r.SkipVtSandbox = false
 		}
 		if r.CliParams != nil {
 			r.CliParams.VTApiKey = r.VTApiKey
-			if r.VTApiKey != "" && !r.Barbarous {
+			if r.VTApiKey != "" {
 				r.CliParams.SkipVtSandbox = false
 			}
 		}
@@ -317,35 +318,6 @@ func TestRootCLI_VirusTotal_AutoEnable(t *testing.T) {
 		assert.Equal(t, "test-env-key-12345", r.VTApiKey)
 		assert.False(t, r.SkipVtSandbox, "SkipVtSandbox should be false (VT enabled)")
 		assert.False(t, r.CliParams.SkipVtSandbox)
-	})
-
-	t.Run("Barbarous_Overrides_AutoEnable", func(t *testing.T) {
-		t.Setenv("VT_API_KEY", "test-env-key-12345")
-		r := &RootCLI{
-			ExecContext: params.ExecContext{
-				Repository:    "owner/repo",
-				Barbarous:     true,
-				SkipVtSandbox: true,
-			},
-		}
-		r.ensureCliParams()
-
-		if r.VTApiKey == "" {
-			if os.Getenv("VT_API_KEY") != "" {
-				r.VTApiKey = os.Getenv("VT_API_KEY")
-			}
-		}
-		if r.VTApiKey != "" && !r.Barbarous {
-			r.SkipVtSandbox = false
-		}
-		if r.CliParams != nil {
-			r.CliParams.VTApiKey = r.VTApiKey
-			if r.VTApiKey != "" && !r.Barbarous {
-				r.CliParams.SkipVtSandbox = false
-			}
-		}
-
-		assert.True(t, r.SkipVtSandbox, "Barbarous flag should keep SkipVtSandbox true")
 	})
 }
 
@@ -482,4 +454,124 @@ func TestMoveDistAndCreateSymlinks_GnomeExtensionBundle(t *testing.T) {
 	target2, err := os.Readlink(daemonSymlink)
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(symlinkDir, "service", "daemon.js"), target2)
+}
+
+func TestTargetPathCreate_WhenDirMissing(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	t.Setenv("XDG_DATA_HOME", filepath.Join(homeDir, ".local", "share"))
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(homeDir, ".config"))
+	xdg.Reload()
+
+	missingDir := filepath.Join(tmpDir, "missing-bin")
+	r := &RootCLI{
+		ExecContext: params.ExecContext{
+			Repository: "cli/cli",
+		},
+	}
+	r.TargetPath = missingDir
+	r.TargetPathCreate = true
+	r.ensureCliParams()
+
+	err := r.Validate()
+	require.NoError(t, err)
+	assert.DirExists(t, missingDir)
+
+	// When TargetPathCreate is false, validation should fail
+	missingDir2 := filepath.Join(tmpDir, "missing-bin-2")
+	r2 := &RootCLI{
+		ExecContext: params.ExecContext{
+			Repository: "cli/cli",
+		},
+	}
+	r2.TargetPath = missingDir2
+	r2.TargetPathCreate = false
+	r2.ensureCliParams()
+
+	err2 := r2.Validate()
+	assert.Error(t, err2)
+	assert.NoDirExists(t, missingDir2)
+}
+
+func TestCompileFromSource_UsesADR004PackagePath(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	t.Setenv("XDG_DATA_HOME", filepath.Join(homeDir, ".local", "share"))
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(homeDir, ".config"))
+	xdg.Reload()
+
+	resolved := release.ResolvePackageDir("coolorg", "coolapp")
+	expected := filepath.Join(xdg.DataHome, "gh-pt", "packages", "coolorg", "coolapp")
+	assert.Equal(t, expected, resolved)
+}
+
+func TestCompileFromSource_AppliesRenameRules(t *testing.T) {
+	tmpDir := t.TempDir()
+	stagingDir := filepath.Join(tmpDir, "staging")
+	targetPath := filepath.Join(tmpDir, "bin")
+	require.NoError(t, os.MkdirAll(stagingDir, 0755))
+	require.NoError(t, os.MkdirAll(targetPath, 0755))
+
+	require.NoError(t, os.WriteFile(filepath.Join(stagingDir, "original-tool"), []byte("#!/bin/sh\necho hi"), 0755))
+
+	r := &RootCLI{
+		ExecContext: params.ExecContext{
+			Repository: "tool/tool",
+		},
+	}
+	r.TargetPath = targetPath
+	r.Rename = map[string]string{
+		"original-tool": "renamed-tool",
+	}
+	r.NoCompletionSetup = true
+	r.ensureCliParams()
+
+	rel := release.MakeGithubRelease(&r.ExecContext, nil)
+	err := rel.DeployBinariesFromStaging(stagingDir, targetPath)
+	require.NoError(t, err)
+
+	assert.FileExists(t, filepath.Join(targetPath, "renamed-tool"))
+	assert.NoFileExists(t, filepath.Join(targetPath, "original-tool"))
+}
+
+func TestCompileFromSource_RespectsSidecarMode(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	targetBin := filepath.Join(homeDir, ".local", "bin")
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	t.Setenv("XDG_DATA_HOME", filepath.Join(homeDir, ".local", "share"))
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(homeDir, ".config"))
+	xdg.Reload()
+
+	distDir := filepath.Join(tmpDir, "dist")
+	symlinkDir := filepath.Join(tmpDir, "symlink")
+	require.NoError(t, os.MkdirAll(distDir, 0755))
+	require.NoError(t, os.MkdirAll(symlinkDir, 0755))
+	require.NoError(t, os.MkdirAll(targetBin, 0755))
+
+	// Create a suspected sidecar inside dist
+	testSo := filepath.Join(distDir, "libhelper.so")
+	require.NoError(t, os.WriteFile(testSo, []byte("so-data"), 0755))
+
+	r := &RootCLI{
+		ExecContext: params.ExecContext{
+			Repository: "myorg/mytool",
+		},
+	}
+	r.TargetPath = targetBin
+	r.IncludeSidecars = true
+	r.SidecarMode = "xdg_data_home"
+	r.ensureCliParams()
+
+	sidecars, err := r.moveDistWithSidecarDetection(distDir, symlinkDir)
+	require.NoError(t, err)
+
+	expectedSidecarPath := filepath.Join(xdg.DataHome, "gh-pt", "sidecars", "myorg/mytool", "libhelper.so")
+	assert.Contains(t, sidecars, expectedSidecarPath)
+	assert.FileExists(t, expectedSidecarPath)
 }

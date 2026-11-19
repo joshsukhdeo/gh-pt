@@ -63,7 +63,7 @@ func RunCommand(cmdStr string, cli *params.CLI) error {
 
 	switch cmdStr {
 	case "install", "install <repository>":
-		r.CommonInstallFlags = cli.Install.CommonInstallFlags
+		r.CommonInstallFlags = cli.Install.ToCommonInstallFlags()
 		r.Repository = cli.Install.Repository
 		r.SpecificallyTargeted = cli.Install.Repository != ""
 		resolveDisplayPreferences(&r.CommonInstallFlags, r)
@@ -100,6 +100,8 @@ func RunCommand(cmdStr string, cli *params.CLI) error {
 		}
 		r.NoColor = cli.Upgrade.NoColor
 		r.NoEmojis = cli.Upgrade.NoEmojis
+		r.NoCompileContainer = cli.Upgrade.NoCompileContainer
+		r.NoAIContainer = cli.Upgrade.NoAIContainer
 		r.IsUpgradeCmd = true
 		resolveDisplayPreferences(&r.CommonInstallFlags, r)
 		if !cli.Upgrade.User && !cli.Upgrade.Global {
@@ -170,7 +172,7 @@ func RunCommand(cmdStr string, cli *params.CLI) error {
 		// Handle both repo clone and repo fork subcommands
 		// kong populates either cli.Repo.Clone or cli.Repo.Fork based on subcommand used
 		if cli.Repo.Clone.Repository != "" {
-			r.CommonInstallFlags = cli.Install.CommonInstallFlags
+			r.CommonInstallFlags = cli.Install.ToCommonInstallFlags()
 			r.Repository = cli.Repo.Clone.Repository
 			r.Clone = true
 			r.Overwrite = cli.Repo.Clone.Force
@@ -182,7 +184,7 @@ func RunCommand(cmdStr string, cli *params.CLI) error {
 			return r.RunInstall()
 		}
 		if cli.Repo.Fork.Repository != "" {
-			r.CommonInstallFlags = cli.Install.CommonInstallFlags
+			r.CommonInstallFlags = cli.Install.ToCommonInstallFlags()
 			r.Repository = cli.Repo.Fork.Repository
 			r.Fork = true
 			r.Overwrite = cli.Repo.Fork.Force
@@ -202,13 +204,16 @@ func RunCommand(cmdStr string, cli *params.CLI) error {
 		}
 		return fmt.Errorf("unknown repo subcommand")
 	case "source", "source <repository>":
-		r.CommonInstallFlags = cli.Source.CommonInstallFlags
+		r.CommonInstallFlags = cli.Source.ToCommonInstallFlags()
 		r.Repository = cli.Source.Repository
+		r.SpecificallyTargeted = cli.Source.Repository != ""
 		r.CompileFromSource = true
 		r.AI = true
 		r.Track = "latest-commit" // Default for source builds
 		r.TargetOS = cli.Source.TargetOS
 		r.TargetArch = cli.Source.TargetArch
+		r.NoCompileContainer = cli.Source.NoCompileContainer
+		r.NoAIContainer = cli.Source.NoAIContainer
 		resolveDisplayPreferences(&r.CommonInstallFlags, r)
 		aiCmd := cli.Source.AICmd
 		if aiCmd == "" {

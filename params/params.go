@@ -149,7 +149,6 @@ type TargetFlags struct {
 	TargetPath       string            `default:"${install_path}" short:"p" type:"path" help:"Target installation directory (default: ~/.local/bin or /usr/local/bin if --global)."`
 	Global           bool              `short:"g" help:"Install globally (e.g. /usr/local/bin) instead of user bin."`
 	Rename           map[string]string `optional:"" short:"t" help:"Rename binaries installed at target path."`
-	KeepSuffixes     bool              `short:"k" help:"Keep OS/hardware suffixes on extracted binaries."`
 	TargetPathCreate bool              `default:"true" negatable:"" help:"Create target installation directory if it does not exist."`
 	Overwrite        bool              `default:"false" short:"f" name:"force" aliases:"overwrite" env:"GH_PT_FORCE" help:"Overwrite target binaries."`
 	Symlink          bool              `env:"GH_PT_SYMLINK" help:"Extract entire release to package store and symlink executables."`
@@ -173,29 +172,25 @@ type VerificationFlags struct {
 // Plugin constants
 const PluginGnome = "gnome-extension"
 
-// SidecarFlags controls non-binary companion assets, plugins, and runtime data.
-type SidecarFlags struct {
-	Sidecars           string   `optional:"" name:"sidecars" short:"S" help:"Regex pattern for sidecar assets to capture (default: \\\\.so.*|\\\\.h.*|\\\\.pak|\\\\.bin|\\\\.red)."`
-	SidecarSymlinkTo   []string `optional:"" help:"Create symlinks from sidecars to these directories (can be specified multiple times)."`
-	IncludeSidecars    bool     `name:"include-sidecars" short:"s" negatable:"" env:"GH_PT_INCLUDE_SIDECARS" help:"Include companion sidecar assets (auto-detects placement)."`
-	SidecarMode        string   `optional:"" name:"sidecar-mode" env:"GH_PT_SIDECAR_MODE" predictor:"sidecar_modes" predict:"sidecar_modes" help:"Sidecar placement mode: auto (maps standard Unix layout to prefix, else xdg_data_home), local-map, xdg_data_home, or custom-path:/path/to/ (default: auto)."`
-	Driver             string   `optional:"" name:"driver" enum:"auto,vulkan,opencl,vaapi,udev,ldso,none" default:"none" help:"Register hardware/userspace driver manifests: auto, vulkan, opencl, vaapi, udev, ldso (Linux only)."`
-	DriverMap          string   `optional:"" name:"driver-map" help:"Map asset/file regex patterns to driver subsystems. Format: 'regex1:driver1,regex2:driver2,...'. Example: '.*\\.icd:opencl,.*\\.json:vulkan,.*\\.conf:ldso'."`
-	Plugin             string   `optional:"" name:"plugin" aliases:"plugins" enum:"auto,obs,gimp,vst,lv2,clap,audio,gnome,gnome-extension,gearlever,none" default:"none" help:"Register host application plugin manifests or symlinks: auto, obs, gimp, vst, lv2, clap, audio, gnome, gnome-extension (Linux only)."`
-	EnvInject          []string `optional:"" help:"Environment variables pointing to sidecar directory (KEY=VALUE)."`
-	WarnUnmappedAssets bool     `default:"true" negatable:"" help:"Warn about suspected unmapped sidecar assets."`
-	AISetupSidecars    bool     `help:"Use AI to analyze sidecars and generate post-install setup commands."`
+// DriverPluginFlags controls Linux driver manifests, plugins, and companion sidecars.
+type DriverPluginFlags struct {
+	IncludeSidecars    bool   `name:"include-sidecars" short:"s" negatable:"" env:"GH_PT_INCLUDE_SIDECARS" help:"Include companion sidecar assets (auto-detects placement)."`
+	SidecarMode        string `optional:"" name:"sidecar-mode" env:"GH_PT_SIDECAR_MODE" predictor:"sidecar_modes" predict:"sidecar_modes" help:"Sidecar placement mode: auto (maps standard Unix layout to prefix, else xdg_data_home), local-map, xdg_data_home, or custom-path:/path/to/ (default: auto)."`
+	Driver             string `optional:"" name:"driver" enum:"auto,vulkan,opencl,vaapi,udev,ldso,none" default:"none" help:"Register hardware/userspace driver manifests: auto, vulkan, opencl, vaapi, udev, ldso (Linux only)."`
+	DriverMap          string `optional:"" name:"driver-map" help:"Map asset/file regex patterns to driver subsystems. Format: 'regex1:driver1,regex2:driver2,...'. Example: '.*\\.icd:opencl,.*\\.json:vulkan,.*\\.conf:ldso'."`
+	Plugin             string `optional:"" name:"plugin" aliases:"plugins" enum:"auto,obs,gimp,vst,lv2,clap,audio,gnome,gnome-extension,gearlever,none" default:"none" help:"Register host application plugin manifests or symlinks: auto, obs, gimp, vst, lv2, clap, audio, gnome, gnome-extension (Linux only)."`
+	WarnUnmappedAssets bool   `default:"true" negatable:"" help:"Warn about suspected unmapped sidecar assets."`
 }
 
 // AfterApply is a kong hook that resolves sidecar settings after CLI parsing.
-func (s *SidecarFlags) AfterApply(ctx *kong.Context) error {
+func (s *DriverPluginFlags) AfterApply(ctx *kong.Context) error {
 	s.ResolveSidecars(ctx)
 	return nil
 }
 
 // ResolveSidecars auto-enables IncludeSidecars if SidecarMode, Driver, or Plugin is explicitly provided,
 // non-empty, and != "none" or "default", unless IncludeSidecars was explicitly set to false.
-func (s *SidecarFlags) ResolveSidecars(ctx ...*kong.Context) {
+func (s *DriverPluginFlags) ResolveSidecars(ctx ...*kong.Context) {
 	mode := strings.ToLower(strings.TrimSpace(s.SidecarMode))
 	driver := strings.ToLower(strings.TrimSpace(s.Driver))
 	plugin := strings.ToLower(strings.TrimSpace(s.Plugin))
@@ -223,61 +218,96 @@ func (s *SidecarFlags) ResolveSidecars(ctx ...*kong.Context) {
 	}
 }
 
-// ExecutionFlags controls interactive runtime behavior and compatibility switches.
-type ExecutionFlags struct {
-	Interactive          bool     `default:"false" short:"i" help:"Use interactive installation."`
-	DisablePrompts       bool     `short:"D" env:"GH_PT_DISABLE_PROMPTS" help:"Disable all interactive prompts."`
-	NoSaveState          bool     `env:"GH_PT_NO_SAVE_STATE" help:"Do not save installation to state."`
-	Wine                 string   `default:"off" enum:"force,priority,allow,off" env:"GH_PT_WINE" help:"Wine mode."`
-	AllowForeignArch     bool     `env:"GH_PT_ALLOW_FOREIGN_ARCH" help:"Allow installing assets with foreign architectures."`
-	AllowRootUserInstall bool     `help:"Allow installation to user-local paths when running as root."`
-	ForceRoot            bool     `name:"force-root" env:"GH_PT_FORCE_ROOT" help:"Allow operations when running as root (suppresses root restriction)."`
-	NoCompileContainer   bool     `name:"no-compile-container" env:"GH_PT_NO_COMPILE_CONTAINER" help:"Opt out of mandatory container isolation for AI source compilation (UNSAFE)."`
-	NoAIContainer        bool     `name:"no-ai-container" env:"GH_PT_NO_AI_CONTAINER" help:"Run AI generation directly on the host machine without container isolation (UNSAFE)."`
-	Extractor            string   `env:"GH_PT_EXTRACTOR" predictor:"extractors" predict:"extractors" help:"Archive extractor precedence (default, ouch, native, internal)." default:"${extractor}"`
-	AllowDowngrade       bool     `help:"Allow downgrades when updating or installing."`
-	SelfInflictedDebt    bool     `name:"self-inflicted-technical-debt" help:"Allow downgrades (alias for allow-downgrade)."`
-	LeRetrogrouch        bool     `name:"LE-RETROGROUCH" help:"Exclusively downgrade and save unpinned with Le_RetroGrouch flag."`
-	RetrogradeStopgap    bool     `name:"retrograde-stopgap" help:"Exclusively downgrade, unpin, and pin the resultant version."`
-	Barbarous            bool     `name:"BARBAROUS" help:"Bypass VT security, skip hashes, allow wine, foreign arch, downgrades."`
-	PinInstall           bool     `name:"pin-install" default:"false" help:"Pin this installation to the current version."`
-	DryRun               bool     `default:"false" help:"Show what would be downloaded."`
-	NoCompletionSetup    bool     `name:"no-completion-setup" help:"Do not automatically install shell autocompletion scripts for extracted binaries."`
-	Gearlever            bool     `name:"gearlever" env:"GH_PT_GEARLEVER" help:"Install AppImage via Gear Lever and do not manage the package."`
-	Extract              []string `optional:"" short:"b" help:"If release asset is an archive - names of binaries to extract and install (comma-separated or multiple flags)."`
-	ExtractRegex         string   `optional:"" short:"B" help:"If release asset is an archive - regular expression matching binaries in the archive to extract and install."`
-	IsUpgradeCmd         bool     `kong:"-"`
-	SpecificallyTargeted bool     `kong:"-"`
+// SharedRuntimeFlags controls runtime behavior and compatibility switches across commands.
+type SharedRuntimeFlags struct {
+	Interactive    bool `default:"false" short:"i" help:"Use interactive installation."`
+	DisablePrompts bool `short:"D" env:"GH_PT_DISABLE_PROMPTS" help:"Disable all interactive prompts."`
+	NoSaveState    bool `env:"GH_PT_NO_SAVE_STATE" help:"Do not save installation to state."`
+	ForceRoot      bool `name:"force-root" env:"GH_PT_FORCE_ROOT" help:"Allow operations when running as root (suppresses root restriction)."`
+	AllowDowngrade bool `help:"Allow downgrades when updating or installing."`
+	PinInstall     bool `name:"pin-install" default:"false" help:"Pin this installation to the current version."`
+	DryRun         bool `default:"false" help:"Show what would be downloaded or built."`
+}
+
+// ReleaseExtractorFlags controls archive extraction and platform compatibility layers for release assets.
+type ReleaseExtractorFlags struct {
+	Extractor         string   `env:"GH_PT_EXTRACTOR" predictor:"extractors" predict:"extractors" help:"Archive extractor precedence (default, ouch, native, internal)." default:"${extractor}"`
+	Wine              string   `default:"off" enum:"force,priority,allow,off" env:"GH_PT_WINE" help:"Wine mode."`
+	AllowForeignArch  bool     `env:"GH_PT_ALLOW_FOREIGN_ARCH" help:"Allow installing assets with foreign architectures."`
+	KeepSuffixes      bool     `short:"k" help:"Keep OS/hardware suffixes on extracted binaries."`
+	NoCompletionSetup bool     `name:"no-completion-setup" help:"Do not automatically install shell autocompletion scripts for extracted binaries."`
+	Gearlever         bool     `name:"gearlever" env:"GH_PT_GEARLEVER" help:"Install AppImage via Gear Lever and do not manage the package."`
+	Extract           []string `optional:"" short:"b" help:"If release asset is an archive - names of binaries to extract and install (comma-separated or multiple flags)."`
+	ExtractRegex      string   `optional:"" short:"B" help:"If release asset is an archive - regular expression matching binaries in the archive to extract and install."`
+	Sidecars          string   `optional:"" name:"sidecars" short:"S" help:"Regex pattern for sidecar assets to capture (default: \\\\.so.*|\\\\.h.*|\\\\.pak|\\\\.bin|\\\\.red)."`
+	SidecarSymlinkTo  []string `optional:"" help:"Create symlinks from sidecars to these directories (can be specified multiple times)."`
+}
+
+// SourceBuildFlags controls source compilation and container isolation.
+type SourceBuildFlags struct {
+	AICmd              string `help:"Command template for AI execution."`
+	TargetOS           string `help:"Target operating system for cross-compilation (e.g., linux, windows, darwin)."`
+	TargetArch         string `help:"Target architecture for cross-compilation (e.g., amd64, arm64, arm)."`
+	NoCompileContainer bool   `name:"no-compile-container" env:"GH_PT_NO_COMPILE_CONTAINER" help:"Opt out of mandatory container isolation for AI source compilation (UNSAFE)."`
+	NoAIContainer      bool   `name:"no-ai-container" env:"GH_PT_NO_AI_CONTAINER" help:"Run AI generation directly on the host machine without container isolation (UNSAFE)."`
 }
 
 // OutputFlags controls UI progress display, styling, and colorization.
 type OutputFlags struct {
-	ProgressBar string `name:"progress-bar" env:"GH_PT_PROGRESS_BAR" predictor:"progress_bars" predict:"progress_bars" help:"Progress bar style: pacman, standard, spinner:<style>, or none. Spinner styles: dots, line, jump, pulse, points, miniDot, step"`
-	NoColor     bool   `name:"no-color" aliases:"no-colors" env:"GH_PT_NO_COLOR" help:"Disable color output."`
-	NoEmojis    bool   `name:"no-emojis" aliases:"no-emoji" env:"GH_PT_NO_EMOJIS" help:"Disable emoji/icon output."`
+	NoColor  bool `name:"no-color" aliases:"no-colors" env:"GH_PT_NO_COLOR" help:"Disable color output."`
+	NoEmojis bool `name:"no-emojis" aliases:"no-emoji" env:"GH_PT_NO_EMOJIS" help:"Disable emoji/icon output."`
 }
 
-// Shared flags across commands
-type CommonInstallFlags struct {
-	ResolutionFlags
+// SharedInstallSourceFlags combines flags common to both release and source installs.
+type SharedInstallSourceFlags struct {
 	TargetFlags
 	DependencyFlags
-	VerificationFlags
-	SidecarFlags
-	ExecutionFlags
+	DriverPluginFlags
+	SharedRuntimeFlags
 	OutputFlags
+}
+
+// ReleaseAssetFlags combines flags applicable strictly to pre-built release assets.
+type ReleaseAssetFlags struct {
+	ResolutionFlags
+	VerificationFlags
+	ReleaseExtractorFlags
+	ProgressBar string `name:"progress-bar" env:"GH_PT_PROGRESS_BAR" predictor:"progress_bars" predict:"progress_bars" help:"Progress bar style: pacman, standard, spinner:<style>, or none. Spinner styles: dots, line, jump, pulse, points, miniDot, step"`
+}
+
+// SidecarFlags is kept as an alias to DriverPluginFlags for backward compatibility.
+type SidecarFlags = DriverPluginFlags
+
+// ExecutionFlags is kept as an alias to SharedRuntimeFlags for backward compatibility.
+type ExecutionFlags = SharedRuntimeFlags
+
+// CommonInstallFlags combines all flags for backward compatibility across internal handlers.
+type CommonInstallFlags struct {
+	SharedInstallSourceFlags
+	ReleaseAssetFlags
+	SourceBuildFlags
+	IsUpgradeCmd         bool `kong:"-"`
+	SpecificallyTargeted bool `kong:"-"`
 }
 
 type InstallCmd struct {
 	Repository string `arg:"" env:"GH_PT_REPOSITORY" optional:"" predictor:"github_repos" predict:"github_repos" help:"Github repository in OWNER/REPOSITORY_NAME format."`
-	CommonInstallFlags
+	SharedInstallSourceFlags
+	ReleaseAssetFlags
+}
+
+func (c *InstallCmd) ToCommonInstallFlags() CommonInstallFlags {
+	return CommonInstallFlags{
+		SharedInstallSourceFlags: c.SharedInstallSourceFlags,
+		ReleaseAssetFlags:        c.ReleaseAssetFlags,
+	}
 }
 
 // ToExecContext converts InstallCmd into an ExecContext with resolved parameters.
 func (c *InstallCmd) ToExecContext() ExecContext {
 	c.ResolveSidecars()
 	ctx := ExecContext{
-		CommonInstallFlags: c.CommonInstallFlags,
+		CommonInstallFlags: c.ToCommonInstallFlags(),
 		Repository:         c.Repository,
 	}
 	ctx.SpecificallyTargeted = c.Repository != ""
@@ -376,6 +406,8 @@ type UpgradeFlags struct {
 	ProgressBar           string `name:"progress-bar" env:"GH_PT_PROGRESS_BAR" predictor:"progress_bars" predict:"progress_bars" help:"Progress bar style: pacman, standard, spinner:<style>, or none. Spinner styles: dots, line, jump, pulse, points, miniDot, step"`
 	NoColor               bool   `name:"no-color" aliases:"no-colors" env:"GH_PT_NO_COLOR" help:"Disable color output."`
 	NoEmojis              bool   `name:"no-emojis" aliases:"no-emoji" env:"GH_PT_NO_EMOJIS" help:"Disable emoji/icon output."`
+	NoCompileContainer    bool   `name:"no-compile-container" env:"GH_PT_NO_COMPILE_CONTAINER" help:"Opt out of mandatory container isolation for AI source compilation (UNSAFE)."`
+	NoAIContainer         bool   `name:"no-ai-container" env:"GH_PT_NO_AI_CONTAINER" help:"Run AI generation directly on the host machine without container isolation (UNSAFE)."`
 }
 
 type UpgradeCmd struct {
@@ -496,11 +528,27 @@ func (h *Hook) Run() error {
 }
 
 type SourceCmd struct {
-	Repository string `arg:"" env:"GH_PT_REPOSITORY" predictor:"github_repos" predict:"github_repos" help:"Github repository."`
-	AICmd      string `help:"Command template for AI execution."`
-	TargetOS   string `help:"Target operating system for cross-compilation (e.g., linux, windows, darwin)."`
-	TargetArch string `help:"Target architecture for cross-compilation (e.g., amd64, arm64, arm)."`
-	CommonInstallFlags
+	Repository string `arg:"" env:"GH_PT_REPOSITORY" predictor:"github_repos" predict:"github_repos" help:"Github repository in OWNER/REPOSITORY_NAME format."`
+	SharedInstallSourceFlags
+	SourceBuildFlags
+}
+
+func (c *SourceCmd) ToCommonInstallFlags() CommonInstallFlags {
+	return CommonInstallFlags{
+		SharedInstallSourceFlags: c.SharedInstallSourceFlags,
+		SourceBuildFlags:         c.SourceBuildFlags,
+	}
+}
+
+// ToExecContext converts SourceCmd into an ExecContext with resolved parameters.
+func (c *SourceCmd) ToExecContext() ExecContext {
+	c.ResolveSidecars()
+	ctx := ExecContext{
+		CommonInstallFlags: c.ToCommonInstallFlags(),
+		Repository:         c.Repository,
+	}
+	ctx.SpecificallyTargeted = c.Repository != ""
+	return ctx
 }
 
 type CompletionsCmd struct {

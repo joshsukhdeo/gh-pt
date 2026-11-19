@@ -33,12 +33,16 @@ Establish a clean, domain-partitioned CLI flag architecture across `install`, `s
 
 ---
 
+## Completed Tickets
+
+- [x] [Ticket 1: Kong Struct Hierarchy Refactor & Dead/Redundant Flag Pruning](#ticket-1-kong-struct-hierarchy-refactor--deadredundant-flag-pruning) (`wayfinder:task`, AFK)
+- [x] [Ticket 2: ADR-004 Package Store Directory & Atomic Symlink/Rename Engine Unification](#ticket-2-adr-004-package-store-directory--atomic-symlinkrename-engine-unification) (`wayfinder:task`, AFK)
+- [x] [Ticket 3: Sidecar Mode & Intermediate Dist Handoff Unification](#ticket-3-sidecar-mode--intermediate-dist-handoff-unification) (`wayfinder:task`, AFK)
+- [x] [Ticket 4: Upgrade Replay Hygiene & Full Integration Verification](#ticket-4-upgrade-replay-hygiene--full-integration-verification) (`wayfinder:task`, AFK)
+
 ## Open Tickets
 
-- [Ticket 1: Kong Struct Hierarchy Refactor & Dead/Redundant Flag Pruning](#ticket-1-kong-struct-hierarchy-refactor--deadredundant-flag-pruning) (`wayfinder:task`, AFK)
-- [Ticket 2: ADR-004 Package Store Directory & Atomic Symlink/Rename Engine Unification](#ticket-2-adr-004-package-store-directory--atomic-symlinkrename-engine-unification) (`wayfinder:task`, AFK)
-- [Ticket 3: Sidecar Mode & Intermediate Dist Handoff Unification](#ticket-3-sidecar-mode--intermediate-dist-handoff-unification) (`wayfinder:task`, AFK)
-- [Ticket 4: Upgrade Replay Hygiene & Full Integration Verification](#ticket-4-upgrade-replay-hygiene--full-integration-verification) (`wayfinder:task`, AFK)
+None.
 
 ---
 
@@ -52,6 +56,8 @@ Establish a clean, domain-partitioned CLI flag architecture across `install`, `s
 
 ### Ticket 1: Kong Struct Hierarchy Refactor & Dead/Redundant Flag Pruning
 **Label:** `wayfinder:task` (AFK)  
+**Status:** COMPLETED  
+**Verification:** CommonInstallFlags decomposed into composable domain structs (SharedInstallSourceFlags, ReleaseAssetFlags, SourceBuildFlags). Dead/joke flags pruned (--env-inject, --BARBAROUS, etc.). Help outputs verified; integration tests in params/ pass.  
 **Deliverable:**
 1. In `params/params.go`:
    - Decompose `CommonInstallFlags` into:
@@ -87,6 +93,8 @@ Establish a clean, domain-partitioned CLI flag architecture across `install`, `s
 
 ### Ticket 2: ADR-004 Package Store Directory & Atomic Symlink/Rename Engine Unification
 **Label:** `wayfinder:task` (AFK)  
+**Status:** COMPLETED  
+**Verification:** Source builds unified onto ADR-004 canonical package store ($XDG_DATA_HOME/gh-pt/packages/{owner}/{repo}) with legacy ~/src/apps path fallback. Unified atomic symlinking and rename engine verified with tests.  
 **Deliverable:**
 1. In `cmd/root.go` (`handleCompileFromSource`):
    - Replace legacy `symlinkDir = filepath.Join(homeDir, "src", "apps", ownerID, repoID)` with canonical package directory resolver:
@@ -108,6 +116,8 @@ Establish a clean, domain-partitioned CLI flag architecture across `install`, `s
 
 ### Ticket 3: Sidecar Mode & Intermediate Dist Handoff Unification
 **Label:** `wayfinder:task` (AFK)  
+**Status:** COMPLETED  
+**Verification:** Dead compile.Execute and duplicate handleDistHandoff purged (-213 lines) from compile/compile.go. Unit test suite compile/compile_test.go added and passing (12/12 tests in compile/).  
 **Deliverable:**
 1. In `cmd/root.go` (`moveDistWithSidecarDetection`):
    - Replace hardcoded sidecar destination `filepath.Join(xdg.DataHome, "gh-pt", "sidecars")` with destination resolved by `--sidecar-mode`:
@@ -125,6 +135,8 @@ Establish a clean, domain-partitioned CLI flag architecture across `install`, `s
 
 ### Ticket 4: Upgrade Replay Hygiene & Full Integration Verification
 **Label:** `wayfinder:task` (AFK)  
+**Status:** COMPLETED  
+**Verification:** Upgrade replay logic isolated in cmd/update.go. Replay flags sanitized for source vs release builds. EnvInject deprecated cleanly. make build, make fmt, and rtk go test ./... passing with 100% success rate (804/804 tests).  
 **Deliverable:**
 1. In `cmd/update.go`:
    - In `processSingleUpdate` ([`cmd/update.go:178-226`](file:///home/tay/projects/gh-pt/cmd/update.go#L178-L226)):

@@ -1213,8 +1213,10 @@ func TestGithubRelease_InstallGearlever(t *testing.T) {
 	t.Run("fails when binary is not an AppImage", func(t *testing.T) {
 		cliParams := &params.ExecContext{
 			CommonInstallFlags: params.CommonInstallFlags{
-				ExecutionFlags: params.ExecutionFlags{
-					Gearlever: true,
+				ReleaseAssetFlags: params.ReleaseAssetFlags{
+					ReleaseExtractorFlags: params.ReleaseExtractorFlags{
+						Gearlever: true,
+					},
 				},
 			},
 		}
@@ -1241,12 +1243,18 @@ func TestGithubRelease_InstallGearlever(t *testing.T) {
 
 		cliParams := &params.ExecContext{
 			CommonInstallFlags: params.CommonInstallFlags{
-				ExecutionFlags: params.ExecutionFlags{
-					Gearlever:      true,
-					DisablePrompts: true,
+				ReleaseAssetFlags: params.ReleaseAssetFlags{
+					ReleaseExtractorFlags: params.ReleaseExtractorFlags{
+						Gearlever: true,
+					},
 				},
-				TargetFlags: params.TargetFlags{
-					Overwrite: true,
+				SharedInstallSourceFlags: params.SharedInstallSourceFlags{
+					SharedRuntimeFlags: params.SharedRuntimeFlags{
+						DisablePrompts: true,
+					},
+					TargetFlags: params.TargetFlags{
+						Overwrite: true,
+					},
 				},
 			},
 		}
@@ -1279,8 +1287,10 @@ func TestGithubRelease_InstallGearlever(t *testing.T) {
 
 		cliParams := &params.ExecContext{
 			CommonInstallFlags: params.CommonInstallFlags{
-				ExecutionFlags: params.ExecutionFlags{
-					Gearlever: true,
+				ReleaseAssetFlags: params.ReleaseAssetFlags{
+					ReleaseExtractorFlags: params.ReleaseExtractorFlags{
+						Gearlever: true,
+					},
 				},
 			},
 		}
@@ -1298,8 +1308,10 @@ func TestGithubRelease_InstallGearlever(t *testing.T) {
 
 		cliParams := &params.ExecContext{
 			CommonInstallFlags: params.CommonInstallFlags{
-				ExecutionFlags: params.ExecutionFlags{
-					Gearlever: true,
+				ReleaseAssetFlags: params.ReleaseAssetFlags{
+					ReleaseExtractorFlags: params.ReleaseExtractorFlags{
+						Gearlever: true,
+					},
 				},
 			},
 		}
@@ -1321,9 +1333,15 @@ func TestGithubRelease_InstallGearlever(t *testing.T) {
 
 		cliParams := &params.ExecContext{
 			CommonInstallFlags: params.CommonInstallFlags{
-				ExecutionFlags: params.ExecutionFlags{
-					Gearlever: true,
-					DryRun:    true,
+				ReleaseAssetFlags: params.ReleaseAssetFlags{
+					ReleaseExtractorFlags: params.ReleaseExtractorFlags{
+						Gearlever: true,
+					},
+				},
+				SharedInstallSourceFlags: params.SharedInstallSourceFlags{
+					SharedRuntimeFlags: params.SharedRuntimeFlags{
+						DryRun: true,
+					},
 				},
 			},
 		}
