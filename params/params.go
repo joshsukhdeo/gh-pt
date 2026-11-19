@@ -170,6 +170,9 @@ type VerificationFlags struct {
 	AI                    bool `help:"Use AI to scan and analyze releases."`
 }
 
+// Plugin constants
+const PluginGnome = "gnome-extension"
+
 // SidecarFlags controls non-binary companion assets, plugins, and runtime data.
 type SidecarFlags struct {
 	Sidecars           string   `optional:"" name:"sidecars" short:"S" help:"Regex pattern for sidecar assets to capture (default: \\\\.so.*|\\\\.h.*|\\\\.pak|\\\\.bin|\\\\.red)."`
@@ -178,7 +181,7 @@ type SidecarFlags struct {
 	SidecarMode        string   `optional:"" name:"sidecar-mode" env:"GH_PT_SIDECAR_MODE" predictor:"sidecar_modes" predict:"sidecar_modes" help:"Sidecar placement mode: auto (maps standard Unix layout to prefix, else xdg_data_home), local-map, xdg_data_home, or custom-path:/path/to/ (default: auto)."`
 	Driver             string   `optional:"" name:"driver" enum:"auto,vulkan,opencl,vaapi,udev,ldso,none" default:"none" help:"Register hardware/userspace driver manifests: auto, vulkan, opencl, vaapi, udev, ldso (Linux only)."`
 	DriverMap          string   `optional:"" name:"driver-map" help:"Map asset/file regex patterns to driver subsystems. Format: 'regex1:driver1,regex2:driver2,...'. Example: '.*\\.icd:opencl,.*\\.json:vulkan,.*\\.conf:ldso'."`
-	Plugin             string   `optional:"" name:"plugin" aliases:"plugins" enum:"auto,obs,gimp,vst,lv2,clap,audio,none" default:"none" help:"Register host application plugin manifests or symlinks: auto, obs, gimp, vst, lv2, clap, audio (Linux only)."`
+	Plugin             string   `optional:"" name:"plugin" aliases:"plugins" enum:"auto,obs,gimp,vst,lv2,clap,audio,gnome,gnome-extension,gearlever,none" default:"none" help:"Register host application plugin manifests or symlinks: auto, obs, gimp, vst, lv2, clap, audio, gnome, gnome-extension (Linux only)."`
 	EnvInject          []string `optional:"" help:"Environment variables pointing to sidecar directory (KEY=VALUE)."`
 	WarnUnmappedAssets bool     `default:"true" negatable:"" help:"Warn about suspected unmapped sidecar assets."`
 	AISetupSidecars    bool     `help:"Use AI to analyze sidecars and generate post-install setup commands."`

@@ -148,7 +148,7 @@ type AssetMatchCriteria struct {
 	AvxLevel         string
 }
 
-// IsAllowedBinaryDir checks if a file inside an archive sits in root, bin, bin32, or bin64.
+// IsAllowedBinaryDir checks if a file inside an archive sits in root, bin, bin32, bin64, service, or preferences.
 func IsAllowedBinaryDir(relPath string) bool {
 	clean := filepath.ToSlash(filepath.Clean(relPath))
 	parts := strings.Split(clean, "/")
@@ -157,11 +157,11 @@ func IsAllowedBinaryDir(relPath string) bool {
 	}
 	if len(parts) == 2 {
 		dir := parts[0]
-		return dir == "bin" || dir == "bin32" || dir == "bin64" || !strings.Contains(dir, "/")
+		return dir == "bin" || dir == "bin32" || dir == "bin64" || dir == "service" || dir == "preferences" || !strings.Contains(dir, "/")
 	}
 	if len(parts) == 3 {
 		dir := parts[1]
-		return dir == "bin" || dir == "bin32" || dir == "bin64"
+		return dir == "bin" || dir == "bin32" || dir == "bin64" || dir == "service" || dir == "preferences"
 	}
 	return false
 }

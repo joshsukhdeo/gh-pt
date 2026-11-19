@@ -434,3 +434,52 @@ func TestRootCLI_RunInstall_Gearlever(t *testing.T) {
 	assert.Equal(t, []string{"appimage"}, r.Type)
 	assert.Equal(t, []string{"appimage"}, r.CliParams.Type)
 }
+
+func TestMoveDistAndCreateSymlinks_GnomeExtensionBundle(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tmpDir)
+	xdg.Reload()
+
+	distDir := filepath.Join(tmpDir, "dist")
+	symlinkDir := filepath.Join(tmpDir, "symlink")
+	targetPath := filepath.Join(tmpDir, "bin")
+
+	require.NoError(t, os.MkdirAll(filepath.Join(distDir, "schemas"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(distDir, "service"), 0755))
+	require.NoError(t, os.MkdirAll(symlinkDir, 0755))
+	require.NoError(t, os.MkdirAll(targetPath, 0755))
+
+	require.NoError(t, os.WriteFile(filepath.Join(distDir, "metadata.json"), []byte(`{"uuid": "test@example.com"}`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(distDir, "schemas", "test.gschema.xml"), []byte(`<schemalist></schemalist>`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(distDir, "gsconnect"), []byte("#!/bin/sh\necho gsconnect"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(distDir, "service", "daemon.js"), []byte("#!/usr/bin/env gjs\n// daemon"), 0755))
+
+	r := &RootCLI{}
+	r.Plugin = "gnome-extension"
+	r.ensureCliParams()
+
+	installedSidecars, err := r.moveDistWithSidecarDetection(distDir, symlinkDir)
+	require.NoError(t, err)
+	assert.Empty(t, installedSidecars, "GNOME extension bundle files should not be routed to sidecars")
+
+	assert.FileExists(t, filepath.Join(symlinkDir, "metadata.json"))
+	assert.FileExists(t, filepath.Join(symlinkDir, "schemas", "test.gschema.xml"))
+	assert.FileExists(t, filepath.Join(symlinkDir, "gsconnect"))
+	assert.FileExists(t, filepath.Join(symlinkDir, "service", "daemon.js"))
+
+	require.NoError(t, createSymlinks(symlinkDir, targetPath))
+
+	gsconnectSymlink := filepath.Join(targetPath, "gsconnect")
+	daemonSymlink := filepath.Join(targetPath, "daemon.js")
+
+	assert.FileExists(t, gsconnectSymlink)
+	assert.FileExists(t, daemonSymlink)
+
+	target1, err := os.Readlink(gsconnectSymlink)
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(symlinkDir, "gsconnect"), target1)
+
+	target2, err := os.Readlink(daemonSymlink)
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(symlinkDir, "service", "daemon.js"), target2)
+}

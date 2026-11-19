@@ -32,6 +32,7 @@ const (
 	PluginLV2   DriverSubsystem = "lv2"
 	PluginCLAP  DriverSubsystem = "clap"
 	PluginAudio DriverSubsystem = "audio"
+	PluginGnome DriverSubsystem = "gnome-extension"
 	PluginNone  DriverSubsystem = "none"
 )
 
@@ -95,6 +96,18 @@ func getGimpPluginDir(global bool) string {
 		return sysPath("usr", "lib", "gimp", "2.0", "plug-ins")
 	}
 	return filepath.Join(xdg.ConfigHome, "GIMP", "2.10", "plug-ins")
+}
+
+func getGnomeExtensionDir(global bool) string {
+	if global {
+		return sysPath("usr", "share", "gnome-shell", "extensions")
+	}
+	dataHome := xdg.DataHome
+	if dataHome == "" {
+		home, _ := os.UserHomeDir()
+		dataHome = filepath.Join(home, ".local", "share")
+	}
+	return filepath.Join(dataHome, "gnome-shell", "extensions")
 }
 
 func getAudioPluginDir(subsystem DriverSubsystem, global bool) string {
@@ -417,8 +430,12 @@ func detectGIMPTargets(owner, repo, pkgDir string, global bool) ([]DriverManifes
 	var srcDir string
 	if fileExists(plugInsDir) {
 		srcDir = plugInsDir
-	} else {
+	} else if strings.Contains(strings.ToLower(repo), "gimp") || strings.Contains(strings.ToLower(owner), "gimp") {
 		srcDir = pkgDir
+	}
+
+	if srcDir == "" {
+		return nil, nil
 	}
 
 	destPath := filepath.Join(gimpDir, repo)
@@ -484,6 +501,47 @@ func detectAudioTargets(owner, repo, pkgDir string, pluginMode string, global bo
 				RequiresSudo: global,
 			})
 		}
+	}
+
+	return targets, nil
+}
+
+func detectGnomeExtensionTargets(owner, repo, pkgDir string, global bool) ([]DriverManifestTarget, error) {
+	var targets []DriverManifestTarget
+
+	metaFiles := findFilesByPattern(pkgDir, func(p string, info os.FileInfo) bool {
+		return !info.IsDir() && filepath.Base(p) == "metadata.json"
+	})
+
+	for _, mf := range metaFiles {
+		data, err := os.ReadFile(mf)
+		if err != nil {
+			continue
+		}
+		var meta struct {
+			UUID         string          `json:"uuid"`
+			ShellVersion json.RawMessage `json:"shell-version,omitempty"`
+		}
+		if err := json.Unmarshal(data, &meta); err != nil || strings.TrimSpace(meta.UUID) == "" {
+			continue
+		}
+		extRoot := filepath.Dir(mf)
+		destPath := filepath.Join(getGnomeExtensionDir(global), strings.TrimSpace(meta.UUID))
+
+		target := DriverManifestTarget{
+			Subsystem:    PluginGnome,
+			SourceFile:   extRoot,
+			DestPath:     destPath,
+			IsSymlink:    true,
+			RequiresSudo: global,
+		}
+
+		schemasDir := filepath.Join(extRoot, "schemas")
+		if info, err := os.Stat(schemasDir); err == nil && info.IsDir() {
+			target.PostHook = "glib-compile-schemas:" + schemasDir
+		}
+
+		targets = append(targets, target)
 	}
 
 	return targets, nil
@@ -681,6 +739,8 @@ func DetectPluginTargets(owner, repo, pkgDir, pluginMode string, global bool) ([
 		return detectGIMPTargets(owner, repo, pkgDir, global)
 	case "vst", "lv2", "clap", "audio":
 		return detectAudioTargets(owner, repo, pkgDir, mode, global)
+	case "gnome", "gnome-extension":
+		return detectGnomeExtensionTargets(owner, repo, pkgDir, global)
 	case "auto":
 		obs, _ := detectOBSTargets(owner, repo, pkgDir, global)
 		targets = append(targets, obs...)
@@ -690,6 +750,9 @@ func DetectPluginTargets(owner, repo, pkgDir, pluginMode string, global bool) ([
 
 		audio, _ := detectAudioTargets(owner, repo, pkgDir, "auto", global)
 		targets = append(targets, audio...)
+
+		gnome, _ := detectGnomeExtensionTargets(owner, repo, pkgDir, global)
+		targets = append(targets, gnome...)
 	}
 
 	return targets, nil
@@ -797,6 +860,7 @@ func (r *GithubRelease) DeployDriverAndPluginManifests(pkgDir string) ([]string,
 
 	var installed []string
 	var needLdconfig, needUdevadm bool
+	var schemaDirs []string
 
 	for _, target := range targets {
 		if r.CliParams.DryRun {
@@ -861,10 +925,29 @@ func (r *GithubRelease) DeployDriverAndPluginManifests(pkgDir string) ([]string,
 			needLdconfig = true
 		} else if target.PostHook == "udevadm" {
 			needUdevadm = true
+		} else if strings.HasPrefix(target.PostHook, "glib-compile-schemas:") {
+			schemaDir := strings.TrimPrefix(target.PostHook, "glib-compile-schemas:")
+			schemaDirs = append(schemaDirs, schemaDir)
 		}
 	}
 
 	if !r.CliParams.DryRun {
+		for _, schemaDir := range schemaDirs {
+			if _, err := lookPath("glib-compile-schemas"); err == nil {
+				log.Infof("compiling gsettings schemas in %s", schemaDir)
+				var cmd *exec.Cmd
+				if r.CliParams.Global && os.Geteuid() != 0 {
+					cmd = execCommand("sudo", "glib-compile-schemas", schemaDir)
+				} else {
+					cmd = execCommand("glib-compile-schemas", schemaDir)
+				}
+				if out, err := cmd.CombinedOutput(); err != nil {
+					log.Warn("failed running glib-compile-schemas", "dir", schemaDir, "error", err, "output", string(out))
+				}
+			} else {
+				log.Debug("glib-compile-schemas not available in PATH, skipping schema compilation")
+			}
+		}
 		if needLdconfig {
 			log.Info("executing ldconfig for updated library paths")
 			if os.Geteuid() == 0 {

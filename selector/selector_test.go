@@ -714,3 +714,32 @@ func TestBinarySelector_MultiBinaryOptions(t *testing.T) {
 		assert.Equal(t, "tool2.exe", selected[1].Name)
 	})
 }
+
+func TestIsAllowedBinaryDir(t *testing.T) {
+	tests := []struct {
+		path     string
+		expected bool
+	}{
+		{"mybin", true},
+		{"bin/mybin", true},
+		{"bin32/mybin", true},
+		{"bin64/mybin", true},
+		{"service", true},
+		{"preferences", true},
+		{"service/daemon.js", true},
+		{"preferences/prefs.js", true},
+		{"app-1.0.0/mybin", true},
+		{"app-1.0.0/bin/mybin", true},
+		{"app-1.0.0/service/daemon.js", true},
+		{"app-1.0.0/preferences/prefs.js", true},
+		{"app-1.0.0/tests/fixtures/fakebin", false},
+		{"internal/vendor/tool", false},
+		{"deeply/nested/dir/service/daemon.js", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			assert.Equal(t, tt.expected, IsAllowedBinaryDir(tt.path))
+		})
+	}
+}

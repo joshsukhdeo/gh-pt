@@ -1444,6 +1444,19 @@ func (r *RootCLI) moveDistWithSidecarDetection(srcDir, dstDir string) ([]string,
 		return nil, err
 	}
 
+	isGnomeBundle := false
+	if r != nil {
+		if r.Plugin == "gnome-extension" || r.Plugin == "gnome" ||
+			(r.CliParams != nil && (r.CliParams.Plugin == "gnome-extension" || r.CliParams.Plugin == "gnome")) {
+			isGnomeBundle = true
+		}
+	}
+	if !isGnomeBundle {
+		if _, err := os.Stat(filepath.Join(srcDir, "metadata.json")); err == nil {
+			isGnomeBundle = true
+		}
+	}
+
 	var primaryBinaries []string
 	var suspectedSidecars []string
 
@@ -1459,9 +1472,14 @@ func (r *RootCLI) moveDistWithSidecarDetection(srcDir, dstDir string) ([]string,
 			return err
 		}
 		cleanRel := filepath.ToSlash(rel)
-		if isSuspectedLocalSidecar(cleanRel, d.Name()) {
+		if strings.HasPrefix(d.Name(), ".") {
+			return nil
+		}
+		if isGnomeBundle {
+			primaryBinaries = append(primaryBinaries, cleanRel)
+		} else if isSuspectedLocalSidecar(cleanRel, d.Name()) {
 			suspectedSidecars = append(suspectedSidecars, cleanRel)
-		} else if !strings.HasPrefix(d.Name(), ".") {
+		} else {
 			primaryBinaries = append(primaryBinaries, cleanRel)
 		}
 		return nil
@@ -1477,6 +1495,7 @@ func (r *RootCLI) moveDistWithSidecarDetection(srcDir, dstDir string) ([]string,
 		if err := os.MkdirAll(filepath.Dir(dstPath), 0755); err != nil {
 			return nil, err
 		}
+		info, statErr := os.Stat(srcPath)
 		if err := os.Rename(srcPath, dstPath); err != nil {
 			_ = os.Remove(dstPath)
 			if err := copyFile(srcPath, dstPath); err != nil {
@@ -1484,7 +1503,21 @@ func (r *RootCLI) moveDistWithSidecarDetection(srcDir, dstDir string) ([]string,
 			}
 			_ = os.Remove(srcPath)
 		}
-		_ = os.Chmod(dstPath, 0755)
+		if isGnomeBundle {
+			if statErr == nil {
+				origMode := info.Mode()
+				cleanRel := filepath.ToSlash(rel)
+				dirPart := filepath.Dir(cleanRel)
+				isAllowedExecDir := (dirPart == "." || dirPart == "service" || dirPart == "preferences")
+				if isAllowedExecDir && (origMode&0111 != 0 || strings.HasSuffix(cleanRel, ".js") || strings.HasSuffix(cleanRel, ".sh") || !strings.Contains(filepath.Base(cleanRel), ".")) {
+					_ = os.Chmod(dstPath, 0755)
+				} else {
+					_ = os.Chmod(dstPath, origMode.Perm())
+				}
+			}
+		} else {
+			_ = os.Chmod(dstPath, 0755)
+		}
 	}
 
 	// Route suspected sidecars
@@ -2580,39 +2613,51 @@ func loadConfig() *config.Config {
 	return cfg
 }
 
-// createSymlinks creates symlinks from executables in symlinkDir to targetPath
+// createSymlinks creates symlinks from executables in symlinkDir (and allowed subdirectories service, preferences) to targetPath
 func createSymlinks(symlinkDir, targetPath string) error {
 	if err := os.MkdirAll(targetPath, 0755); err != nil {
 		return fmt.Errorf("failed to create target directory: %w", err)
 	}
 
-	// Find all executable files in symlinkDir
-	entries, err := os.ReadDir(symlinkDir)
-	if err != nil {
-		return fmt.Errorf("failed to read symlinkDir: %w", err)
+	dirsToScan := []string{symlinkDir}
+	for _, sub := range []string{"service", "preferences"} {
+		subDir := filepath.Join(symlinkDir, sub)
+		if info, err := os.Stat(subDir); err == nil && info.IsDir() {
+			dirsToScan = append(dirsToScan, subDir)
+		}
 	}
 
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			// Check if file is executable
-			info, err := entry.Info()
-			if err != nil {
+	for _, dir := range dirsToScan {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			if os.IsNotExist(err) {
 				continue
 			}
-			if info.Mode()&0111 != 0 { // Check if executable
-				srcPath := filepath.Join(symlinkDir, entry.Name())
-				destPath := filepath.Join(targetPath, entry.Name())
+			return fmt.Errorf("failed to read directory %s: %w", dir, err)
+		}
 
-				// Remove existing symlink/file if exists
-				if err := os.Remove(destPath); err != nil && !os.IsNotExist(err) {
-					return fmt.Errorf("failed to remove existing file/symlink %s: %w", destPath, err)
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				// Check if file is executable
+				info, err := entry.Info()
+				if err != nil {
+					continue
 				}
+				if info.Mode()&0111 != 0 { // Check if executable
+					srcPath := filepath.Join(dir, entry.Name())
+					destPath := filepath.Join(targetPath, entry.Name())
 
-				if err := os.Symlink(srcPath, destPath); err != nil {
-					return fmt.Errorf("failed to create symlink %s -> %s: %w", destPath, srcPath, err)
+					// Remove existing symlink/file if exists
+					if err := os.Remove(destPath); err != nil && !os.IsNotExist(err) {
+						return fmt.Errorf("failed to remove existing file/symlink %s: %w", destPath, err)
+					}
+
+					if err := os.Symlink(srcPath, destPath); err != nil {
+						return fmt.Errorf("failed to create symlink %s -> %s: %w", destPath, srcPath, err)
+					}
+
+					log.Info("created symlink", "source", srcPath, "dest", destPath)
 				}
-
-				log.Info("created symlink", "source", srcPath, "dest", destPath)
 			}
 		}
 	}

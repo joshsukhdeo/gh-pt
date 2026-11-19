@@ -333,7 +333,8 @@ func (c *AssetClassifier) DetectOS(name string) AssetOS {
 	}
 
 	// 7. Linux
-	if strings.Contains(lower, "linux") ||
+	if isGnomeExtension(name) ||
+		strings.Contains(lower, "linux") ||
 		strings.HasSuffix(lower, ".deb") ||
 		strings.HasSuffix(lower, ".rpm") ||
 		strings.HasSuffix(lower, ".appimage") ||
@@ -676,6 +677,13 @@ func (c *AssetClassifier) DetectSubcategory(name string) ArchSubcategory {
 		return SubcatSidecar
 	}
 
+	if isGnomeExtension(name) {
+		if c.HostOS == "linux" || c.HostOS == "" {
+			return SubcatNative
+		}
+		return SubcatUnsupported
+	}
+
 	// If no foreign token matched and OS is compatible, check format before defaulting to native
 	if os == OSLinux && c.HostOS == "linux" {
 		if c.isNativeFormatForOS(name) {
@@ -794,6 +802,11 @@ func (c *AssetClassifier) ClassifyAsset(name string, size int64, allAssets []str
 		Subcat:          subcat,
 		InstallCategory: installCat,
 	}
+}
+
+func isGnomeExtension(name string) bool {
+	lower := strings.ToLower(name)
+	return strings.HasSuffix(lower, ".shell-extension.zip") || (strings.HasSuffix(lower, ".zip") && strings.Contains(lower, "@"))
 }
 
 func isPackageFormat(name string) bool {

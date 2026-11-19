@@ -39,6 +39,8 @@ func TestAssetClassifier_DetectOS(t *testing.T) {
 		{"Multiplatform signature", "release.sig", OSMultiplat},
 		{"Multiplatform source zip", "source.zip", OSMultiplat},
 		{"Unknown asset", "unknown_format.xyz", OSUnknown},
+		{"GNOME Shell Extension UUID zip", "gsconnect@andyholmes.github.io.zip", OSLinux},
+		{"GNOME Shell Extension named zip", "sample.shell-extension.zip", OSLinux},
 	}
 
 	for _, tt := range tests {
@@ -88,6 +90,8 @@ func TestAssetClassifier_DetectSubcategory_LinuxHost(t *testing.T) {
 	assert.Equal(t, SubcatMetadata, c.DetectSubcategory("source.zip"))
 	assert.Equal(t, SubcatUnsupported, c.DetectSubcategory("SystemWebView_arm32.apk"))
 	assert.Equal(t, SubcatUnsupported, c.DetectSubcategory("tool-darwin-arm64.dmg"))
+	assert.Equal(t, SubcatNative, c.DetectSubcategory("gsconnect@andyholmes.github.io.zip"))
+	assert.Equal(t, SubcatNative, c.DetectSubcategory("sample.shell-extension.zip"))
 }
 
 func TestAssetClassifier_WindowsHostSuppressesWine(t *testing.T) {
@@ -586,4 +590,24 @@ func TestAssetClassifier_OSVersionMatchingAndClosestChoice(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, selected)
 	assert.Equal(t, "mytool_ubuntu24.04_amd64.deb", selected[0].Name, "Selector.Run must order closest Ubuntu version first")
+}
+
+func TestAssetClassifier_GNOMEExtension(t *testing.T) {
+	c := NewAssetClassifier("linux", "amd64", "off", "avx2")
+
+	assets := []string{
+		"gsconnect@andyholmes.github.io.zip",
+		"sample.shell-extension.zip",
+	}
+
+	for _, a := range assets {
+		assert.Equal(t, OSLinux, c.DetectOS(a))
+		assert.Equal(t, SubcatNative, c.DetectSubcategory(a))
+
+		classified := c.ClassifyRelease([]string{a}, nil)
+		require.NotEmpty(t, classified[CategoryDefaultInstall], "GNOME extension must be in CategoryDefaultInstall")
+		assert.Len(t, classified[CategoryDefaultInstall], 1)
+		assert.Equal(t, SubcatNative, classified[CategoryDefaultInstall][0].Subcat)
+		assert.Equal(t, OSLinux, classified[CategoryDefaultInstall][0].OS)
+	}
 }

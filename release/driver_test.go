@@ -151,6 +151,84 @@ func TestDetectPluginTargets_OBS_GIMP_Audio(t *testing.T) {
 	require.Len(t, audioTargets, 2) // VST3 and CLAP
 }
 
+func TestDetectPluginTargets_GnomeExtension(t *testing.T) {
+	tempData := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tempData)
+	xdg.Reload()
+
+	pkgDir := t.TempDir()
+	metaJSON := `{"uuid": "gsconnect@andyholmes.github.io", "name": "GSConnect", "shell-version": ["45", "46"]}`
+	require.NoError(t, os.WriteFile(filepath.Join(pkgDir, "metadata.json"), []byte(metaJSON), 0644))
+	schemasDir := filepath.Join(pkgDir, "schemas")
+	require.NoError(t, os.MkdirAll(schemasDir, 0755))
+
+	expectedDest := filepath.Join(tempData, "gnome-shell", "extensions", "gsconnect@andyholmes.github.io")
+	expectedPostHook := "glib-compile-schemas:" + schemasDir
+
+	// Test gnome-extension mode
+	targets, err := DetectPluginTargets("GSConnect", "gnome-shell-extension-gsconnect", pkgDir, "gnome-extension", false)
+	require.NoError(t, err)
+	require.Len(t, targets, 1)
+	assert.Equal(t, PluginGnome, targets[0].Subsystem)
+	assert.Equal(t, pkgDir, targets[0].SourceFile)
+	assert.Equal(t, expectedDest, targets[0].DestPath)
+	assert.True(t, targets[0].IsSymlink)
+	assert.Equal(t, expectedPostHook, targets[0].PostHook)
+
+	// Test gnome alias mode
+	targetsGnome, err := DetectPluginTargets("GSConnect", "gnome-shell-extension-gsconnect", pkgDir, "gnome", false)
+	require.NoError(t, err)
+	require.Len(t, targetsGnome, 1)
+	assert.Equal(t, PluginGnome, targetsGnome[0].Subsystem)
+	assert.Equal(t, expectedDest, targetsGnome[0].DestPath)
+
+	// Test auto mode
+	targetsAuto, err := DetectPluginTargets("GSConnect", "gnome-shell-extension-gsconnect", pkgDir, "auto", false)
+	require.NoError(t, err)
+	require.Len(t, targetsAuto, 1)
+	assert.Equal(t, PluginGnome, targetsAuto[0].Subsystem)
+	assert.Equal(t, expectedDest, targetsAuto[0].DestPath)
+}
+
+func TestDeployDriverAndPluginManifests_GnomeExtension(t *testing.T) {
+	tempData := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tempData)
+	xdg.Reload()
+
+	pkgDir := t.TempDir()
+	metaJSON := `{"uuid": "gsconnect@andyholmes.github.io", "name": "GSConnect", "shell-version": ["45", "46"]}`
+	require.NoError(t, os.WriteFile(filepath.Join(pkgDir, "metadata.json"), []byte(metaJSON), 0644))
+	schemasDir := filepath.Join(pkgDir, "schemas")
+	require.NoError(t, os.MkdirAll(schemasDir, 0755))
+	schemaXML := `<schemalist><schema id="org.gnome.shell.extensions.gsconnect" path="/org/gnome/shell/extensions/gsconnect/"><key name="show-indicators" type="b"><default>true</default></key></schema></schemalist>`
+	require.NoError(t, os.WriteFile(filepath.Join(schemasDir, "org.gnome.shell.extensions.gsconnect.gschema.xml"), []byte(schemaXML), 0644))
+
+	r := &GithubRelease{
+		CliParams: &params.ExecContext{
+			Repository: "GSConnect/gnome-shell-extension-gsconnect",
+			CommonInstallFlags: params.CommonInstallFlags{
+				SidecarFlags: params.SidecarFlags{
+					Plugin: "gnome-extension",
+				},
+			},
+		},
+	}
+
+	installed, err := r.DeployDriverAndPluginManifests(pkgDir)
+	require.NoError(t, err)
+
+	expectedSymlink := filepath.Join(tempData, "gnome-shell", "extensions", "gsconnect@andyholmes.github.io")
+	assert.Contains(t, installed, expectedSymlink)
+
+	// Verify symlink target
+	target, err := os.Readlink(expectedSymlink)
+	require.NoError(t, err)
+	assert.Equal(t, pkgDir, target)
+
+	// Verify schemas compiled
+	assert.FileExists(t, filepath.Join(schemasDir, "gschemas.compiled"))
+}
+
 func TestDeployDriverAndPluginManifests(t *testing.T) {
 	tempData := t.TempDir()
 	tempConfig := t.TempDir()
