@@ -41,6 +41,15 @@ func TestAssetClassifier_DetectOS(t *testing.T) {
 		{"Unknown asset", "unknown_format.xyz", OSUnknown},
 		{"GNOME Shell Extension UUID zip", "gsconnect@andyholmes.github.io.zip", OSLinux},
 		{"GNOME Shell Extension named zip", "sample.shell-extension.zip", OSLinux},
+		{"Linux rhel archive", "tool_rhel8.tar.gz", OSLinux},
+		{"Linux rocky archive", "agent-rocky9.tar.gz", OSLinux},
+		{"Linux alma archive", "agent-alma9.tar.gz", OSLinux},
+		{"Linux suse archive", "server-suse.tar.gz", OSLinux},
+		{"Linux opensuse archive", "server-opensuse.tar.gz", OSLinux},
+		{"Linux arch archive", "sample_arch_amd64.tar.gz", OSLinux},
+		{"Linux manjaro archive", "client-manjaro.tar.gz", OSLinux},
+		{"Linux el8 archive", "pkg-el8.tar.gz", OSLinux},
+		{"Linux el9 archive", "pkg-el9.tar.gz", OSLinux},
 	}
 
 	for _, tt := range tests {
@@ -341,6 +350,16 @@ func TestAssetClassifier_AVXHardwareCompatibility(t *testing.T) {
 
 	// AVX on AVX2 host is Native
 	assert.Equal(t, SubcatNative, cAVX2.DetectSubcategory("thorium-browser_154.0.8037.45_AVX.deb"))
+
+	// AVX2 deb vs AVX2 AppImage on Linux with dpkg: .deb must be selected over AppImage
+	if _, err := lookPath("dpkg"); err == nil {
+		classified := cAVX2.ClassifyRelease([]string{
+			"Thorium_Browser_158.0.8127.41_AVX2.AppImage",
+			"thorium-browser_158.0.8127.41_AVX2.deb",
+		}, nil)
+		require.NotEmpty(t, classified[CategoryDefaultInstall])
+		assert.Equal(t, "thorium-browser_158.0.8127.41_AVX2.deb", classified[CategoryDefaultInstall][0].Name)
+	}
 }
 
 func TestAssetClassifier_NativePackageFiltering(t *testing.T) {
@@ -610,4 +629,79 @@ func TestAssetClassifier_GNOMEExtension(t *testing.T) {
 		assert.Equal(t, SubcatNative, classified[CategoryDefaultInstall][0].Subcat)
 		assert.Equal(t, OSLinux, classified[CategoryDefaultInstall][0].OS)
 	}
+}
+
+func TestAssetClassifier_OpenVINO_Weekly(t *testing.T) {
+	assets := []string{
+		"ovms_ubuntu26.tar.gz",
+		"ovms_ubuntu24.tar.gz",
+		"ovms_redhat9.tar.gz",
+		"ovms_windows.zip",
+		"ovms_ubuntu26.tar.gz.sha256",
+		"ovms_ubuntu24.tar.gz.sha256",
+		"ovms_redhat9.tar.gz.sha256",
+		"ovms_windows.zip.sha256",
+		"version.txt",
+		"changelog.txt",
+	}
+
+	// 1. Ubuntu 26.04 host
+	c26 := NewAssetClassifier("linux", "amd64", "off", "avx2")
+	c26.HostDistro = "ubuntu"
+	c26.HostDistroVersion = "26.04"
+	c26.HostDistroCodename = "resolute"
+
+	// Verify individual classifications
+	assert.Equal(t, OSLinux, c26.DetectOS("ovms_ubuntu26.tar.gz"))
+	assert.Equal(t, OSLinux, c26.DetectOS("ovms_ubuntu24.tar.gz"))
+	assert.Equal(t, OSLinux, c26.DetectOS("ovms_redhat9.tar.gz"))
+	assert.Equal(t, OSWindows, c26.DetectOS("ovms_windows.zip"))
+
+	assert.Equal(t, SubcatNative, c26.DetectSubcategory("ovms_ubuntu26.tar.gz"))
+	assert.Equal(t, SubcatNative, c26.DetectSubcategory("ovms_ubuntu24.tar.gz"))
+	assert.Equal(t, SubcatUnsupported, c26.DetectSubcategory("ovms_windows.zip"))
+	assert.Equal(t, SubcatChecksum, c26.DetectSubcategory("ovms_ubuntu26.tar.gz.sha256"))
+	assert.Equal(t, SubcatChecksum, c26.DetectSubcategory("ovms_ubuntu24.tar.gz.sha256"))
+	assert.Equal(t, SubcatChecksum, c26.DetectSubcategory("ovms_redhat9.tar.gz.sha256"))
+	assert.Equal(t, SubcatChecksum, c26.DetectSubcategory("ovms_windows.zip.sha256"))
+	assert.Equal(t, SubcatMetadata, c26.DetectSubcategory("version.txt"))
+	assert.Equal(t, SubcatMetadata, c26.DetectSubcategory("changelog.txt"))
+
+	// Verify ClassifyRelease on Ubuntu 26.04
+	classified26 := c26.ClassifyRelease(assets, nil)
+
+	require.Len(t, classified26[CategoryDefaultInstall], 1, "Expected exactly 1 default install asset on Ubuntu 26.04")
+	assert.Equal(t, "ovms_ubuntu26.tar.gz", classified26[CategoryDefaultInstall][0].Name)
+	assert.Equal(t, SubcatNative, classified26[CategoryDefaultInstall][0].Subcat)
+	assert.Equal(t, OSLinux, classified26[CategoryDefaultInstall][0].OS)
+
+	// Alternatives should include ovms_ubuntu24.tar.gz and ovms_redhat9.tar.gz
+	altNames := make([]string, len(classified26[CategoryInstallableAlternative]))
+	for i, a := range classified26[CategoryInstallableAlternative] {
+		altNames[i] = a.Name
+	}
+	assert.Contains(t, altNames, "ovms_ubuntu24.tar.gz")
+	assert.Contains(t, altNames, "ovms_redhat9.tar.gz")
+
+	// CannotInstall should include checksums, metadata, and Windows zip
+	cannotNames := make([]string, len(classified26[CategoryCannotInstall]))
+	for i, a := range classified26[CategoryCannotInstall] {
+		cannotNames[i] = a.Name
+	}
+	assert.Contains(t, cannotNames, "ovms_windows.zip")
+	assert.Contains(t, cannotNames, "ovms_ubuntu26.tar.gz.sha256")
+	assert.Contains(t, cannotNames, "version.txt")
+	assert.Contains(t, cannotNames, "changelog.txt")
+
+	// 2. Ubuntu 24.04 host
+	c24 := NewAssetClassifier("linux", "amd64", "off", "avx2")
+	c24.HostDistro = "ubuntu"
+	c24.HostDistroVersion = "24.04"
+	c24.HostDistroCodename = "noble"
+
+	classified24 := c24.ClassifyRelease(assets, nil)
+	require.Len(t, classified24[CategoryDefaultInstall], 1, "Expected exactly 1 default install asset on Ubuntu 24.04")
+	assert.Equal(t, "ovms_ubuntu24.tar.gz", classified24[CategoryDefaultInstall][0].Name)
+	assert.Equal(t, SubcatNative, classified24[CategoryDefaultInstall][0].Subcat)
+	assert.Equal(t, OSLinux, classified24[CategoryDefaultInstall][0].OS)
 }

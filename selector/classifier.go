@@ -343,10 +343,19 @@ func (c *AssetClassifier) DetectOS(name string) AssetOS {
 		strings.Contains(lower, "ubuntu") ||
 		strings.Contains(lower, "debian") ||
 		strings.Contains(lower, "redhat") ||
-		strings.Contains(lower, "fedora") ||
+		strings.Contains(lower, "rhel") ||
 		strings.Contains(lower, "centos") ||
-		strings.Contains(lower, "archlinux") ||
+		strings.Contains(lower, "fedora") ||
+		strings.Contains(lower, "rocky") ||
+		strings.Contains(lower, "alma") ||
 		strings.Contains(lower, "alpine") ||
+		strings.Contains(lower, "suse") ||
+		strings.Contains(lower, "opensuse") ||
+		strings.Contains(lower, "manjaro") ||
+		strings.Contains(lower, "archlinux") ||
+		isArchLinuxToken(lower) ||
+		strings.Contains(lower, "el8") ||
+		strings.Contains(lower, "el9") ||
 		strings.Contains(lower, "musl") ||
 		strings.Contains(lower, "glibc") {
 		return OSLinux
@@ -453,6 +462,7 @@ func (c *AssetClassifier) IsMetadata(name string) bool {
 	if strings.HasSuffix(lower, ".md") || strings.HasSuffix(lower, ".txt") || strings.HasSuffix(lower, ".json") {
 		if strings.Contains(lower, "license") || strings.Contains(lower, "licence") ||
 			strings.Contains(lower, "readme") || strings.Contains(lower, "changelog") ||
+			strings.Contains(lower, "version") ||
 			strings.Contains(lower, "manifest") || strings.Contains(lower, "sbom") ||
 			strings.Contains(lower, "notice") || strings.Contains(lower, "copying") {
 			return true
@@ -809,6 +819,23 @@ func isGnomeExtension(name string) bool {
 	return strings.HasSuffix(lower, ".shell-extension.zip") || (strings.HasSuffix(lower, ".zip") && strings.Contains(lower, "@"))
 }
 
+func isArchLinuxToken(lower string) bool {
+	if strings.Contains(lower, "archlinux") {
+		return true
+	}
+	clean := strings.ReplaceAll(lower, "aarch64", "")
+	clean = strings.ReplaceAll(clean, "aarch32", "")
+	clean = strings.ReplaceAll(clean, "archive", "")
+	clean = strings.ReplaceAll(clean, "search", "")
+	clean = strings.ReplaceAll(clean, "march", "")
+	clean = strings.ReplaceAll(clean, "parch", "")
+	return strings.Contains(clean, "-arch") ||
+		strings.Contains(clean, "_arch") ||
+		strings.Contains(clean, "arch-") ||
+		strings.Contains(clean, "arch_") ||
+		strings.Contains(clean, ".arch.")
+}
+
 func isPackageFormat(name string) bool {
 	lower := strings.ToLower(name)
 	for _, ext := range []string{".deb", ".rpm", ".appimage", ".flatpak", ".snap", ".apk", ".pkg.tar.zst", ".pkg.tar.xz", ".dmg", ".pkg", ".msi"} {
@@ -1066,10 +1093,15 @@ func (c *AssetClassifier) ScoreAssetOSVersion(name string) float64 {
 		return 15.0
 	}
 
-	// 4. Incompatible Linux distros (e.g. Alpine musl, Fedora on Ubuntu, Arch)
+	// 4. Incompatible Linux distros (e.g. Alpine musl, Fedora on Ubuntu, Arch, RedHat, etc.)
 	if strings.Contains(lower, "alpine") || strings.Contains(lower, "musl") ||
 		strings.Contains(lower, "fedora") || strings.Contains(lower, "centos") ||
-		strings.Contains(lower, "rhel") || strings.Contains(lower, "archlinux") {
+		strings.Contains(lower, "redhat") || strings.Contains(lower, "rhel") ||
+		strings.Contains(lower, "rocky") || strings.Contains(lower, "alma") ||
+		strings.Contains(lower, "suse") || strings.Contains(lower, "opensuse") ||
+		strings.Contains(lower, "manjaro") ||
+		strings.Contains(lower, "el8") || strings.Contains(lower, "el9") ||
+		strings.Contains(lower, "archlinux") || isArchLinuxToken(lower) {
 		return 500.0
 	}
 
@@ -1197,128 +1229,72 @@ func (c *AssetClassifier) PickDefaultAssetsWithContext(repo string, assets []str
 	// 1. Pick the best package candidate (packages compete only amongst themselves)
 	var bestPackage string
 	if len(packageCandidates) > 0 {
+		var avxPackages []string
 		for _, cand := range packageCandidates {
 			if strings.Contains(strings.ToLower(cand), strings.ToLower(effectiveAVX)) {
-				bestPackage = cand
-				break
+				avxPackages = append(avxPackages, cand)
 			}
 		}
-		if bestPackage == "" {
-			switch c.HostOS {
-			case "linux":
-				hasDpkg := false
-				hasRpm := false
-				if _, err := lookPath("dpkg"); err == nil {
-					hasDpkg = true
-				}
-				if _, err := lookPath("rpm"); err == nil {
-					hasRpm = true
-				}
-				var preferredExts []string
-				if hasDpkg && !hasRpm {
-					preferredExts = []string{".deb", ".snap", ".flatpak", ".appimage"}
-				} else if hasRpm && !hasDpkg {
-					preferredExts = []string{".rpm", ".snap", ".flatpak", ".appimage"}
-				} else if hasDpkg && hasRpm {
-					preferredExts = []string{".deb", ".rpm", ".snap", ".flatpak", ".appimage"}
-				} else {
-					preferredExts = []string{".appimage", ".flatpak", ".snap"}
-				}
-				for _, pref := range preferredExts {
-					for _, cand := range packageCandidates {
-						if strings.EqualFold(filepath.Ext(cand), pref) {
-							bestPackage = cand
-							break
-						}
-					}
-					if bestPackage != "" {
-						break
-					}
-				}
-			case "darwin":
-				for _, pref := range []string{".dmg", ".pkg"} {
-					for _, cand := range packageCandidates {
-						if strings.EqualFold(filepath.Ext(cand), pref) {
-							bestPackage = cand
-							break
-						}
-					}
-					if bestPackage != "" {
-						break
-					}
-				}
-			case "windows":
-				for _, pref := range []string{".msi", ".exe"} {
-					for _, cand := range packageCandidates {
-						if strings.EqualFold(filepath.Ext(cand), pref) {
-							bestPackage = cand
-							break
-						}
-					}
-					if bestPackage != "" {
-						break
-					}
-				}
-			}
-			if bestPackage == "" {
-				bestPackage = packageCandidates[0]
-			}
+		targetPackages := packageCandidates
+		if len(avxPackages) > 0 {
+			targetPackages = avxPackages
 		}
+		bestPackage = c.selectPreferredPackage(targetPackages)
 	}
 
 	// 2. Pick the best binary candidate (if any)
 	var bestBinary string
 	if len(binaryCandidates) > 0 {
+		var avxBins []string
 		for _, cand := range binaryCandidates {
 			if strings.Contains(strings.ToLower(cand), strings.ToLower(effectiveAVX)) {
-				bestBinary = cand
-				break
+				avxBins = append(avxBins, cand)
 			}
 		}
-		if bestBinary == "" {
-			// If a package is also present, only choose a binary if it is a standalone executable
-			// or clearly a distinct CLI/tool (to avoid duplicate archives of the same program)
-			if bestPackage != "" {
-				pkgBase := extractPackageBase(bestPackage)
-				for _, cand := range binaryCandidates {
-					lowerCand := strings.ToLower(cand)
-					ext := filepath.Ext(cand)
-					// Only choose binary if it is a distinct companion CLI/tool (e.g. app-cli)
-					// to avoid duplicate binary collision between package and standalone binary of the same app.
-					isCompanion := strings.Contains(lowerCand, "cli") ||
-						strings.Contains(lowerCand, "daemon") ||
-						strings.Contains(lowerCand, "server") ||
-						strings.Contains(lowerCand, "agent") ||
-						strings.Contains(lowerCand, "tool")
-					if !isCompanion {
-						candBase := extractPackageBase(cand)
-						if candBase == pkgBase {
-							// Redundant duplicate binary of the same program
-							continue
-						}
-					}
-					// Standalone executable (extensionless or .exe on Windows) or companion tool
-					if ext == "" || (c.HostOS == "windows" && strings.EqualFold(ext, ".exe")) || isCompanion {
-						if !strings.Contains(lowerCand, "musl") {
-							bestBinary = cand
-							break
-						} else if bestBinary == "" {
-							bestBinary = cand
-						}
+		targetBins := binaryCandidates
+		if len(avxBins) > 0 {
+			targetBins = avxBins
+		}
+		if bestPackage != "" {
+			pkgBase := extractPackageBase(bestPackage)
+			for _, cand := range targetBins {
+				lowerCand := strings.ToLower(cand)
+				ext := filepath.Ext(cand)
+				// Only choose binary if it is a distinct companion CLI/tool (e.g. app-cli)
+				// to avoid duplicate binary collision between package and standalone binary of the same app.
+				isCompanion := strings.Contains(lowerCand, "cli") ||
+					strings.Contains(lowerCand, "daemon") ||
+					strings.Contains(lowerCand, "server") ||
+					strings.Contains(lowerCand, "agent") ||
+					strings.Contains(lowerCand, "tool")
+				if !isCompanion {
+					candBase := extractPackageBase(cand)
+					if candBase == pkgBase {
+						// Redundant duplicate binary of the same program
+						continue
 					}
 				}
-			} else {
-				// No package is present: pick standard binary/archive
-				for _, cand := range binaryCandidates {
-					lowerCand := strings.ToLower(cand)
+				// Standalone executable (extensionless or .exe on Windows) or companion tool
+				if ext == "" || (c.HostOS == "windows" && strings.EqualFold(ext, ".exe")) || isCompanion {
 					if !strings.Contains(lowerCand, "musl") {
 						bestBinary = cand
 						break
+					} else if bestBinary == "" {
+						bestBinary = cand
 					}
 				}
-				if bestBinary == "" {
-					bestBinary = binaryCandidates[0]
+			}
+		} else {
+			// No package is present: pick standard binary/archive
+			for _, cand := range targetBins {
+				lowerCand := strings.ToLower(cand)
+				if !strings.Contains(lowerCand, "musl") {
+					bestBinary = cand
+					break
 				}
+			}
+			if bestBinary == "" {
+				bestBinary = targetBins[0]
 			}
 		}
 	}
@@ -1409,14 +1385,25 @@ func (c *AssetClassifier) PickPrimaryDefaultAssetWithContext(repo string, assets
 	})
 
 	// Prefer candidate matching host AVX if present
+	var avxCandidates []string
 	for _, cand := range candidates {
 		lower := strings.ToLower(cand)
 		if strings.Contains(lower, strings.ToLower(effectiveAVX)) {
-			return cand
+			avxCandidates = append(avxCandidates, cand)
 		}
 	}
+	targetCandidates := candidates
+	if len(avxCandidates) > 0 {
+		targetCandidates = avxCandidates
+	}
 
-	// Prefer standard binary/package formats over general archives, respecting host package manager
+	return c.selectPreferredPackage(targetCandidates)
+}
+
+func (c *AssetClassifier) selectPreferredPackage(packages []string) string {
+	if len(packages) == 0 {
+		return ""
+	}
 	switch c.HostOS {
 	case "linux":
 		hasDpkg := false
@@ -1438,7 +1425,7 @@ func (c *AssetClassifier) PickPrimaryDefaultAssetWithContext(repo string, assets
 			preferredExts = []string{".appimage", ".flatpak", ".snap"}
 		}
 		for _, pref := range preferredExts {
-			for _, cand := range candidates {
+			for _, cand := range packages {
 				if strings.EqualFold(filepath.Ext(cand), pref) {
 					return cand
 				}
@@ -1446,23 +1433,22 @@ func (c *AssetClassifier) PickPrimaryDefaultAssetWithContext(repo string, assets
 		}
 	case "darwin":
 		for _, pref := range []string{".dmg", ".pkg"} {
-			for _, cand := range candidates {
+			for _, cand := range packages {
 				if strings.EqualFold(filepath.Ext(cand), pref) {
 					return cand
 				}
 			}
 		}
 	case "windows":
-		for _, pref := range []string{".exe", ".msi"} {
-			for _, cand := range candidates {
+		for _, pref := range []string{".msi", ".exe"} {
+			for _, cand := range packages {
 				if strings.EqualFold(filepath.Ext(cand), pref) {
 					return cand
 				}
 			}
 		}
 	}
-
-	return candidates[0]
+	return packages[0]
 }
 
 // ClassifyRelease takes a full list of asset names and sizes, classifies them,

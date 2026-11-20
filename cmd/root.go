@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -200,6 +201,9 @@ func formatGitHubError(err error, repo string) error {
 // needsGitHubAPI returns true if the command requires GitHub API access.
 func needsGitHubAPI(r *RootCLI) bool {
 	r.ensureCliParams()
+	if r.HTTPURL != "" || (r.CliParams != nil && r.CliParams.HTTPURL != "") {
+		return false
+	}
 	// Commands that don't need GitHub API
 	if r.Ls != "" || r.Ll != "" {
 		return false
@@ -304,10 +308,69 @@ func isContainerEnvironment() bool {
 	return false
 }
 
+// resolveRepoAndHTTPURL validates and resolves repository and HTTPURL flags and parameters.
+func resolveRepoAndHTTPURL(r *RootCLI) error {
+	r.ensureCliParams()
+
+	if r.User && r.Global {
+		return fmt.Errorf("cannot specify both --user (-u) and --global (-g)")
+	}
+
+	// Mutual exclusion: HTTPURL vs Repository / Repo
+	if r.HTTPURL != "" && (r.Repository != "" || r.Repo != "") {
+		return fmt.Errorf("cannot specify both --http-url and repository")
+	}
+
+	// Conflict between positional Repository and --repo
+	if r.Repository != "" && r.Repo != "" && r.Repository != r.Repo {
+		return fmt.Errorf("conflicting repository specifications: positional %q vs --repo %q", r.Repository, r.Repo)
+	}
+
+	// If positional is empty, assign from --repo
+	if r.Repository == "" && r.Repo != "" {
+		r.Repository = r.Repo
+		if r.CliParams != nil {
+			r.CliParams.Repository = r.Repo
+		}
+	}
+
+	// If HTTPURL is set
+	if r.HTTPURL != "" {
+		if r.CompileFromSource {
+			return fmt.Errorf("--http-url cannot be used with source compilation")
+		}
+		parsedURL, err := url.Parse(r.HTTPURL)
+		if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") || parsedURL.Host == "" {
+			return fmt.Errorf("invalid --http-url %q: must be a valid HTTP or HTTPS URL with a non-empty host", r.HTTPURL)
+		}
+		r.Repository = synthesizeHTTPRepoSlug(parsedURL)
+		if r.CliParams != nil {
+			r.CliParams.Repository = r.Repository
+			r.CliParams.HTTPURL = r.HTTPURL
+		}
+	}
+
+	return nil
+}
+
+// synthesizeHTTPRepoSlug builds a two-segment owner/repo slug from an HTTP URL.
+func synthesizeHTTPRepoSlug(u *url.URL) string {
+	host := u.Host
+	cleanPath := strings.Trim(u.Path, "/")
+	if cleanPath == "" {
+		return host + "/root"
+	}
+	slug := strings.ReplaceAll(cleanPath, "/", "-")
+	return host + "/" + slug
+}
+
 // validateInputs validates and sanitizes user inputs to prevent injection attacks
 // and ensure well-formed repository names, paths, and hook commands.
 func validateInputs(r *RootCLI) error {
 	r.ensureCliParams()
+	if err := resolveRepoAndHTTPURL(r); err != nil {
+		return err
+	}
 	c := r.CliParams
 
 	// Validate repository name format (owner/repo)
@@ -399,6 +462,9 @@ func validateInputs(r *RootCLI) error {
 
 func (r *RootCLI) Validate() error {
 	r.ensureCliParams()
+	if err := resolveRepoAndHTTPURL(r); err != nil {
+		return err
+	}
 	if r.Wine != "off" && r.Wine != "" {
 		if !selector.IsWineSupportedOS(runtime.GOOS) {
 			pterm.Warning.Printf("Wine is not supported on %s. Continuing with wine disabled.\n", runtime.GOOS)
@@ -522,6 +588,9 @@ func PostBuild(k *kong.Kong) error {
 
 func (r *RootCLI) RunInstall() error {
 	r.ensureCliParams()
+	if err := resolveRepoAndHTTPURL(r); err != nil {
+		return err
+	}
 	safety.SetDryRun(r.DryRun)
 	defer safety.SetDryRun(false)
 	if r.NoEmojis {
@@ -813,14 +882,16 @@ func (r *RootCLI) RunInstall() error {
 		"renaming binaries", r.Rename,
 	)
 
-	if ghClient == nil {
-		return fmt.Errorf("GitHub client is not initialized")
-	}
+	if r.HTTPURL == "" {
+		if ghClient == nil {
+			return fmt.Errorf("GitHub client is not initialized")
+		}
 
-	response := struct{ Name string }{}
-	err = ghClient.Get(fmt.Sprintf("repos/%s", r.Repository), &response)
-	if err != nil {
-		log.Error(fmt.Sprintf("repository %s doesn't exist", r.Repository), "error", err)
+		response := struct{ Name string }{}
+		err = ghClient.Get(fmt.Sprintf("repos/%s", r.Repository), &response)
+		if err != nil {
+			log.Error(fmt.Sprintf("repository %s doesn't exist", r.Repository), "error", err)
+		}
 	}
 
 	var existingHooks map[string]string
@@ -2523,6 +2594,8 @@ func buildRegexFromTypes(types []string, wine string) []string {
 		if isOsFormatPkg {
 			archOnlyRegex := fmt.Sprintf(`.*%s.*`, archRegex)
 			matchers = append(matchers, buildFinal(archOnlyRegex, t))
+			// Also allow bare format matches (no arch specified in filename, e.g. SIMD-named packages)
+			matchers = append(matchers, buildFinal(`.*`, t))
 		}
 
 		// Universal Linux packages: only need arch match, no OS token required
