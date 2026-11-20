@@ -316,6 +316,17 @@ func resolveRepoAndHTTPURL(r *RootCLI) error {
 		return fmt.Errorf("cannot specify both --user (-u) and --global (-g)")
 	}
 
+	// Auto-detect HTTP/HTTPS URL passed as positional argument or via --repo
+	if r.HTTPURL == "" {
+		if strings.HasPrefix(r.Repository, "http://") || strings.HasPrefix(r.Repository, "https://") {
+			r.HTTPURL = r.Repository
+			r.Repository = ""
+		} else if strings.HasPrefix(r.Repo, "http://") || strings.HasPrefix(r.Repo, "https://") {
+			r.HTTPURL = r.Repo
+			r.Repo = ""
+		}
+	}
+
 	// Mutual exclusion: HTTPURL vs Repository / Repo
 	if r.HTTPURL != "" && (r.Repository != "" || r.Repo != "") {
 		return fmt.Errorf("cannot specify both --http-url and repository")

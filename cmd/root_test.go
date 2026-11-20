@@ -575,3 +575,110 @@ func TestCompileFromSource_RespectsSidecarMode(t *testing.T) {
 	assert.Contains(t, sidecars, expectedSidecarPath)
 	assert.FileExists(t, expectedSidecarPath)
 }
+
+func TestResolveRepoAndHTTPURL_MutualExclusion(t *testing.T) {
+	t.Run("http-url and positional repository conflict", func(t *testing.T) {
+		r := &RootCLI{}
+		r.Repository = "owner/repo"
+		r.HTTPURL = "https://example.com/dir/"
+		err := resolveRepoAndHTTPURL(r)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cannot specify both --http-url and repository")
+	})
+
+	t.Run("http-url and --repo flag conflict", func(t *testing.T) {
+		r := &RootCLI{}
+		r.Repo = "owner/repo"
+		r.HTTPURL = "https://example.com/dir/"
+		err := resolveRepoAndHTTPURL(r)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cannot specify both --http-url and repository")
+	})
+
+	t.Run("conflicting positional and --repo flag", func(t *testing.T) {
+		r := &RootCLI{}
+		r.Repository = "owner/repo1"
+		r.Repo = "owner/repo2"
+		err := resolveRepoAndHTTPURL(r)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "conflicting repository specifications")
+	})
+
+	t.Run("both user and global flags conflict", func(t *testing.T) {
+		r := &RootCLI{}
+		r.User = true
+		r.Global = true
+		r.Repository = "owner/repo"
+		err := resolveRepoAndHTTPURL(r)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cannot specify both --user (-u) and --global (-g)")
+	})
+
+	t.Run("http-url with source compilation rejected", func(t *testing.T) {
+		r := &RootCLI{}
+		r.HTTPURL = "https://example.com/dir/"
+		r.CompileFromSource = true
+		err := resolveRepoAndHTTPURL(r)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "--http-url cannot be used with source compilation")
+	})
+
+	t.Run("invalid http-url scheme rejected", func(t *testing.T) {
+		r := &RootCLI{}
+		r.HTTPURL = "ftp://example.com/dir/"
+		err := resolveRepoAndHTTPURL(r)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must be a valid HTTP or HTTPS URL")
+	})
+}
+
+func TestResolveRepoAndHTTPURL_Resolution(t *testing.T) {
+	t.Run("repo flag populates repository", func(t *testing.T) {
+		r := &RootCLI{}
+		r.Repo = "cli/cli"
+		err := resolveRepoAndHTTPURL(r)
+		require.NoError(t, err)
+		assert.Equal(t, "cli/cli", r.Repository)
+		assert.Equal(t, "cli/cli", r.CliParams.Repository)
+	})
+
+	t.Run("http-url synthesizes canonical repository slug", func(t *testing.T) {
+		r := &RootCLI{}
+		r.HTTPURL = "https://storage.openvinotoolkit.org/packages/weekly/latest/"
+		err := resolveRepoAndHTTPURL(r)
+		require.NoError(t, err)
+		assert.Equal(t, "storage.openvinotoolkit.org/packages-weekly-latest", r.Repository)
+		assert.Equal(t, "storage.openvinotoolkit.org/packages-weekly-latest", r.CliParams.Repository)
+		assert.Equal(t, "https://storage.openvinotoolkit.org/packages/weekly/latest/", r.CliParams.HTTPURL)
+	})
+
+	t.Run("positional URL automatically resolves to HTTPURL", func(t *testing.T) {
+		r := &RootCLI{}
+		r.Repository = "https://storage.openvinotoolkit.org/packages/weekly/latest/"
+		err := resolveRepoAndHTTPURL(r)
+		require.NoError(t, err)
+		assert.Equal(t, "https://storage.openvinotoolkit.org/packages/weekly/latest/", r.HTTPURL)
+		assert.Equal(t, "storage.openvinotoolkit.org/packages-weekly-latest", r.Repository)
+		assert.Equal(t, "https://storage.openvinotoolkit.org/packages/weekly/latest/", r.CliParams.HTTPURL)
+	})
+
+	t.Run("repo flag with URL automatically resolves to HTTPURL", func(t *testing.T) {
+		r := &RootCLI{}
+		r.Repo = "http://storage.example.com/packages/"
+		err := resolveRepoAndHTTPURL(r)
+		require.NoError(t, err)
+		assert.Equal(t, "http://storage.example.com/packages/", r.HTTPURL)
+		assert.Equal(t, "storage.example.com/packages", r.Repository)
+		assert.Equal(t, "http://storage.example.com/packages/", r.CliParams.HTTPURL)
+	})
+}
+
+func TestNeedsGitHubAPI_HTTPURL(t *testing.T) {
+	rHTTP := &RootCLI{}
+	rHTTP.HTTPURL = "https://example.com/packages/"
+	assert.False(t, needsGitHubAPI(rHTTP), "needsGitHubAPI must return false for HTTPURL")
+
+	rNormal := &RootCLI{}
+	rNormal.Repository = "cli/cli"
+	assert.True(t, needsGitHubAPI(rNormal), "needsGitHubAPI must return true for regular GitHub repo")
+}

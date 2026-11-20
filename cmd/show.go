@@ -249,7 +249,7 @@ func showInfoWithClient(r *RootCLI, client ghRestClient) error {
 		}
 		switch section {
 		case "versions":
-			if showVersionsLimit <= -1 {
+			if showVersionsLimit <= -1 || len(releases) == 0 {
 				continue
 			}
 			if disableIcons {
@@ -380,17 +380,17 @@ func showInfoWithClient(r *RootCLI, client ghRestClient) error {
 			if showDescLimit <= -1 {
 				continue
 			}
-			if disableIcons {
-				fmt.Println("--- DESCRIPTION ---")
-			} else {
-				fmt.Println("--- 📝 DESCRIPTION 📝 ---")
-			}
 
 			var repoInfo struct {
 				Description string `json:"description"`
 			}
 			err := client.Get("repos/"+repo, &repoInfo)
 			if err == nil && repoInfo.Description != "" {
+				if disableIcons {
+					fmt.Println("--- DESCRIPTION ---")
+				} else {
+					fmt.Println("--- 📝 DESCRIPTION 📝 ---")
+				}
 				lines := strings.Split(repoInfo.Description, "\n")
 				limit := len(lines)
 				if showDescLimit > -1 && limit > showDescLimit {
@@ -407,17 +407,17 @@ func showInfoWithClient(r *RootCLI, client ghRestClient) error {
 			if showReadmeLimit <= -1 {
 				continue
 			}
-			if disableIcons {
-				fmt.Println("--- README ---")
-			} else {
-				fmt.Println("--- 📖 README 📖 ---")
-			}
 
 			var readme struct {
 				Content string `json:"content"`
 			}
 			err := client.Get("repos/"+repo+"/readme", &readme)
 			if err == nil && readme.Content != "" {
+				if disableIcons {
+					fmt.Println("--- README ---")
+				} else {
+					fmt.Println("--- 📖 README 📖 ---")
+				}
 				decoded, decErr := base64.StdEncoding.DecodeString(strings.ReplaceAll(readme.Content, "\n", ""))
 				content := readme.Content
 				if decErr == nil {
