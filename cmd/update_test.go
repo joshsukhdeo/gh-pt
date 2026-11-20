@@ -1367,3 +1367,44 @@ func TestSourceUpgrade_HonorsNoCompileContainerFlag(t *testing.T) {
 
 	assert.FileExists(t, flagFile, "host compile script must run directly when NoCompileContainer is true")
 }
+
+func TestProcessSingleUpdate_PropagatesHTTPURL(t *testing.T) {
+	origInstallReleaseFunc := installReleaseFunc
+	defer func() { installReleaseFunc = origInstallReleaseFunc }()
+
+	var capturedParams *params.ExecContext
+	installReleaseFunc = func(ctx *params.ExecContext, client *api.RESTClient) error {
+		capturedParams = ctx
+		return nil
+	}
+
+	app := &state.InstalledApp{
+		Repository: "storage.example.com/packages",
+		HTTPURL:    "https://storage.example.com/packages/",
+		TargetPath: t.TempDir(),
+		Version:    "v1.0.0",
+	}
+
+	r := &RootCLI{}
+	appParams := &params.ExecContext{}
+	mu := &sync.Mutex{}
+	successfulUpdates := make(map[string]string)
+
+	err := processSingleUpdate(
+		r,
+		&state.State{},
+		appParams,
+		nil,
+		app,
+		"v1.0.0",
+		mu,
+		successfulUpdates,
+		nil,
+		nil,
+		app.TargetPath,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, capturedParams)
+	assert.Equal(t, "https://storage.example.com/packages/", capturedParams.HTTPURL)
+	assert.Equal(t, "storage.example.com/packages", capturedParams.Repository)
+}

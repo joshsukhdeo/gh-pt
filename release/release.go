@@ -414,7 +414,14 @@ func (r *GithubRelease) handleSuspectedSidecars(suspected []string, extractDir s
 			version = r.CliParams.ReleaseAsset
 		}
 		if r.CliParams != nil && version != "" {
-			_, _, err := ghExec("release", "download", version, "--repo", r.CliParams.Repository, "--pattern", item, "--dir", targetDir)
+			var err error
+			if r.CliParams.HTTPURL != "" {
+				sidecarURL := strings.TrimRight(r.CliParams.HTTPURL, "/") + "/" + item
+				dest := filepath.Join(targetDir, item)
+				err = DownloadHTTPAsset(context.Background(), sidecarURL, dest)
+			} else {
+				_, _, err = ghExec("release", "download", version, "--repo", r.CliParams.Repository, "--pattern", item, "--dir", targetDir)
+			}
 			if err == nil {
 				r.InstalledSidecars = append(r.InstalledSidecars, filepath.Join(targetDir, item))
 			} else {
@@ -1800,21 +1807,36 @@ func (r *GithubRelease) Install() (installErr error) {
 		r.CliParams.SidecarMode = "auto"
 	}
 
-	var prerelease, stable bool
-	if r.CliParams != nil {
-		prerelease = r.CliParams.Prerelease
-		stable = r.CliParams.Stable
-	}
-	releaseSelector, err := selector.ReleaseSelector(r.Client, r.CliParams.Repository, r.CliParams.ReleaseVersion, r.CliParams.Interactive, prerelease, stable)
-	if err != nil {
-		return formatGitHubError(err, r.CliParams.Repository)
-	}
-	releases, err := releaseSelector.Run()
-	if err != nil {
-		return formatGitHubError(err, r.CliParams.Repository)
-	}
-	if len(releases) == 0 {
-		return fmt.Errorf("no releases found for %s", r.CliParams.Repository)
+	var releases []*selector.SelectorItem
+	if r.CliParams != nil && r.CliParams.HTTPURL != "" {
+		httpIndex, err := FetchHTTPReleaseIndex(r.CliParams.HTTPURL)
+		if err != nil {
+			return fmt.Errorf("failed to fetch HTTP release index from %s: %w", r.CliParams.HTTPURL, err)
+		}
+		releases = []*selector.SelectorItem{
+			{
+				Name: httpIndex.VersionTag,
+				Id:   0,
+			},
+		}
+		r.Client = &HTTPReleaseClient{Index: httpIndex}
+	} else {
+		var prerelease, stable bool
+		if r.CliParams != nil {
+			prerelease = r.CliParams.Prerelease
+			stable = r.CliParams.Stable
+		}
+		releaseSelector, err := selector.ReleaseSelector(r.Client, r.CliParams.Repository, r.CliParams.ReleaseVersion, r.CliParams.Interactive, prerelease, stable)
+		if err != nil {
+			return formatGitHubError(err, r.CliParams.Repository)
+		}
+		releases, err = releaseSelector.Run()
+		if err != nil {
+			return formatGitHubError(err, r.CliParams.Repository)
+		}
+		if len(releases) == 0 {
+			return fmt.Errorf("no releases found for %s", r.CliParams.Repository)
+		}
 	}
 
 	// Early status abortion check: Fail fast for unforced zerograde or downgrade
@@ -2124,23 +2146,46 @@ func (r *GithubRelease) Install() (installErr error) {
 	var checksumFilePath string
 	if r.CliParams.VerifyChecksum {
 		// Get all release assets to find checksum file
-		allAssetsResponse := []struct{ Name string }{}
+		allAssetsResponse := []struct {
+			Name string `json:"name"`
+			URL  string `json:"url"`
+		}{}
 		if err := r.Client.Get(fmt.Sprintf("repos/%s/releases/%d/assets", r.CliParams.Repository, releases[0].Id), &allAssetsResponse); err == nil {
 			var allAssets []*selector.SelectorItem
 			for _, a := range allAssetsResponse {
-				allAssets = append(allAssets, &selector.SelectorItem{Name: a.Name})
+				allAssets = append(allAssets, &selector.SelectorItem{Name: a.Name, URL: a.URL})
 			}
 
-			checksumFileName := r.findChecksumFile(allAssets)
+			targetName := ""
+			if len(assets) > 0 {
+				targetName = assets[0].Name
+			}
+			checksumFileName := r.FindChecksumFileForAsset(targetName, allAssets)
 			if checksumFileName != "" {
 				log.Info("found checksum file, downloading", "checksum_file", checksumFileName)
 
-				_, _, execErr := ghExec("release", "download", releases[0].Name,
-					"--repo", r.CliParams.Repository, "--pattern", checksumFileName, "--dir", downloadDir)
+				checksumDestPath := filepath.Join(downloadDir, checksumFileName)
+				var execErr error
+				if r.CliParams.HTTPURL != "" {
+					var checksumURL string
+					for _, a := range allAssets {
+						if a.Name == checksumFileName && a.URL != "" {
+							checksumURL = a.URL
+							break
+						}
+					}
+					if checksumURL == "" {
+						checksumURL = strings.TrimRight(r.CliParams.HTTPURL, "/") + "/" + checksumFileName
+					}
+					execErr = DownloadHTTPAsset(context.Background(), checksumURL, checksumDestPath)
+				} else {
+					_, _, execErr = ghExec("release", "download", releases[0].Name,
+						"--repo", r.CliParams.Repository, "--pattern", checksumFileName, "--dir", downloadDir)
+				}
 				if execErr != nil {
 					log.Warn("failed to download checksum file, skipping verification", "error", execErr)
 				} else {
-					checksumFilePath = filepath.Join(downloadDir, checksumFileName)
+					checksumFilePath = checksumDestPath
 				}
 			}
 		}
@@ -2208,18 +2253,35 @@ func (r *GithubRelease) Install() (installErr error) {
 				pUI.Update(3, "", "", "", "", "")
 			}
 
-			stdOut, stdErr, ghErr := ghExec("release", "download", releases[0].Name,
-				"--repo", r.CliParams.Repository, "--pattern", asset.Name, "--dir", downloadDir)
-			if ghErr != nil {
-				execErr = fmt.Errorf("failed to run gh command: %s", stdErr.String())
-				log.Error("could not download release asset", "repository", r.CliParams.Repository, "release id", releases[0].Id, "release name", releases[0].Name, "release asset name", asset.Name, "download directory", downloadDir, "error", execErr)
-				if r.CliParams.Interactive {
-					if pUI != nil {
-						pUI.Stop()
-						fmt.Printf("\nFailed - '%s' failed\n", stdErr.String())
+			if r.CliParams != nil && r.CliParams.HTTPURL != "" {
+				if dlErr := r.DownloadAsset(asset, downloadDir); dlErr != nil {
+					execErr = fmt.Errorf("failed to download release asset: %w", dlErr)
+					log.Error("could not download release asset", "repository", r.CliParams.Repository, "release id", releases[0].Id, "release name", releases[0].Name, "release asset name", asset.Name, "download directory", downloadDir, "error", execErr)
+					if r.CliParams.Interactive {
+						if pUI != nil {
+							pUI.Stop()
+							fmt.Printf("\nFailed - '%s' failed\n", dlErr.Error())
+						}
 					}
+					return execErr
 				}
-				return execErr
+				log.Info("downloaded release asset via HTTP", "repository", r.CliParams.Repository, "release asset name", asset.Name, "download directory", downloadDir)
+			} else {
+				stdOut, stdErr, ghErr := ghExec("release", "download", releases[0].Name,
+					"--repo", r.CliParams.Repository, "--pattern", asset.Name, "--dir", downloadDir)
+				if ghErr != nil {
+					execErr = fmt.Errorf("failed to run gh command: %s", stdErr.String())
+					log.Error("could not download release asset", "repository", r.CliParams.Repository, "release id", releases[0].Id, "release name", releases[0].Name, "release asset name", asset.Name, "download directory", downloadDir, "error", execErr)
+					if r.CliParams.Interactive {
+						if pUI != nil {
+							pUI.Stop()
+							fmt.Printf("\nFailed - '%s' failed\n", stdErr.String())
+						}
+					}
+					return execErr
+				}
+
+				log.Info("downloaded release asset", "repository", r.CliParams.Repository, "release id", releases[0].Id, "release name", releases[0].Name, "release asset name", asset.Name, "download directory", downloadDir, "output", stdOut.String())
 			}
 
 			if r.CliParams.Interactive {
@@ -2227,8 +2289,6 @@ func (r *GithubRelease) Install() (installErr error) {
 					pUI.Update(4, "", "", "", "", "")
 				}
 			}
-
-			log.Info("downloaded release asset", "repository", r.CliParams.Repository, "release id", releases[0].Id, "release name", releases[0].Name, "release asset name", asset.Name, "download directory", downloadDir, "output", stdOut.String())
 
 			downloadedAssetPath := filepath.Join(downloadDir, asset.Name)
 
@@ -2808,6 +2868,7 @@ func (r *GithubRelease) Install() (installErr error) {
 		if err == nil {
 			_ = st.AddApp(&state.InstalledApp{
 				Repository:               r.CliParams.Repository,
+				HTTPURL:                  r.CliParams.HTTPURL,
 				TargetPath:               r.CliParams.TargetPath,
 				Global:                   r.CliParams.Global,
 				ReleaseAsset:             r.CliParams.ReleaseAsset,

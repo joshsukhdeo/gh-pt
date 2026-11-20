@@ -23,9 +23,35 @@ Implement native support for `--repo` (named flag alternative to positional `<re
 
 ## Open Tickets
 
-- [Ticket 1: CLI Flags & Mutual Exclusion (Seam 1)](#ticket-1-cli-flags--mutual-exclusion-seam-1) (`wayfinder:task`)
-- [Ticket 2: Multi-Format HTTP Directory & Bucket Parser (Seam 2)](#ticket-2-multi-format-http-directory--bucket-parser-seam-2) (`wayfinder:task`, blocked by Ticket 1)
-- [Ticket 3: Virtual Release Integration & Live OpenVINO Verification (Seam 3)](#ticket-3-virtual-release-integration--live-openvino-verification-seam-3) (`wayfinder:task`, blocked by Ticket 2)
+*(All wave tickets complete!)*
+
+---
+
+## Completed Tickets
+
+- [x] **Ticket 1: CLI Flags & Mutual Exclusion (Seam 1)**
+  - Made `<repository>` optional when `--repo` or `--http-url` provided.
+  - Implemented `CommonRepoFlags` (`Repo`, `HTTPURL`) across `InstallCmd`, `Show`, `UpgradeCmd`, `ExecContext`.
+  - Added mutual exclusion and GitHub API bypass in `cmd/root.go` (`needsGitHubAPI`).
+  - Unit tests verified in `params/cli_integration_test.go` and `cmd/root_test.go`.
+
+- [x] **Ticket 2: Multi-Format HTTP Directory & Bucket Parser (Seam 2)**
+  - Implemented `release/http_repo.go` with `CleanHTTPSlug`, `HTTPReleaseIndex`, `FetchHTTPReleaseIndex`, and `HTTPReleaseClient`.
+  - Implemented 3-stage cascade: OpenVINO SPA `filetree.json`, S3 XML `ListBucketResult`, Apache/Nginx HTML `<a href="...">` directory index.
+  - Added unit test suite in `release/http_repo_test.go` with 12 mock scenarios covering all parsers and edge cases.
+
+- [x] **Ticket 3: Virtual Release Integration & Live OpenVINO Verification (Seam 3)**
+  - Implemented direct HTTP download streaming in `release/download.go` (`DownloadHTTPAsset`, `DownloadAsset`).
+  - Connected `release/release.go` to invoke `FetchHTTPReleaseIndex` on `r.CliParams.HTTPURL != ""`.
+  - Updated `state/state.go` and `release/release.go` to record `HTTPURL` in `state.InstalledApp`.
+  - Integrated `cmd/show.go` with `HTTPReleaseClient` for viewing HTTP repo release details and assets.
+  - Updated `cmd/update.go` to isolate HTTP-tracked apps from GitHub GraphQL batch queries.
+  - Created integration test `release/release_http_test.go` with mock server and verified installation.
+  - Built binary (`make build`) and verified live installation:
+    `./gh-pt install --http-url https://storage.openvinotoolkit.org/repositories/openvino_model_server/packages/weekly/latest/ -s --driver=auto -u -y`
+  - Verified `~/.local/bin/ovms --version` outputs `OpenVINO Model Server 2026.5.0.dbe11fa27`.
+  - Verified OpenCL driver manifest registered in `~/.config/OpenCL/vendors/`.
+  - Verified `state.json` persistence and `gh-pt ls openvino` display.
 
 ---
 

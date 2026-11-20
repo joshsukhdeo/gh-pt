@@ -13,6 +13,7 @@ import (
 
 type InstalledApp struct {
 	Repository               string            `json:"repository"`
+	HTTPURL                  string            `json:"http_url,omitempty"`
 	TargetPath               string            `json:"target_path"`
 	Global                   bool              `json:"global"`
 	ReleaseAsset             string            `json:"release_asset"`

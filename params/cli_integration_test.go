@@ -319,3 +319,52 @@ func TestCLI_DriverAndPluginFlags(t *testing.T) {
 		assert.False(t, cli.Install.IncludeSidecars)
 	})
 }
+
+func TestCLI_CommonRepoFlags(t *testing.T) {
+	t.Run("install with --repo flag", func(t *testing.T) {
+		cli, _ := parseWithTestVars(t, []string{"install", "--repo", "cli/cli"})
+		assert.Empty(t, cli.Install.Repository)
+		assert.Equal(t, "cli/cli", cli.Install.Repo)
+	})
+
+	t.Run("install with --http-url flag", func(t *testing.T) {
+		cli, _ := parseWithTestVars(t, []string{"install", "--http-url", "https://storage.openvinotoolkit.org/packages/"})
+		assert.Empty(t, cli.Install.Repository)
+		assert.Equal(t, "https://storage.openvinotoolkit.org/packages/", cli.Install.HTTPURL)
+	})
+
+	t.Run("install with --http alias flag", func(t *testing.T) {
+		cli, _ := parseWithTestVars(t, []string{"install", "--http", "https://storage.openvinotoolkit.org/packages/"})
+		assert.Empty(t, cli.Install.Repository)
+		assert.Equal(t, "https://storage.openvinotoolkit.org/packages/", cli.Install.HTTPURL)
+	})
+
+	t.Run("install with -u user flag", func(t *testing.T) {
+		cli, _ := parseWithTestVars(t, []string{"install", "cli/cli", "-u"})
+		assert.True(t, cli.Install.User)
+	})
+
+	t.Run("source with --repo flag", func(t *testing.T) {
+		cli, _ := parseWithTestVars(t, []string{"source", "--repo", "cli/cli"})
+		assert.Empty(t, cli.Source.Repository)
+		assert.Equal(t, "cli/cli", cli.Source.Repo)
+	})
+
+	t.Run("show with --repo flag", func(t *testing.T) {
+		cli, _ := parseWithTestVars(t, []string{"show", "--repo", "cli/cli"})
+		assert.Empty(t, cli.Show.Repository)
+		assert.Equal(t, "cli/cli", cli.Show.Repo)
+	})
+
+	t.Run("show with --http-url flag", func(t *testing.T) {
+		cli, _ := parseWithTestVars(t, []string{"show", "--http-url", "https://storage.openvinotoolkit.org/packages/"})
+		assert.Empty(t, cli.Show.Repository)
+		assert.Equal(t, "https://storage.openvinotoolkit.org/packages/", cli.Show.HTTPURL)
+	})
+
+	t.Run("upgrade with --repo flag", func(t *testing.T) {
+		cli, _ := parseWithTestVars(t, []string{"upgrade", "--repo", "cli/cli"})
+		assert.Empty(t, cli.Upgrade.Repository)
+		assert.Equal(t, "cli/cli", cli.Upgrade.Repo)
+	})
+}

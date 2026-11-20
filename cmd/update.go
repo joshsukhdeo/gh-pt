@@ -177,6 +177,9 @@ func processSingleUpdate(
 	// Create a copy of appParams for this specific app
 	appParamsCopy := *appParams
 	appParamsCopy.Repository = app.Repository
+	if app.HTTPURL != "" {
+		appParamsCopy.HTTPURL = app.HTTPURL
+	}
 	appParamsCopy.TargetPath = app.TargetPath
 	appParamsCopy.Global = app.Global
 	appParamsCopy.ReleaseAsset = app.ReleaseAsset
@@ -678,27 +681,47 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 	// Dynamic GraphQL query using repository aliases to fetch the latest release tag
 	// for every repository tracked in state.json in exactly one network round-trip.
 	trackedRepos := make([]string, 0, len(st.Apps))
-	for repo := range st.Apps {
+	httpApps := make(map[string]*state.InstalledApp)
+	for repo, app := range st.Apps {
 		if repo == "" {
 			continue
 		}
 		if r.Repository != "" && !strings.EqualFold(r.Repository, repo) {
 			continue
 		}
+		if app != nil && app.HTTPURL != "" {
+			httpApps[repo] = app
+			continue
+		}
 		trackedRepos = append(trackedRepos, repo)
 	}
 	sort.Strings(trackedRepos)
 
-	gqlClient, err := newGraphQLClient()
-	if err != nil {
-		log.Error("Could not initialize GitHub GraphQL client", "error", err)
-		return err
+	latestTags := make(map[string]string)
+	if len(trackedRepos) > 0 {
+		gqlClient, err := newGraphQLClient()
+		if err != nil {
+			log.Error("Could not initialize GitHub GraphQL client", "error", err)
+			return err
+		}
+
+		tags, err := FetchLatestReleaseTags(gqlClient, trackedRepos)
+		if err != nil {
+			log.Error("Failed to fetch latest releases via GraphQL", "error", err)
+			return err
+		}
+		for k, v := range tags {
+			latestTags[k] = v
+		}
 	}
 
-	latestTags, err := FetchLatestReleaseTags(gqlClient, trackedRepos)
-	if err != nil {
-		log.Error("Failed to fetch latest releases via GraphQL", "error", err)
-		return err
+	for repo, app := range httpApps {
+		httpIndex, err := release.FetchHTTPReleaseIndex(app.HTTPURL)
+		if err != nil {
+			log.Warn("Failed to fetch latest version for HTTP app", "app", repo, "url", app.HTTPURL, "error", err)
+			continue
+		}
+		latestTags[repo] = httpIndex.VersionTag
 	}
 
 	// Compare fetched latest tags against Version in state.InstalledApp.

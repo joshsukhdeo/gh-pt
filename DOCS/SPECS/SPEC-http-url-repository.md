@@ -295,3 +295,23 @@ Flags justification:
   - Live/Mock integration test verifying `ovms_ubuntu26.tar.gz` is selected on Ubuntu 26 host.
   - Verifying direct HTTP asset streaming download with checksum verification.
   - Verifying `state.InstalledApp` records `HTTPURL`.
+
+---
+
+## 8. Verification & Success Criteria
+
+- [x] `--repo` supported across `install`, `show`, `upgrade`, and `rm` as an explicit named flag alternative to positional `<repository>`.
+- [x] `--http-url` / `--http` supported across `install`, `show`, `upgrade`, and `rm`.
+- [x] Mutual exclusion enforced: error if both `--http-url` and GitHub repository are passed.
+- [x] `needsGitHubAPI()` returns false when `--http-url` is specified, bypassing `gh` authentication checks.
+- [x] Cascading HTTP release discovery implemented in `release/http_repo.go` (OpenVINO SPA `filetree.json`, S3 XML `ListBucketResult`, Apache/Nginx HTML `<a href="...">` directory listing, direct downloadable binary fallback).
+- [x] Synthetic clean slug generation (`CleanHTTPSlug`) generating two-segment `owner/repo` identifiers safe for filesystem storage without path traversal.
+- [x] Synthetic release and asset classification seamlessly integrated with `selector.AssetClassifier` (correctly matching `ovms_ubuntu26.tar.gz` on Ubuntu 26.04).
+- [x] Direct streaming HTTP download via temporary file with atomic rename in `release/download.go`.
+- [x] `state.json` persistence of `http_url` enabling subsequent inspection via `gh-pt ls`, `gh-pt ll`, and `gh-pt show`.
+- [x] Unit test suite fully passing across `release`, `cmd`, `params`, `selector`, and `state` packages (846/846 tests passed).
+- [x] Live installation verified against `https://storage.openvinotoolkit.org/repositories/openvino_model_server/packages/weekly/latest/`:
+  - `ovms` executable placed and functional (`ovms --version` outputs `OpenVINO Model Server 2026.5.0.dbe11fa27`).
+  - OpenCL userspace driver manifest automatically registered at `~/.config/OpenCL/vendors/gh-pt-storage.openvinotoolkit.org-repositories-openvino_model_server-packages-weekly-latest.icd`.
+  - App state successfully logged and visible in `gh-pt ls`.
+
