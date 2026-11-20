@@ -59,7 +59,7 @@ type CLI struct {
 	Repo        RepoCmd        `cmd:"" help:"Manage source repositories."`
 	Scan        ScanCmd        `cmd:"" help:"Security and AI scanning."`
 	Vt          VtCmd          `cmd:"" help:"VirusTotal integration."`
-	Show        Show           `cmd:"" help:"Show release information."`
+	Show        Show           `cmd:"" help:"Show release information and preview which asset(s) will be selected for installation."`
 	Hook        Hook           `cmd:"" help:"Configure repository lifecycle hooks."`
 	Source      SourceCmd      `cmd:"" help:"Compile repository from source."`
 	SourceClean SourceCleanCmd `cmd:"source-clean" help:"Clean source build artifacts."`
@@ -507,7 +507,7 @@ type VtSetKeyCmd struct {
 type Show struct {
 	Repository string `arg:"" env:"GH_PT_REPOSITORY" optional:"" predictor:"github_repos" predict:"github_repos" help:"Github repository."`
 	CommonRepoFlags
-	Assets           int    `default:"-1" optional:"" help:"Show available assets (max number)."`
+	Assets           int      `default:"-1" optional:"" help:"Preview which asset(s) will be selected for installation and show available assets (max number)."`
 	Versions         int    `default:"-1" optional:"" help:"Show release versions (max number)."`
 	Description      int    `default:"-1" optional:"" help:"Show repository description (max lines)."`
 	Readme           int    `default:"-1" optional:"" help:"Show repository readme (max lines)."`
