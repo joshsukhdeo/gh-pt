@@ -507,10 +507,10 @@ type VtSetKeyCmd struct {
 type Show struct {
 	Repository string `arg:"" env:"GH_PT_REPOSITORY" optional:"" predictor:"github_repos" predict:"github_repos" help:"Github repository."`
 	CommonRepoFlags
-	Assets           int      `default:"-1" optional:"" group:"Preview Install selections" help:"Preview which asset(s) will be selected for installation and show available assets (max number)."`
-	Versions         int    `default:"-1" optional:"" help:"Show release versions (max number)."`
-	Description      int    `default:"-1" optional:"" help:"Show repository description (max lines)."`
-	Readme           int    `default:"-1" optional:"" help:"Show repository readme (max lines)."`
+	Assets           int      `default:"-1" optional:"" group:"View repository releases & info" help:"Preview which asset(s) will be selected for installation and show available assets (max number)."`
+	Versions         int      `default:"-1" optional:"" group:"View repository releases & info" help:"Show release versions (max number)."`
+	Description      int      `default:"-1" optional:"" group:"View repository releases & info" help:"Show repository description (max lines)."`
+	Readme           int      `default:"-1" optional:"" group:"View repository releases & info" help:"Show repository readme (max lines)."`
 	Prerelease       bool   `help:"Include prereleases."`
 	Stable           bool   `help:"Include only stable releases."`
 	Version          string   `short:"v" default:"latest" help:"Version to show."`
