@@ -12,6 +12,7 @@ import (
 
 	"github.com/charmbracelet/glamour"
 	"github.com/cli/go-gh/v2/pkg/api"
+	"github.com/joshsukhdeo/gh-pt/release"
 	"github.com/joshsukhdeo/gh-pt/selector"
 	"github.com/joshsukhdeo/gh-pt/state"
 	"github.com/mattn/go-runewidth"
@@ -43,6 +44,24 @@ type Release struct {
 }
 
 func ShowInfo(r *RootCLI) error {
+	if err := resolveRepoAndHTTPURL(r); err != nil {
+		return err
+	}
+	if r.HTTPURL == "" && r.Repository != "" {
+		if st, err := state.LoadState(); err == nil && st != nil && st.Apps != nil {
+			if app, ok := st.Apps[r.Repository]; ok && app != nil && app.HTTPURL != "" {
+				r.HTTPURL = app.HTTPURL
+			}
+		}
+	}
+	if r.HTTPURL != "" {
+		idx, err := release.FetchHTTPReleaseIndex(r.HTTPURL)
+		if err != nil {
+			return fmt.Errorf("failed to fetch HTTP release index from %s: %w", r.HTTPURL, err)
+		}
+		client := &release.HTTPReleaseClient{Index: idx}
+		return showInfoWithClient(r, client)
+	}
 	client, err := defaultRestClient()
 	if err != nil {
 		return fmt.Errorf("could not init GitHub REST client: %w", err)
@@ -259,7 +278,7 @@ func showInfoWithClient(r *RootCLI, client ghRestClient) error {
 			} else {
 				fmt.Println("--- 📂 ASSETS 📂 ---")
 			}
-			classifier := selector.NewAssetClassifier(runtime.GOOS, runtime.GOARCH, r.Wine, "")
+			classifier := selector.NewAssetClassifier(runtime.GOOS, runtime.GOARCH, r.Wine, r.AvxLevel)
 			var assetNames []string
 			var assetSizes []int64
 			for _, a := range assets {

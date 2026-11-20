@@ -1018,3 +1018,59 @@ func TestShowInfo_Assets_DebPrioritizedOverAppImage(t *testing.T) {
 		assert.Contains(t, defaultSection, "SideX_0.1.2_amd64.deb", "deb must be prioritized over AppImage on dpkg systems")
 	}
 }
+
+func TestShow_ManualOverrideFlags(t *testing.T) {
+	mock := &mockGhClient{
+		releases: []Release{
+			{ID: 700, TagName: "v1.0.0"},
+		},
+		assets: map[int64][]ReleaseAsset{
+			700: {
+				{ID: 1, Name: "tool_1.0.0_amd64.AppImage"},
+				{ID: 2, Name: "tool_1.0.0_amd64.deb"},
+			},
+		},
+	}
+
+	t.Run("override with type appimage", func(t *testing.T) {
+		r := &RootCLI{
+			ExecContext: params.ExecContext{
+				Repository: "test/tool",
+				ShowAssets: 50,
+				CommonInstallFlags: params.CommonInstallFlags{
+					Type: []string{"appimage"},
+				},
+			},
+		}
+		out := captureOutput(func() {
+			err := showInfoWithClient(r, mock)
+			assert.NoError(t, err)
+		})
+		defaultSection := out
+		if idx := strings.Index(out, "Can be installed but will not be"); idx != -1 {
+			defaultSection = out[:idx]
+		}
+		assert.Contains(t, defaultSection, "tool_1.0.0_amd64.AppImage")
+	})
+
+	t.Run("override with asset regex", func(t *testing.T) {
+		r := &RootCLI{
+			ExecContext: params.ExecContext{
+				Repository: "test/tool",
+				ShowAssets: 50,
+				CommonInstallFlags: params.CommonInstallFlags{
+					ReleaseAssetRegexp: ".*AppImage",
+				},
+			},
+		}
+		out := captureOutput(func() {
+			err := showInfoWithClient(r, mock)
+			assert.NoError(t, err)
+		})
+		defaultSection := out
+		if idx := strings.Index(out, "Can be installed but will not be"); idx != -1 {
+			defaultSection = out[:idx]
+		}
+		assert.Contains(t, defaultSection, "tool_1.0.0_amd64.AppImage")
+	})
+}

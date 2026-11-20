@@ -64,8 +64,9 @@ func RunCommand(cmdStr string, cli *params.CLI) error {
 	switch cmdStr {
 	case "install", "install <repository>":
 		r.CommonInstallFlags = cli.Install.ToCommonInstallFlags()
+		r.CommonRepoFlags = cli.Install.CommonRepoFlags
 		r.Repository = cli.Install.Repository
-		r.SpecificallyTargeted = cli.Install.Repository != ""
+		r.SpecificallyTargeted = cli.Install.Repository != "" || cli.Install.Repo != "" || cli.Install.HTTPURL != ""
 		resolveDisplayPreferences(&r.CommonInstallFlags, r)
 		return r.RunInstall()
 	case "ls", "ls <filter>":
@@ -83,8 +84,9 @@ func RunCommand(cmdStr string, cli *params.CLI) error {
 		}
 		return RemoveApp(cli.Rm.Target, cli.Rm.Purge, cli.Rm.UnsafeSkipDirFlagCheck)
 	case "upgrade", "upgrade <repository>":
+		r.CommonRepoFlags = cli.Upgrade.CommonRepoFlags
 		r.Repository = cli.Upgrade.Repository
-		r.SpecificallyTargeted = cli.Upgrade.Repository != ""
+		r.SpecificallyTargeted = cli.Upgrade.Repository != "" || cli.Upgrade.Repo != ""
 		r.DisablePrompts = cli.Upgrade.DisablePrompts
 		r.Extractor = cli.Upgrade.Extractor
 		r.Overwrite = cli.Upgrade.Overwrite
@@ -150,14 +152,19 @@ func RunCommand(cmdStr string, cli *params.CLI) error {
 		return RunRollback(&cli.State.Rollback)
 	case "show", "show <repository>":
 		flags := params.CommonInstallFlags{
-			ReleaseVersion: cli.Show.Version,
-			Stable:         cli.Show.Stable,
-			Prerelease:     cli.Show.Prerelease,
-			NoColor:        cli.Show.NoColor,
-			NoEmojis:       cli.Show.NoEmojis,
+			ReleaseVersion:     cli.Show.Version,
+			ReleaseAssetRegexp: cli.Show.ReleaseAssetRegexp,
+			Type:               cli.Show.Type,
+			AvxLevel:           cli.Show.AvxLevel,
+			Wine:               cli.Show.Wine,
+			Stable:             cli.Show.Stable,
+			Prerelease:         cli.Show.Prerelease,
+			NoColor:            cli.Show.NoColor,
+			NoEmojis:           cli.Show.NoEmojis,
 		}
 		resolveDisplayPreferences(&flags, r)
 		return ShowInfo(&RootCLI{ExecContext: params.ExecContext{
+			CommonRepoFlags:    cli.Show.CommonRepoFlags,
 			Repository:         cli.Show.Repository,
 			Show:               true,
 			ShowAssets:         cli.Show.Assets,
@@ -205,8 +212,9 @@ func RunCommand(cmdStr string, cli *params.CLI) error {
 		return fmt.Errorf("unknown repo subcommand")
 	case "source", "source <repository>":
 		r.CommonInstallFlags = cli.Source.ToCommonInstallFlags()
+		r.CommonRepoFlags = cli.Source.CommonRepoFlags
 		r.Repository = cli.Source.Repository
-		r.SpecificallyTargeted = cli.Source.Repository != ""
+		r.SpecificallyTargeted = cli.Source.Repository != "" || cli.Source.Repo != ""
 		r.CompileFromSource = true
 		r.AI = true
 		r.Track = "latest-commit" // Default for source builds

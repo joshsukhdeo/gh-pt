@@ -148,6 +148,7 @@ type ResolutionFlags struct {
 type TargetFlags struct {
 	TargetPath       string            `default:"${install_path}" short:"p" type:"path" help:"Target installation directory (default: ~/.local/bin or /usr/local/bin if --global)."`
 	Global           bool              `short:"g" help:"Install globally (e.g. /usr/local/bin) instead of user bin."`
+	User             bool              `short:"u" name:"user" help:"Install for current user (default)."`
 	Rename           map[string]string `optional:"" short:"t" help:"Rename binaries installed at target path."`
 	TargetPathCreate bool              `default:"true" negatable:"" help:"Create target installation directory if it does not exist."`
 	Overwrite        bool              `default:"false" short:"f" name:"force" aliases:"overwrite" env:"GH_PT_FORCE" help:"Overwrite target binaries."`
@@ -281,6 +282,12 @@ type SidecarFlags = DriverPluginFlags
 // ExecutionFlags is kept as an alias to SharedRuntimeFlags for backward compatibility.
 type ExecutionFlags = SharedRuntimeFlags
 
+// CommonRepoFlags provides alternative flag specification for repository and generic HTTP/HTTPS directory sources.
+type CommonRepoFlags struct {
+	Repo    string `optional:"" name:"repo" aliases:"repository" predictor:"github_repos" predict:"github_repos" help:"Repository in OWNER/REPO format (alternative to positional argument)."`
+	HTTPURL string `optional:"" name:"http-url" aliases:"http" env:"GH_PT_HTTP_URL" help:"HTTP or HTTPS directory index or storage bucket URL to install from (bypasses GitHub API)."`
+}
+
 // CommonInstallFlags combines all flags for backward compatibility across internal handlers.
 type CommonInstallFlags struct {
 	SharedInstallSourceFlags
@@ -292,6 +299,7 @@ type CommonInstallFlags struct {
 
 type InstallCmd struct {
 	Repository string `arg:"" env:"GH_PT_REPOSITORY" optional:"" predictor:"github_repos" predict:"github_repos" help:"Github repository in OWNER/REPOSITORY_NAME format."`
+	CommonRepoFlags
 	SharedInstallSourceFlags
 	ReleaseAssetFlags
 }
@@ -308,9 +316,10 @@ func (c *InstallCmd) ToExecContext() ExecContext {
 	c.ResolveSidecars()
 	ctx := ExecContext{
 		CommonInstallFlags: c.ToCommonInstallFlags(),
+		CommonRepoFlags:    c.CommonRepoFlags,
 		Repository:         c.Repository,
 	}
-	ctx.SpecificallyTargeted = c.Repository != ""
+	ctx.SpecificallyTargeted = c.Repository != "" || c.Repo != "" || c.HTTPURL != ""
 	return ctx
 }
 
@@ -412,8 +421,9 @@ type UpgradeFlags struct {
 
 type UpgradeCmd struct {
 	Repository string `arg:"" optional:"" predictor:"installed_apps" predict:"installed_apps" help:"Optional repository to update."`
-	User       bool   `short:"u" name:"user" help:"Update only user installations."`
-	Global     bool   `short:"g" name:"global" help:"Update only global installations."`
+	CommonRepoFlags
+	User   bool `short:"u" name:"user" help:"Update only user installations."`
+	Global bool `short:"g" name:"global" help:"Update only global installations."`
 	UpgradeFlags
 }
 
@@ -495,15 +505,20 @@ type VtSetKeyCmd struct {
 }
 
 type Show struct {
-	Repository       string `arg:"" env:"GH_PT_REPOSITORY" predictor:"github_repos" predict:"github_repos" help:"Github repository."`
+	Repository string `arg:"" env:"GH_PT_REPOSITORY" optional:"" predictor:"github_repos" predict:"github_repos" help:"Github repository."`
+	CommonRepoFlags
 	Assets           int    `default:"-1" optional:"" help:"Show available assets (max number)."`
 	Versions         int    `default:"-1" optional:"" help:"Show release versions (max number)."`
 	Description      int    `default:"-1" optional:"" help:"Show repository description (max lines)."`
 	Readme           int    `default:"-1" optional:"" help:"Show repository readme (max lines)."`
 	Prerelease       bool   `help:"Include prereleases."`
 	Stable           bool   `help:"Include only stable releases."`
-	Version          string `short:"v" default:"latest" help:"Version to show."`
-	DiscoverSidecars bool   `help:"Discover potential sidecar assets in the repository."`
+	Version          string   `short:"v" default:"latest" help:"Version to show."`
+	ReleaseAssetRegexp string `optional:"" short:"A" help:"Regular expression matching release asset to preview."`
+	Type             []string `short:"T" name:"format" help:"Comma-separated list of types to match and prioritize."`
+	AvxLevel         string   `default:"auto" enum:"auto,none,avx,avx2,avx512" env:"GH_PT_AVX_LEVEL" help:"AVX instruction set preference: auto, none, avx, avx2, avx512."`
+	Wine             string   `default:"off" enum:"off,allow,priority,force" env:"GH_PT_WINE" help:"Wine execution mode: off, allow, priority, force."`
+	DiscoverSidecars bool     `help:"Discover potential sidecar assets in the repository."`
 	NoColor          bool   `name:"no-color" aliases:"no-colors" env:"GH_PT_NO_COLOR" help:"Disable color output."`
 	NoEmojis         bool   `name:"no-emojis" aliases:"no-emoji" env:"GH_PT_NO_EMOJIS" help:"Disable emoji/icon output."`
 }
@@ -528,7 +543,8 @@ func (h *Hook) Run() error {
 }
 
 type SourceCmd struct {
-	Repository string `arg:"" env:"GH_PT_REPOSITORY" predictor:"github_repos" predict:"github_repos" help:"Github repository in OWNER/REPOSITORY_NAME format."`
+	Repository string `arg:"" env:"GH_PT_REPOSITORY" optional:"" predictor:"github_repos" predict:"github_repos" help:"Github repository in OWNER/REPOSITORY_NAME format."`
+	CommonRepoFlags
 	SharedInstallSourceFlags
 	SourceBuildFlags
 }
@@ -545,9 +561,10 @@ func (c *SourceCmd) ToExecContext() ExecContext {
 	c.ResolveSidecars()
 	ctx := ExecContext{
 		CommonInstallFlags: c.ToCommonInstallFlags(),
+		CommonRepoFlags:    c.CommonRepoFlags,
 		Repository:         c.Repository,
 	}
-	ctx.SpecificallyTargeted = c.Repository != ""
+	ctx.SpecificallyTargeted = c.Repository != "" || c.Repo != ""
 	return ctx
 }
 
@@ -589,6 +606,7 @@ func (c *SearchCmd) Run(ctx *ExecContext) error {
 type ExecContext struct {
 	UpdateAll bool
 	Update    bool
+	CommonRepoFlags
 	CommonInstallFlags
 	Repository          string
 	Clone               bool
