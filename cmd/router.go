@@ -97,6 +97,7 @@ func RunCommand(cmdStr string, cli *params.CLI) error {
 		r.FallbackReleases = cli.Upgrade.FallbackReleases
 		r.WarnUnmappedAssets = cli.Upgrade.WarnUnmappedAssets
 		r.ProgressBar = cli.Upgrade.ProgressBar
+		r.Symlink = cli.Upgrade.Symlink
 		if r.Verbose {
 			r.ProgressBar = "none"
 		}

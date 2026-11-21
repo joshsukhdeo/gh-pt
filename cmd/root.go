@@ -2321,6 +2321,7 @@ func (r *RootCLI) handleCompileFromSource(cfg *config.Config) error {
 				Pinned:            r.PinInstall,
 				MaxDepth:          r.MaxDepth,
 				SymlinkDir:        symlinkDir,
+				Symlink:           r.Symlink,
 				Sidecars:          r.CliParams.Sidecars,
 				InstalledSidecars: sidecarList,
 				IncludeSidecars:   r.IncludeSidecars,

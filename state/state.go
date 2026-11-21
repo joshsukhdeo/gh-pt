@@ -40,6 +40,7 @@ type InstalledApp struct {
 	LastVTScan               string            `json:"last_vt_scan,omitempty"`
 	LastAIScan               string            `json:"last_ai_scan,omitempty"`
 	SymlinkDir               string            `json:"symlink_dir,omitempty"`
+	Symlink                  bool              `json:"symlink,omitempty"`
 	Hooks                    map[string]string `json:"hooks,omitempty"`
 	SystemPackages           []string          `json:"system_packages,omitempty"`
 	Sidecars                 string            `json:"sidecars,omitempty"`

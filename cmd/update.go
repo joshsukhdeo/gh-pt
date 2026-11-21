@@ -207,7 +207,7 @@ func processSingleUpdate(
 	appParamsCopy.Driver = app.Driver
 	appParamsCopy.Plugin = app.Plugin
 	appParamsCopy.DriverMap = app.DriverMap
-	if app.SymlinkDir != "" || (app.Driver != "" && app.Driver != "none") || (app.Plugin != "" && app.Plugin != "none") || app.DriverMap != "" {
+	if r.Symlink || app.Symlink || app.SymlinkDir != "" || (app.Driver != "" && app.Driver != "none") || (app.Plugin != "" && app.Plugin != "none") || app.DriverMap != "" {
 		appParamsCopy.Symlink = true
 	}
 	appParamsCopy.FallbackReleases = app.FallbackReleases
@@ -323,11 +323,13 @@ func processSingleUpdate(
 				currentApp.Plugin = app.Plugin
 				currentApp.DriverMap = app.DriverMap
 				currentApp.SymlinkDir = resolvedSymlinkDir
+				currentApp.Symlink = app.Symlink || appParamsCopy.Symlink
 			} else {
 				app.Version = latestTag
 				app.InstalledSidecars = updatedSidecars
 				app.InstalledBinaries = updatedBinaries
 				app.SymlinkDir = resolvedSymlinkDir
+				app.Symlink = app.Symlink || appParamsCopy.Symlink
 				currentSt.Apps[app.Repository] = app
 			}
 			return nil
@@ -346,6 +348,7 @@ func processSingleUpdate(
 		appEntry.Plugin = app.Plugin
 		appEntry.DriverMap = app.DriverMap
 		appEntry.SymlinkDir = resolvedSymlinkDir
+		appEntry.Symlink = app.Symlink || appParamsCopy.Symlink
 	}
 	mu.Unlock()
 

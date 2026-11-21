@@ -1408,3 +1408,102 @@ func TestProcessSingleUpdate_PropagatesHTTPURL(t *testing.T) {
 	assert.Equal(t, "https://storage.example.com/packages/", capturedParams.HTTPURL)
 	assert.Equal(t, "storage.example.com/packages", capturedParams.Repository)
 }
+
+func TestProcessSingleUpdate_SymlinkReplay(t *testing.T) {
+	origInstallReleaseFunc := installReleaseFunc
+	defer func() { installReleaseFunc = origInstallReleaseFunc }()
+
+	t.Run("preserves symlink mode from state without CLI flag", func(t *testing.T) {
+		var capturedParams *params.ExecContext
+		installReleaseFunc = func(ctx *params.ExecContext, client *api.RESTClient) error {
+			capturedParams = ctx
+			return nil
+		}
+
+		app := &state.InstalledApp{
+			Repository: "cli/cli",
+			TargetPath: t.TempDir(),
+			Version:    "v2.0.0",
+			Symlink:    true,
+		}
+
+		r := &RootCLI{}
+		appParams := &params.ExecContext{}
+		mu := &sync.Mutex{}
+		successfulUpdates := make(map[string]string)
+		st := &state.State{
+			Apps: map[string]*state.InstalledApp{
+				"cli/cli": app,
+			},
+		}
+
+		err := processSingleUpdate(
+			r,
+			st,
+			appParams,
+			nil,
+			app,
+			"v2.1.0",
+			mu,
+			successfulUpdates,
+			nil,
+			nil,
+			app.TargetPath,
+		)
+		require.NoError(t, err)
+		require.NotNil(t, capturedParams)
+		assert.True(t, capturedParams.Symlink, "expected Symlink=true preserved from state")
+		assert.True(t, app.Symlink, "expected Symlink=true in updated state entry")
+	})
+
+	t.Run("enables symlink mode when CLI has --symlink flag", func(t *testing.T) {
+		var capturedParams *params.ExecContext
+		installReleaseFunc = func(ctx *params.ExecContext, client *api.RESTClient) error {
+			capturedParams = ctx
+			return nil
+		}
+
+		app := &state.InstalledApp{
+			Repository: "cli/cli",
+			TargetPath: t.TempDir(),
+			Version:    "v2.0.0",
+			Symlink:    false,
+		}
+
+		r := &RootCLI{
+			ExecContext: params.ExecContext{
+				SharedInstallSourceFlags: params.SharedInstallSourceFlags{
+					TargetFlags: params.TargetFlags{
+						Symlink: true,
+					},
+				},
+			},
+		}
+		appParams := &params.ExecContext{}
+		mu := &sync.Mutex{}
+		successfulUpdates := make(map[string]string)
+		st := &state.State{
+			Apps: map[string]*state.InstalledApp{
+				"cli/cli": app,
+			},
+		}
+
+		err := processSingleUpdate(
+			r,
+			st,
+			appParams,
+			nil,
+			app,
+			"v2.1.0",
+			mu,
+			successfulUpdates,
+			nil,
+			nil,
+			app.TargetPath,
+		)
+		require.NoError(t, err)
+		require.NotNil(t, capturedParams)
+		assert.True(t, capturedParams.Symlink, "expected Symlink=true when r.Symlink is set")
+		assert.True(t, app.Symlink, "expected Symlink=true in updated state entry")
+	})
+}

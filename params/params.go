@@ -413,6 +413,7 @@ type UpgradeFlags struct {
 	FallbackReleases      int    `default:"0" help:"Try this many older releases if no assets found in latest (0=disabled)."`
 	WarnUnmappedAssets    bool   `default:"true" negatable:"" help:"Warn about suspected unmapped sidecar assets."`
 	ProgressBar           string `name:"progress-bar" env:"GH_PT_PROGRESS_BAR" predictor:"progress_bars" predict:"progress_bars" help:"Progress bar style: pacman, standard, spinner:<style>, or none. Spinner styles: dots, line, jump, pulse, points, miniDot, step"`
+	Symlink               bool   `name:"symlink" env:"GH_PT_SYMLINK" help:"Extract or build application in package store and symlink executables."`
 	NoColor               bool   `name:"no-color" aliases:"no-colors" env:"GH_PT_NO_COLOR" help:"Disable color output."`
 	NoEmojis              bool   `name:"no-emojis" aliases:"no-emoji" env:"GH_PT_NO_EMOJIS" help:"Disable emoji/icon output."`
 	NoCompileContainer    bool   `name:"no-compile-container" env:"GH_PT_NO_COMPILE_CONTAINER" help:"Opt out of mandatory container isolation for AI source compilation (UNSAFE)."`

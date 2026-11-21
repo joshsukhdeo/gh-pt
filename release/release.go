@@ -2895,6 +2895,7 @@ func (r *GithubRelease) Install() (installErr error) {
 				Plugin:                   r.CliParams.Plugin,
 				DriverMap:                r.CliParams.DriverMap,
 				SymlinkDir:               r.SymlinkDir,
+				Symlink:                  r.CliParams.Symlink,
 				InstalledSidecars:        r.InstalledSidecars,
 				FallbackReleases:         r.CliParams.FallbackReleases,
 				InsecureAllowUnsigned:    r.CliParams.InsecureAllowUnsigned,
