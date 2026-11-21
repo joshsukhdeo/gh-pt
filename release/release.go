@@ -2311,7 +2311,7 @@ func (r *GithubRelease) Install() (installErr error) {
 					log.Error("checksum verification failed", "error", err, "asset", asset.Name)
 					return fmt.Errorf("checksum verification failed for %s: %w", asset.Name, err)
 				}
-			} else if r.CliParams.IsUpgradeCmd {
+			} else if r.CliParams.IsUpgradeCmd && r.CliParams.HTTPURL == "" {
 				data, readErr := os.ReadFile(downloadedAssetPath)
 				if readErr != nil {
 					return fmt.Errorf("failed to read downloaded asset %s: %w", asset.Name, readErr)

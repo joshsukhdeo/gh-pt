@@ -1,13 +1,23 @@
 package e2e
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -222,4 +232,181 @@ func TestE2E_CompileFromSource_TwoStage(t *testing.T) {
 	t.Logf("Exit code: %d", exitCode)
 	t.Logf("STDOUT: %s", stdout.String())
 	t.Logf("STDERR: %s", stderr.String())
+}
+
+func runCLIWithEnv(t *testing.T, customEnv []string, args ...string) (string, string, int) {
+	cmd := exec.Command(cliBinPath, args...)
+	cmd.Env = append(os.Environ(), customEnv...)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	exitCode := 0
+	if err != nil {
+		if exitError, ok := err.(*exec.ExitError); ok {
+			exitCode = exitError.ExitCode()
+		} else {
+			t.Fatalf("Failed to execute command: %v", err)
+		}
+	}
+
+	return stdout.String(), stderr.String(), exitCode
+}
+
+func createTarGzArchive(filename string, content []byte, mode int64) []byte {
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gw)
+	hdr := &tar.Header{
+		Name: filename,
+		Mode: mode,
+		Size: int64(len(content)),
+	}
+	_ = tw.WriteHeader(hdr)
+	_, _ = tw.Write(content)
+	_ = tw.Close()
+	_ = gw.Close()
+	return buf.Bytes()
+}
+
+func TestE2E_Lifecycle_InstallUpgradeRollbackPurge(t *testing.T) {
+	tempDir := t.TempDir()
+	targetDir := filepath.Join(tempDir, "bin")
+	require.NoError(t, os.MkdirAll(targetDir, 0755))
+
+	dataDir := filepath.Join(tempDir, "data")
+	configDir := filepath.Join(tempDir, "config")
+	cacheDir := filepath.Join(tempDir, "cache")
+
+	env := []string{
+		"XDG_DATA_HOME=" + dataDir,
+		"XDG_CONFIG_HOME=" + configDir,
+		"XDG_CACHE_HOME=" + cacheDir,
+		"GH_PT_DISABLE_PROMPTS=true",
+	}
+
+	var currentVersion atomic.Pointer[string]
+	v1 := "1.0.0"
+	currentVersion.Store(&v1)
+
+	var serverURL string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ver := *currentVersion.Load()
+		switch {
+		case r.URL.Path == "/version.txt":
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = w.Write([]byte(ver + "\n"))
+		case r.URL.Path == "/" || r.URL.Path == "/index.html":
+			w.Header().Set("Content-Type", "text/html")
+			archiveName := fmt.Sprintf("mytool-v%s-linux-amd64.tar.gz", ver)
+			html := fmt.Sprintf(`<html><body>
+<a href="%s">%s</a>
+<a href="version.txt">version.txt</a>
+</body></html>`, archiveName, archiveName)
+			_, _ = w.Write([]byte(html))
+		case strings.HasSuffix(r.URL.Path, ".tar.gz"):
+			w.Header().Set("Content-Type", "application/gzip")
+			binContent := []byte(fmt.Sprintf("#!/bin/sh\necho \"mytool-%s\"\n", ver))
+			archive := createTarGzArchive("mytool", binContent, 0755)
+			_, _ = w.Write(archive)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+	serverURL = ts.URL + "/"
+
+	parsedServerURL, err := url.Parse(serverURL)
+	require.NoError(t, err)
+	slug := parsedServerURL.Host + "/root"
+
+	// Step 1: Install
+	stdout, stderr, code := runCLIWithEnv(t, env, "install", serverURL, "--target-path", targetDir, "-D", "--progress-bar", "none", "--insecure-allow-unsigned")
+	require.Equal(t, 0, code, "install failed:\nSTDOUT: %s\nSTDERR: %s", stdout, stderr)
+
+	installedBin := filepath.Join(targetDir, "mytool")
+	require.FileExists(t, installedBin)
+
+	out, err := exec.Command(installedBin).CombinedOutput()
+	require.NoError(t, err)
+	assert.Equal(t, "mytool-1.0.0", strings.TrimSpace(string(out)))
+
+	// Step 2: Verify List Output
+	stdout, stderr, code = runCLIWithEnv(t, env, "ls")
+	require.Equal(t, 0, code, "ls failed:\nSTDOUT: %s\nSTDERR: %s", stdout, stderr)
+	assert.Contains(t, stdout, "1.0.0")
+
+	// Step 3: Upgrade to v2.0.0
+	v2 := "2.0.0"
+	currentVersion.Store(&v2)
+
+	stdout, stderr, code = runCLIWithEnv(t, env, "upgrade", "-D", "--progress-bar", "none", "--insecure-allow-unsigned")
+	require.Equal(t, 0, code, "upgrade failed:\nSTDOUT: %s\nSTDERR: %s", stdout, stderr)
+
+	out, err = exec.Command(installedBin).CombinedOutput()
+	require.NoError(t, err)
+	assert.Equal(t, "mytool-2.0.0", strings.TrimSpace(string(out)))
+
+	// Step 4: Verify History records v1.0.0 update
+	stdout, stderr, code = runCLIWithEnv(t, env, "history", slug)
+	require.Equal(t, 0, code, "history failed:\nSTDOUT: %s\nSTDERR: %s", stdout, stderr)
+	assert.Contains(t, stdout, "1.0.0")
+
+	// Step 5: Rollback to v1.0.0
+	stdout, stderr, code = runCLIWithEnv(t, env, "rollback", slug, "-f")
+	require.Equal(t, 0, code, "rollback failed:\nSTDOUT: %s\nSTDERR: %s", stdout, stderr)
+
+	out, err = exec.Command(installedBin).CombinedOutput()
+	require.NoError(t, err)
+	assert.Equal(t, "mytool-1.0.0", strings.TrimSpace(string(out)))
+
+	// Step 6: Purge / Remove Application
+	stdout, stderr, code = runCLIWithEnv(t, env, "rm", slug, "--purge", "-f")
+	require.Equal(t, 0, code, "rm failed:\nSTDOUT: %s\nSTDERR: %s", stdout, stderr)
+
+	_, err = os.Stat(installedBin)
+	assert.True(t, os.IsNotExist(err), "Binary must be removed after purge")
+
+	stdout, stderr, code = runCLIWithEnv(t, env, "ls")
+	require.Equal(t, 0, code)
+	assert.NotContains(t, stdout, slug)
+}
+
+func TestE2E_StateLock_Concurrency(t *testing.T) {
+	tempDir := t.TempDir()
+	env := []string{
+		"XDG_DATA_HOME=" + filepath.Join(tempDir, "data"),
+		"XDG_CONFIG_HOME=" + filepath.Join(tempDir, "config"),
+		"XDG_CACHE_HOME=" + filepath.Join(tempDir, "cache"),
+		"GH_PT_DISABLE_PROMPTS=true",
+	}
+
+	const concurrency = 8
+	var wg sync.WaitGroup
+	errs := make(chan error, concurrency)
+
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			time.Sleep(time.Duration(workerID*5) * time.Millisecond)
+			stdout, stderr, code := runCLIWithEnv(t, env, "config", "ls")
+			if code != 0 {
+				errs <- fmt.Errorf("worker %d failed with code %d: %s %s", workerID, code, stdout, stderr)
+				return
+			}
+			if !strings.Contains(stdout, "install_path") {
+				errs <- fmt.Errorf("worker %d output missing install_path: %s", workerID, stdout)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		assert.NoError(t, err)
+	}
 }

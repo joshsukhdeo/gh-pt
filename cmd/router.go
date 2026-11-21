@@ -98,7 +98,7 @@ func RunCommand(cmdStr string, cli *params.CLI) error {
 		r.WarnUnmappedAssets = cli.Upgrade.WarnUnmappedAssets
 		r.ProgressBar = cli.Upgrade.ProgressBar
 		r.Symlink = cli.Upgrade.Symlink
-		if r.Verbose {
+		if r.Verbose || r.DisablePrompts || os.Getenv("GH_PT_DISABLE_PROMPTS") != "" {
 			r.ProgressBar = "none"
 		}
 		r.NoColor = cli.Upgrade.NoColor
