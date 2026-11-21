@@ -62,7 +62,9 @@ func BuildBatchReleaseQuery(repos []string) (string, map[string]string) {
 		if repo != "" {
 			parts := strings.Split(repo, "/")
 			if len(parts) == 2 && parts[0] != "" && parts[1] != "" {
-				repoSet[repo] = true
+				if !strings.Contains(parts[0], ".") && !strings.Contains(parts[0], ":") {
+					repoSet[repo] = true
+				}
 			}
 		}
 	}
@@ -104,7 +106,9 @@ func FetchLatestReleaseTags(client GQLClient, repos []string) (map[string]string
 		if repo != "" {
 			parts := strings.Split(repo, "/")
 			if len(parts) == 2 && parts[0] != "" && parts[1] != "" {
-				repoSet[repo] = true
+				if !strings.Contains(parts[0], ".") && !strings.Contains(parts[0], ":") {
+					repoSet[repo] = true
+				}
 			}
 		}
 	}

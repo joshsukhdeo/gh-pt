@@ -53,11 +53,17 @@ func DownloadHTTPAsset(ctx context.Context, downloadURL, destPath string) error 
 	}
 
 	_, err = io.Copy(out, resp.Body)
-	closeErr := out.Close()
 	if err != nil {
+		_ = out.Close()
 		_ = os.Remove(tmpFile)
 		return fmt.Errorf("error streaming download for %s: %w", downloadURL, err)
 	}
+	if err := out.Sync(); err != nil {
+		_ = out.Close()
+		_ = os.Remove(tmpFile)
+		return fmt.Errorf("error syncing file %s: %w", tmpFile, err)
+	}
+	closeErr := out.Close()
 	if closeErr != nil {
 		_ = os.Remove(tmpFile)
 		return fmt.Errorf("error closing file %s: %w", tmpFile, closeErr)

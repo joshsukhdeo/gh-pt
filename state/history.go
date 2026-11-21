@@ -145,7 +145,11 @@ func (db *HistoryDB) SaveUnlocked() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0644)
+	tmpPath := path + ".tmp"
+	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, path)
 }
 
 func mutateHistoryInternal(autoPrune bool, fn func(db *HistoryDB) error) error {

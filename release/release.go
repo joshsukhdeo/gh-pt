@@ -702,7 +702,8 @@ func (r *GithubRelease) installArchivedBinary(fileSystem fs.FS, binaryPath strin
 		_ = sourceFile.Close()
 	}()
 
-	destinationFile, err := os.Create(destinationPath)
+	tmpDestinationPath := destinationPath + ".tmp"
+	destinationFile, err := os.OpenFile(tmpDestinationPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
 	if err != nil {
 		if os.IsPermission(err) {
 			log.Info("permission denied, attempting to install with elevated privileges")
@@ -747,17 +748,33 @@ func (r *GithubRelease) installArchivedBinary(fileSystem fs.FS, binaryPath strin
 		}
 		return err
 	}
-	defer func() {
-		_ = destinationFile.Close()
-	}()
 
 	_, err = io.Copy(destinationFile, sourceFile)
 	if err != nil {
+		_ = destinationFile.Close()
+		_ = os.Remove(tmpDestinationPath)
 		return err
 	}
 
-	err = r.ensureExecutable(destinationPath, 0755)
+	if err := destinationFile.Sync(); err != nil {
+		_ = destinationFile.Close()
+		_ = os.Remove(tmpDestinationPath)
+		return err
+	}
+
+	if err := destinationFile.Close(); err != nil {
+		_ = os.Remove(tmpDestinationPath)
+		return err
+	}
+
+	err = r.ensureExecutable(tmpDestinationPath, 0755)
 	if err != nil {
+		_ = os.Remove(tmpDestinationPath)
+		return err
+	}
+
+	if err := os.Rename(tmpDestinationPath, destinationPath); err != nil {
+		_ = os.Remove(tmpDestinationPath)
 		return err
 	}
 
@@ -1056,7 +1073,8 @@ func (r *GithubRelease) installBinary(binaryPath string) error {
 		return err
 	}
 
-	destination, err := os.Create(destinationPath)
+	tmpDestinationPath := destinationPath + ".tmp"
+	destination, err := os.OpenFile(tmpDestinationPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
 	if err != nil {
 		if os.IsPermission(err) {
 			log.Info("permission denied, attempting to install with elevated privileges")
@@ -1101,17 +1119,32 @@ func (r *GithubRelease) installBinary(binaryPath string) error {
 		return err
 	}
 
-	defer func() {
-		err = errors.Join(err, destination.Close())
-	}()
-
 	_, err = io.Copy(destination, source)
 	if err != nil {
+		_ = destination.Close()
+		_ = os.Remove(tmpDestinationPath)
 		return err
 	}
 
-	err = r.ensureExecutable(destinationPath, 0755)
+	if err := destination.Sync(); err != nil {
+		_ = destination.Close()
+		_ = os.Remove(tmpDestinationPath)
+		return err
+	}
+
+	if err := destination.Close(); err != nil {
+		_ = os.Remove(tmpDestinationPath)
+		return err
+	}
+
+	err = r.ensureExecutable(tmpDestinationPath, 0755)
 	if err != nil {
+		_ = os.Remove(tmpDestinationPath)
+		return err
+	}
+
+	if err := os.Rename(tmpDestinationPath, destinationPath); err != nil {
+		_ = os.Remove(tmpDestinationPath)
 		return err
 	}
 
