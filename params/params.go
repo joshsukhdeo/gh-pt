@@ -507,20 +507,20 @@ type VtSetKeyCmd struct {
 type Show struct {
 	Repository string `arg:"" env:"GH_PT_REPOSITORY" optional:"" predictor:"github_repos" predict:"github_repos" help:"Github repository."`
 	CommonRepoFlags
-	Assets           int      `default:"-1" optional:"" group:"View repository releases & info" help:"Preview which asset(s) will be selected for installation and show available assets (max number)."`
-	Versions         int      `default:"-1" optional:"" group:"View repository releases & info" help:"Show release versions (max number)."`
-	Description      int      `default:"-1" optional:"" group:"View repository releases & info" help:"Show repository description (max lines)."`
-	Readme           int      `default:"-1" optional:"" group:"View repository releases & info" help:"Show repository readme (max lines)."`
-	Prerelease       bool   `help:"Include prereleases."`
-	Stable           bool   `help:"Include only stable releases."`
-	Version          string   `short:"v" default:"latest" help:"Version to show."`
-	ReleaseAssetRegexp string `optional:"" short:"A" group:"Preview Install selections" help:"Regular expression matching release asset to preview."`
-	Type             []string `short:"T" name:"format" group:"Preview Install selections" help:"Comma-separated list of types to match and prioritize."`
-	AvxLevel         string   `default:"auto" enum:"auto,none,avx,avx2,avx512" env:"GH_PT_AVX_LEVEL" group:"Preview Install selections" help:"AVX instruction set preference: auto, none, avx, avx2, avx512."`
-	Wine             string   `default:"off" enum:"off,allow,priority,force" env:"GH_PT_WINE" group:"Preview Install selections" help:"Wine execution mode: off, allow, priority, force."`
-	DiscoverSidecars bool     `help:"Discover potential sidecar assets in the repository."`
-	NoColor          bool   `name:"no-color" aliases:"no-colors" env:"GH_PT_NO_COLOR" help:"Disable color output."`
-	NoEmojis         bool   `name:"no-emojis" aliases:"no-emoji" env:"GH_PT_NO_EMOJIS" help:"Disable emoji/icon output."`
+	Assets             int      `default:"-1" optional:"" group:"View repository releases & info" help:"Preview which asset(s) will be selected for installation and show available assets (max number)."`
+	Versions           int      `default:"-1" optional:"" group:"View repository releases & info" help:"Show release versions (max number)."`
+	Description        int      `default:"-1" optional:"" group:"View repository releases & info" help:"Show repository description (max lines)."`
+	Readme             int      `default:"-1" optional:"" group:"View repository releases & info" help:"Show repository readme (max lines)."`
+	Prerelease         bool     `help:"Include prereleases."`
+	Stable             bool     `help:"Include only stable releases."`
+	Version            string   `short:"v" default:"latest" help:"Version to show."`
+	ReleaseAssetRegexp string   `optional:"" short:"A" group:"Preview Install selections" help:"Regular expression matching release asset to preview."`
+	Type               []string `short:"T" name:"format" group:"Preview Install selections" help:"Comma-separated list of types to match and prioritize."`
+	AvxLevel           string   `default:"auto" enum:"auto,none,avx,avx2,avx512" env:"GH_PT_AVX_LEVEL" group:"Preview Install selections" help:"AVX instruction set preference: auto, none, avx, avx2, avx512."`
+	Wine               string   `default:"off" enum:"off,allow,priority,force" env:"GH_PT_WINE" group:"Preview Install selections" help:"Wine execution mode: off, allow, priority, force."`
+	DiscoverSidecars   bool     `help:"Discover potential sidecar assets in the repository."`
+	NoColor            bool     `name:"no-color" aliases:"no-colors" env:"GH_PT_NO_COLOR" help:"Disable color output."`
+	NoEmojis           bool     `name:"no-emojis" aliases:"no-emoji" env:"GH_PT_NO_EMOJIS" help:"Disable emoji/icon output."`
 }
 
 type ShowCmd = Show

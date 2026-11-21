@@ -77,10 +77,7 @@ func helperGetSystemInfo(h *params.HelperCmd) error {
 	}
 
 	targetBaseDir := resolveTargetBaseDir()
-	global := false
-	if targetBaseDir == "/usr/local" {
-		global = true
-	}
+	global := targetBaseDir == "/usr/local"
 
 	installPrefix := targetBaseDir
 	installBin := filepath.Join(installPrefix, "bin")
@@ -711,7 +708,7 @@ func helperRunCompileScript() error {
 	if err := os.WriteFile(tmpScript, []byte(compileScript), 0755); err != nil {
 		return fmt.Errorf("cannot write temporary compile.sh: %w", err)
 	}
-	defer os.Remove(tmpScript)
+	defer func() { _ = os.Remove(tmpScript) }()
 
 	// Check if containerized execution is requested
 	if os.Getenv("GHPT_COMPILE_CONTAINER") == "1" {
