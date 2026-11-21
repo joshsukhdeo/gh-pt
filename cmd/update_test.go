@@ -84,6 +84,7 @@ func TestBuildBatchReleaseQuery(t *testing.T) {
 
 func TestFetchLatestReleaseTags(t *testing.T) {
 	t.Run("successful fetch for multiple repositories in one round-trip", func(t *testing.T) {
+		ClearReleaseTagCache()
 		mockClient := &mockGQLClient{
 			doFunc: func(query string, variables map[string]interface{}, response interface{}) error {
 				resp, ok := response.(*map[string]GQLRepoResult)
@@ -111,6 +112,7 @@ func TestFetchLatestReleaseTags(t *testing.T) {
 	})
 
 	t.Run("network error returns error", func(t *testing.T) {
+		ClearReleaseTagCache()
 		mockClient := &mockGQLClient{
 			doFunc: func(query string, variables map[string]interface{}, response interface{}) error {
 				return errors.New("network failure")
@@ -123,6 +125,7 @@ func TestFetchLatestReleaseTags(t *testing.T) {
 	})
 
 	t.Run("partial GraphQL errors preserve valid results", func(t *testing.T) {
+		ClearReleaseTagCache()
 		mockClient := &mockGQLClient{
 			doFunc: func(query string, variables map[string]interface{}, response interface{}) error {
 				resp, ok := response.(*map[string]GQLRepoResult)
@@ -148,6 +151,7 @@ func TestFetchLatestReleaseTags(t *testing.T) {
 	})
 
 	t.Run("chunks repositories in batches of 30", func(t *testing.T) {
+		ClearReleaseTagCache()
 		mockClient := &mockGQLClient{
 			doFunc: func(query string, variables map[string]interface{}, response interface{}) error {
 				resp, ok := response.(*map[string]GQLRepoResult)
@@ -178,6 +182,55 @@ func TestFetchLatestReleaseTags(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, int32(3), mockClient.callCount.Load(), "75 repos should be chunked into 3 queries (30 + 30 + 15)")
 		assert.Len(t, tags, 75)
+	})
+
+	t.Run("deduplicates queries using release tag cache", func(t *testing.T) {
+		ClearReleaseTagCache()
+		mockClient := &mockGQLClient{
+			doFunc: func(query string, variables map[string]interface{}, response interface{}) error {
+				resp, ok := response.(*map[string]GQLRepoResult)
+				require.True(t, ok)
+				*resp = map[string]GQLRepoResult{
+					"repo_0": {LatestRelease: &struct {
+						TagName string `json:"tagName"`
+						Name    string `json:"name"`
+					}{TagName: "v2.40.0"}},
+				}
+				return nil
+			},
+		}
+
+		// First call queries GraphQL and populates cache
+		tags1, err := FetchLatestReleaseTags(mockClient, []string{"cli/cli"})
+		require.NoError(t, err)
+		assert.Equal(t, int32(1), mockClient.callCount.Load())
+		assert.Equal(t, "v2.40.0", tags1["cli/cli"])
+
+		// Second call for same repo hits cache and executes zero GraphQL requests
+		tags2, err := FetchLatestReleaseTags(mockClient, []string{"cli/cli"})
+		require.NoError(t, err)
+		assert.Equal(t, int32(1), mockClient.callCount.Load(), "Cached tag must not trigger new network round-trip")
+		assert.Equal(t, "v2.40.0", tags2["cli/cli"])
+
+		// Third call with partial hit only queries missing repo
+		mockClient.doFunc = func(query string, variables map[string]interface{}, response interface{}) error {
+			assert.NotContains(t, query, `name: "cli"`, "Cached repo cli/cli must not be included in GraphQL query")
+			assert.Contains(t, query, `name: "fzf"`, "Uncached repo fzf must be in GraphQL query")
+			resp, ok := response.(*map[string]GQLRepoResult)
+			require.True(t, ok)
+			*resp = map[string]GQLRepoResult{
+				"repo_0": {LatestRelease: &struct {
+					TagName string `json:"tagName"`
+					Name    string `json:"name"`
+				}{TagName: "v0.52.0"}},
+			}
+			return nil
+		}
+		tags3, err := FetchLatestReleaseTags(mockClient, []string{"cli/cli", "junegunn/fzf"})
+		require.NoError(t, err)
+		assert.Equal(t, int32(2), mockClient.callCount.Load())
+		assert.Equal(t, "v2.40.0", tags3["cli/cli"])
+		assert.Equal(t, "v0.52.0", tags3["junegunn/fzf"])
 	})
 }
 

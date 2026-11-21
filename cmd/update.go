@@ -95,6 +95,7 @@ const maxGraphQLBatchSize = 30
 
 // FetchLatestReleaseTags sends batched GraphQL queries to GitHub in chunks of 30
 // and returns a map of repository name to latest release tag.
+// It checks the local tag cache to deduplicate queries across commands.
 func FetchLatestReleaseTags(client GQLClient, repos []string) (map[string]string, error) {
 	repoSet := make(map[string]bool)
 	for _, repo := range repos {
@@ -110,19 +111,30 @@ func FetchLatestReleaseTags(client GQLClient, repos []string) (map[string]string
 		return make(map[string]string), nil
 	}
 
-	sortedRepos := make([]string, 0, len(repoSet))
-	for r := range repoSet {
-		sortedRepos = append(sortedRepos, r)
-	}
-	sort.Strings(sortedRepos)
-
 	mergedTags := make(map[string]string)
-	for i := 0; i < len(sortedRepos); i += maxGraphQLBatchSize {
-		end := i + maxGraphQLBatchSize
-		if end > len(sortedRepos) {
-			end = len(sortedRepos)
+	var uncachedRepos []string
+
+	for repo := range repoSet {
+		if tag, ok := GetCachedReleaseTag(repo); ok && tag != "" {
+			mergedTags[repo] = tag
+		} else {
+			uncachedRepos = append(uncachedRepos, repo)
 		}
-		chunk := sortedRepos[i:end]
+	}
+
+	if len(uncachedRepos) == 0 {
+		return mergedTags, nil
+	}
+
+	sort.Strings(uncachedRepos)
+
+	freshTags := make(map[string]string)
+	for i := 0; i < len(uncachedRepos); i += maxGraphQLBatchSize {
+		end := i + maxGraphQLBatchSize
+		if end > len(uncachedRepos) {
+			end = len(uncachedRepos)
+		}
+		chunk := uncachedRepos[i:end]
 		query, aliasToRepo := BuildBatchReleaseQuery(chunk)
 		if query == "" {
 			continue
@@ -151,9 +163,14 @@ func FetchLatestReleaseTags(client GQLClient, repos []string) (map[string]string
 				}
 				if tag != "" {
 					mergedTags[repo] = tag
+					freshTags[repo] = tag
 				}
 			}
 		}
+	}
+
+	if len(freshTags) > 0 {
+		SetCachedReleaseTags(freshTags)
 	}
 
 	return mergedTags, nil
@@ -699,6 +716,13 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 		trackedRepos = append(trackedRepos, repo)
 	}
 	sort.Strings(trackedRepos)
+
+	if r.Repository != "" {
+		InvalidateReleaseTag(r.Repository)
+	}
+	if r.Overwrite {
+		ClearReleaseTagCache()
+	}
 
 	latestTags := make(map[string]string)
 	if len(trackedRepos) > 0 {

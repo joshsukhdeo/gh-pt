@@ -23,6 +23,7 @@ CLAUDE.md
 CURSOR.md
 .cursorrules
 .windsurfrules
+.github/copilot-instructions.md
 
 # Local agent artifacts & workspaces
 .kiro/

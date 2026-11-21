@@ -138,6 +138,10 @@ func showInfoWithClient(r *RootCLI, client ghRestClient) error {
 		}
 	}
 
+	if latestStable != nil && latestStable.TagName != "" {
+		SetCachedReleaseTag(repo, latestStable.TagName)
+	}
+
 	formatRelease := func(rel *Release, installedVer string, pinned bool, latestStableRel *Release, latestPrereleaseRel *Release, noIcons bool) string {
 		isInstalled := installedVer != "" && (rel.TagName == installedVer || strings.TrimPrefix(rel.TagName, "v") == strings.TrimPrefix(installedVer, "v"))
 		isPinned := isInstalled && pinned
