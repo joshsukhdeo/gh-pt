@@ -36,3 +36,17 @@
 2. Allow `service/` and `preferences/` subdirectories in `selector.IsAllowedBinaryDir`.
 3. Add `PluginGnome` (`gnome`, `gnome-extension`, and `auto` detection in `release/driver.go`) which symlinks the extracted extension root to `$XDG_DATA_HOME/gnome-shell/extensions/<uuid>` (or `/usr/share/gnome-shell/extensions/<uuid>` when `--global` is set), compiles `schemas/` via `glib-compile-schemas`, and links wrapper scripts into `~/.local/bin`.
 **Consequences**: `gh-pt install`, `gh-pt upgrade`, `gh-pt source`, `gh-pt rm`, and `gh-pt rollback` natively manage GNOME Shell extensions across both release archives (Method A) and Meson/Ninja source builds (Method C).
+
+## ADR-006: GoReleaser Automated Cross-Platform Binary Releases
+**Date**: 2026-11-21
+**Status**: Accepted
+**Context**: Manual single-platform `make build` cannot distribute cross-platform release artifacts (Linux, macOS, Windows, FreeBSD) with standard checksums and archives.
+**Decision**: Added `.goreleaser.yaml` configuring CGO_ENABLED=0 builds across linux/darwin/windows/freebsd (amd64/arm64), tar.gz and zip archives, and sha256 checksums.
+**Consequences**: Standardized release builds and archive manifests ready for CI/CD automation.
+
+## ADR-007: Background Sudo Keepalive Goroutine
+**Date**: 2026-11-21
+**Status**: Accepted
+**Context**: In headless pipelines and long source compilations (>15 mins), sudo timestamp expiration causes subsequent elevated commands to hang indefinitely waiting for stdin.
+**Decision**: Spawn a non-interactive background goroutine executing `sudo -n -v` every 60 seconds when `(Global || ResolveDeps) && os.Geteuid() != 0`, cleanly terminated via context cancellation.
+**Consequences**: Headless automation and long-running compilations complete without credential cache drops or stdin blocking.

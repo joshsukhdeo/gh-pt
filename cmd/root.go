@@ -538,7 +538,7 @@ func (r *RootCLI) Validate() error {
 				r.TargetPath = "/usr/local/bin"
 			}
 			if os.Geteuid() != 0 {
-				if err := exec.Command("sudo", "-v").Run(); err != nil {
+				if err := execCommand("sudo", "-v").Run(); err != nil {
 					log.Warn("sudo -v failed (credentials may not cache)", "error", err)
 				}
 			}
@@ -604,6 +604,10 @@ func (r *RootCLI) RunInstall() error {
 	}
 	safety.SetDryRun(r.DryRun)
 	defer safety.SetDryRun(false)
+	if (r.Global || r.ResolveDeps) && os.Geteuid() != 0 && runtime.GOOS != "windows" {
+		cancelSudo := startSudoKeepalive(context.Background())
+		defer cancelSudo()
+	}
 	if r.NoEmojis {
 		r.DisableIcons = true
 	}

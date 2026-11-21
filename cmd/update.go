@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -461,6 +462,20 @@ func DoUpdate(r *RootCLI, ghClient *api.RESTClient) error {
 	if len(st.Apps) == 0 {
 		log.Info("No tracked applications in state.")
 		return nil
+	}
+
+	hasGlobal := r.Global
+	if !hasGlobal {
+		for _, app := range st.Apps {
+			if app.Global {
+				hasGlobal = true
+				break
+			}
+		}
+	}
+	if (hasGlobal || r.ResolveDeps) && os.Geteuid() != 0 && runtime.GOOS != "windows" {
+		cancelSudo := startSudoKeepalive(context.Background())
+		defer cancelSudo()
 	}
 
 	// First handle compile scripts and cloned/forked repos if applicable
