@@ -112,25 +112,48 @@ func copyFile(src, dst string, mode os.FileMode) error {
 	}()
 	_ = os.Remove(dst) // Prevent permission denied if existing file is read-only
 	_ = os.Chmod(filepath.Dir(dst), 0755)
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+
+	tmpDst := dst + ".tmp"
+	out, err := os.OpenFile(tmpDst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if err := out.Close(); err != nil {
-			log.Warn("failed to close destination file", "error", err, "file", dst)
-		}
-	}()
-	_, err = io.Copy(out, in)
-	return err
+	if _, err = io.Copy(out, in); err != nil {
+		_ = out.Close()
+		_ = os.Remove(tmpDst)
+		return err
+	}
+	if err := out.Sync(); err != nil {
+		_ = out.Close()
+		_ = os.Remove(tmpDst)
+		return err
+	}
+	if err := out.Close(); err != nil {
+		_ = os.Remove(tmpDst)
+		return err
+	}
+	if err := os.Chmod(tmpDst, mode); err != nil {
+		_ = os.Remove(tmpDst)
+		return err
+	}
+	if err := os.Rename(tmpDst, dst); err != nil {
+		_ = os.Remove(tmpDst)
+		return err
+	}
+	return nil
 }
 
 func copyFS(fileSystem fs.FS, dst string) error {
+	cleanDst := filepath.Clean(dst) + string(filepath.Separator)
 	return fs.WalkDir(fileSystem, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		target := filepath.Join(dst, path)
+		cleanTarget := filepath.Clean(target)
+		if !strings.HasPrefix(cleanTarget, cleanDst) && cleanTarget != filepath.Clean(dst) {
+			return fmt.Errorf("archive entry escapes destination: %s", path)
+		}
 		if d.IsDir() {
 			return os.MkdirAll(target, 0755)
 		}
@@ -149,17 +172,35 @@ func copyFS(fileSystem fs.FS, dst string) error {
 		}()
 		_ = os.Remove(target) // Prevent permission denied if existing file is read-only
 		_ = os.Chmod(filepath.Dir(target), 0755)
-		out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode())
+
+		tmpTarget := target + ".tmp"
+		out, err := os.OpenFile(tmpTarget, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode())
 		if err != nil {
 			return err
 		}
-		defer func() {
-			if err := out.Close(); err != nil {
-				log.Warn("failed to close destination file", "error", err, "file", target)
-			}
-		}()
-		_, err = io.Copy(out, in)
-		return err
+		if _, err = io.Copy(out, in); err != nil {
+			_ = out.Close()
+			_ = os.Remove(tmpTarget)
+			return err
+		}
+		if err := out.Sync(); err != nil {
+			_ = out.Close()
+			_ = os.Remove(tmpTarget)
+			return err
+		}
+		if err := out.Close(); err != nil {
+			_ = os.Remove(tmpTarget)
+			return err
+		}
+		if err := os.Chmod(tmpTarget, info.Mode()); err != nil {
+			_ = os.Remove(tmpTarget)
+			return err
+		}
+		if err := os.Rename(tmpTarget, target); err != nil {
+			_ = os.Remove(tmpTarget)
+			return err
+		}
+		return nil
 	})
 }
 

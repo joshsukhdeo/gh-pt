@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -194,19 +195,58 @@ func copyFileContents(src, dst string, mode os.FileMode) error {
 	defer func() { _ = in.Close() }()
 
 	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		if os.IsPermission(err) {
+			permStr := fmt.Sprintf("%04o", mode.Perm())
+			var cmd *exec.Cmd
+			if os.Geteuid() == 0 {
+				cmd = exec.Command("install", "-m", permStr, src, dst)
+			} else {
+				cmd = exec.Command("sudo", "install", "-m", permStr, src, dst)
+			}
+			return cmd.Run()
+		}
 		return err
 	}
 
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	tmpDst := dst + ".tmp"
+	out, err := os.OpenFile(tmpDst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
 	if err != nil {
+		if os.IsPermission(err) {
+			permStr := fmt.Sprintf("%04o", mode.Perm())
+			var cmd *exec.Cmd
+			if os.Geteuid() == 0 {
+				cmd = exec.Command("install", "-m", permStr, src, dst)
+			} else {
+				cmd = exec.Command("sudo", "install", "-m", permStr, src, dst)
+			}
+			return cmd.Run()
+		}
 		return err
 	}
-	defer func() { _ = out.Close() }()
 
 	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
+		_ = os.Remove(tmpDst)
 		return err
 	}
-	return out.Sync()
+	if err := out.Sync(); err != nil {
+		_ = out.Close()
+		_ = os.Remove(tmpDst)
+		return err
+	}
+	if err := out.Close(); err != nil {
+		_ = os.Remove(tmpDst)
+		return err
+	}
+	if err := os.Chmod(tmpDst, mode); err != nil {
+		_ = os.Remove(tmpDst)
+		return err
+	}
+	if err := os.Rename(tmpDst, dst); err != nil {
+		_ = os.Remove(tmpDst)
+		return err
+	}
+	return nil
 }
 
 // BackupAppBinaries copies all currently installed binaries for an app into the backup directory.

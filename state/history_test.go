@@ -201,3 +201,17 @@ func TestBackupAppBinaries_And_Rollback(t *testing.T) {
 	assert.Equal(t, "v0.51.0", hist[0].PreviousVersion)
 	assert.Equal(t, "v0.50.0", hist[0].NewVersion)
 }
+
+func TestCopyFileContents_Atomic(t *testing.T) {
+	tmpDir := t.TempDir()
+	src := filepath.Join(tmpDir, "backup.bin")
+	dst := filepath.Join(tmpDir, "sub", "app.bin")
+
+	require.NoError(t, os.WriteFile(src, []byte("restored-content"), 0755))
+	err := copyFileContents(src, dst, 0755)
+	assert.NoError(t, err)
+
+	data, err := os.ReadFile(dst)
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("restored-content"), data)
+}

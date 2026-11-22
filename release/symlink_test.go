@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/fstest"
 
 	"github.com/adrg/xdg"
 	"github.com/joshsukhdeo/gh-pt/config"
@@ -430,3 +431,35 @@ func TestDeploySidecarFile_Exported(t *testing.T) {
 	assert.Equal(t, filepath.Join(customPrefix, "test.so"), dstCustom)
 	assert.FileExists(t, dstCustom)
 }
+
+func TestCopyFS_ZipSlipPrevention(t *testing.T) {
+	tmpDir := t.TempDir()
+	extractDir := filepath.Join(tmpDir, "extracted")
+	require.NoError(t, os.MkdirAll(extractDir, 0755))
+
+	mfs := fstest.MapFS{
+		"valid.txt": &fstest.MapFile{
+			Data: []byte("safe content"),
+			Mode: 0644,
+		},
+	}
+
+	err := copyFS(mfs, extractDir)
+	assert.NoError(t, err)
+	assert.FileExists(t, filepath.Join(extractDir, "valid.txt"))
+}
+
+func TestCopyFile_Atomic(t *testing.T) {
+	tmpDir := t.TempDir()
+	srcFile := filepath.Join(tmpDir, "src.bin")
+	dstFile := filepath.Join(tmpDir, "dst.bin")
+
+	require.NoError(t, os.WriteFile(srcFile, []byte("atomic-data"), 0755))
+	err := copyFile(srcFile, dstFile, 0755)
+	assert.NoError(t, err)
+
+	content, err := os.ReadFile(dstFile)
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("atomic-data"), content)
+}
+

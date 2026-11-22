@@ -1610,6 +1610,9 @@ func (r *GithubRelease) verifyChecksum(filePath, checksumFilePath string) error 
 
 	if len(expectedHash) != 64 && len(expectedHash) != 128 {
 		log.Warn("unknown hash algorithm, skipping verification", "hash_length", len(expectedHash))
+		if r != nil && r.CliParams != nil && r.CliParams.VerifyChecksum {
+			return fmt.Errorf("checksum verification enabled but unsupported hash length %d in %s", len(expectedHash), checksumFilePath)
+		}
 		return nil
 	}
 
@@ -2183,45 +2186,47 @@ func (r *GithubRelease) Install() (installErr error) {
 			Name string `json:"name"`
 			URL  string `json:"url"`
 		}{}
-		if err := r.Client.Get(fmt.Sprintf("repos/%s/releases/%d/assets", r.CliParams.Repository, releases[0].Id), &allAssetsResponse); err == nil {
-			var allAssets []*selector.SelectorItem
-			for _, a := range allAssetsResponse {
-				allAssets = append(allAssets, &selector.SelectorItem{Name: a.Name, URL: a.URL})
-			}
-
-			targetName := ""
-			if len(assets) > 0 {
-				targetName = assets[0].Name
-			}
-			checksumFileName := r.FindChecksumFileForAsset(targetName, allAssets)
-			if checksumFileName != "" {
-				log.Info("found checksum file, downloading", "checksum_file", checksumFileName)
-
-				checksumDestPath := filepath.Join(downloadDir, checksumFileName)
-				var execErr error
-				if r.CliParams.HTTPURL != "" {
-					var checksumURL string
-					for _, a := range allAssets {
-						if a.Name == checksumFileName && a.URL != "" {
-							checksumURL = a.URL
-							break
-						}
-					}
-					if checksumURL == "" {
-						checksumURL = strings.TrimRight(r.CliParams.HTTPURL, "/") + "/" + checksumFileName
-					}
-					execErr = DownloadHTTPAsset(context.Background(), checksumURL, checksumDestPath)
-				} else {
-					_, _, execErr = ghExec("release", "download", releases[0].Name,
-						"--repo", r.CliParams.Repository, "--pattern", checksumFileName, "--dir", downloadDir)
-				}
-				if execErr != nil {
-					log.Warn("failed to download checksum file, skipping verification", "error", execErr)
-				} else {
-					checksumFilePath = checksumDestPath
-				}
-			}
+		getAssetsErr := r.Client.Get(fmt.Sprintf("repos/%s/releases/%d/assets", r.CliParams.Repository, releases[0].Id), &allAssetsResponse)
+		if getAssetsErr != nil {
+			return fmt.Errorf("checksum verification requested with --verify-checksum, but failed to fetch release assets: %w", getAssetsErr)
 		}
+		var allAssets []*selector.SelectorItem
+		for _, a := range allAssetsResponse {
+			allAssets = append(allAssets, &selector.SelectorItem{Name: a.Name, URL: a.URL})
+		}
+
+		targetName := ""
+		if len(assets) > 0 {
+			targetName = assets[0].Name
+		}
+		checksumFileName := r.FindChecksumFileForAsset(targetName, allAssets)
+		if checksumFileName == "" {
+			return fmt.Errorf("checksum verification requested with --verify-checksum, but no checksum file found for release asset %s", targetName)
+		}
+		log.Info("found checksum file, downloading", "checksum_file", checksumFileName)
+
+		checksumDestPath := filepath.Join(downloadDir, checksumFileName)
+		var execErr error
+		if r.CliParams.HTTPURL != "" {
+			var checksumURL string
+			for _, a := range allAssets {
+				if a.Name == checksumFileName && a.URL != "" {
+					checksumURL = a.URL
+					break
+				}
+			}
+			if checksumURL == "" {
+				checksumURL = strings.TrimRight(r.CliParams.HTTPURL, "/") + "/" + checksumFileName
+			}
+			execErr = DownloadHTTPAsset(context.Background(), checksumURL, checksumDestPath)
+		} else {
+			_, _, execErr = ghExec("release", "download", releases[0].Name,
+				"--repo", r.CliParams.Repository, "--pattern", checksumFileName, "--dir", downloadDir)
+		}
+		if execErr != nil {
+			return fmt.Errorf("checksum verification requested with --verify-checksum, but failed to download checksum file %s: %w", checksumFileName, execErr)
+		}
+		checksumFilePath = checksumDestPath
 	}
 
 	for _, asset := range assets {
@@ -2339,7 +2344,10 @@ func (r *GithubRelease) Install() (installErr error) {
 				}
 			}
 
-			if checksumFilePath != "" && r.CliParams.VerifyChecksum {
+			if r.CliParams.VerifyChecksum {
+				if checksumFilePath == "" {
+					return fmt.Errorf("checksum verification requested with --verify-checksum, but no checksum file was downloaded for %s", asset.Name)
+				}
 				if err := r.verifyChecksum(downloadedAssetPath, checksumFilePath); err != nil {
 					log.Error("checksum verification failed", "error", err, "asset", asset.Name)
 					return fmt.Errorf("checksum verification failed for %s: %w", asset.Name, err)
